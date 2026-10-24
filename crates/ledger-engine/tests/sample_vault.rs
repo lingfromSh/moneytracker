@@ -101,3 +101,36 @@ fn sample_vault_prices_drive_conversion() {
     // 100 USD @@ 712 CNY is recorded as a total price, so the base value is exactly 712.
     assert_eq!(travel.base_value, Some(Decimal::from_str("712").unwrap()));
 }
+
+/// A node's `total` must equal its own postings plus every descendant `total`,
+/// and a leaf must report the same number in `own` and `total`. The leaf used to
+/// be credited twice, which made every account row read double its balance while
+/// the parent rows and the kind totals stayed correct.
+fn assert_tree_totals(nodes: &[ledger_engine::types::AccountNodeDto]) {
+    let value = |amounts: &[ledger_engine::types::AmountDto]| -> Decimal {
+        amounts
+            .first()
+            .and_then(|a| a.quantity.parse().ok())
+            .unwrap_or_default()
+    };
+    for node in nodes {
+        let own = value(&node.own);
+        let total = value(&node.total);
+        let children: Decimal = node.children.iter().map(|c| value(&c.total)).sum();
+        assert!(
+            (total - (own + children)).abs() < Decimal::new(1, 2),
+            "{} total {total} != own {own} + children {children}",
+            node.full
+        );
+        if node.children.is_empty() {
+            assert_eq!(own, total, "leaf {} reports own != total", node.full);
+        }
+        assert_tree_totals(&node.children);
+    }
+}
+
+#[test]
+fn account_tree_totals_match_their_children() {
+    let vault = Vault::load(&sample(), &VaultOptions::default()).unwrap();
+    assert_tree_totals(&vault.account_tree());
+}

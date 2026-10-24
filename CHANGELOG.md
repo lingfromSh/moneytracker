@@ -38,6 +38,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Every leaf account in **账户** reported twice its balance (and the `assets`/`income` parent rows
+  looked half of their children) while the kind totals were correct. `account_tree()` credited a
+  leaf's `total` both on the way down and in its own base case; a leaf now adds only its `own`
+  postings, so `own == total` for leaves and every parent equals the sum of its children.
 - Recording an entry froze the window. `refresh()` kept the vault `RwLock` read guard alive while
   storing the reloaded vault, and because `std::sync::RwLock` is not re-entrant the write lock
   blocked the event-loop thread forever. Reloads now funnel through `AppState::reload_from_disk`

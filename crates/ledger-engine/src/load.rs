@@ -433,8 +433,10 @@ impl Vault {
         }
         fn insert(node: &mut Node, parts: &[&str], amount: Decimal) {
             if parts.is_empty() {
+                // `total` was already credited by the caller on the way down, so the
+                // leaf must only add its own posting — otherwise every leaf reports
+                // twice its balance while the ancestors stay correct.
                 node.own += amount;
-                node.total += amount;
                 return;
             }
             let child = node.children.entry(parts[0].to_string()).or_default();
