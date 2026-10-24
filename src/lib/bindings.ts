@@ -40,6 +40,11 @@ export const commands = {
 	writeAudit: (limit: number) => typedError<AuditEntryDto[], CmdError>(__TAURI_INVOKE("write_audit", { limit })),
 	settingsGet: () => typedError<Settings_Serialize, CmdError>(__TAURI_INVOKE("settings_get")),
 	settingsSet: (settings: Settings_Deserialize) => typedError<Settings_Serialize, CmdError>(__TAURI_INVOKE("settings_set", { settings })),
+	/**
+	 *  Registration state of the global capture shortcut, so settings can warn about
+	 *  a chord that was rejected at boot or after a failed rebind.
+	 */
+	shortcutStatus: () => typedError<ShortcutStatusDto_Serialize, CmdError>(__TAURI_INVOKE("shortcut_status")),
 	sampleVaultPath: () => typedError<string, CmdError>(__TAURI_INVOKE("sample_vault_path")),
 	createSampleVault: () => typedError<OpenVaultResultDto_Serialize, CmdError>(__TAURI_INVOKE("create_sample_vault")),
 	appVersion: () => typedError<string, CmdError>(__TAURI_INVOKE("app_version")),
@@ -553,6 +558,23 @@ export type Settings_Serialize = {
 	max_backups: number | null,
 	/**  Persisted dashboard grid layout (JSON blob owned by the frontend). */
 	dashboard_layout: string | null,
+};
+
+/**  Whether the configured global capture shortcut is actually live. */
+export type ShortcutStatusDto = ShortcutStatusDto_Serialize | ShortcutStatusDto_Deserialize;
+
+/**  Whether the configured global capture shortcut is actually live. */
+export type ShortcutStatusDto_Deserialize = {
+	shortcut: string,
+	ok: boolean,
+	error?: string | null,
+};
+
+/**  Whether the configured global capture shortcut is actually live. */
+export type ShortcutStatusDto_Serialize = {
+	shortcut: string,
+	ok: boolean,
+	error: string | null,
 };
 
 export type SnapshotDto = SnapshotDto_Serialize | SnapshotDto_Deserialize;

@@ -359,6 +359,14 @@ pub struct FxSyncResultDto {
     pub skipped_reason: Option<String>,
 }
 
+/// Whether the configured global capture shortcut is actually live.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ShortcutStatusDto {
+    pub shortcut: String,
+    pub ok: bool,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct AuditEntryDto {
     pub ts: String,

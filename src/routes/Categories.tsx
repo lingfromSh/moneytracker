@@ -80,7 +80,7 @@ export function Categories() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
         {mode === "account" ? (
           categories.length === 0 ? (
             <EmptyState title="本月还没有支出" hint="记一笔试试" />

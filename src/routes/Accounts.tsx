@@ -90,7 +90,7 @@ export function Accounts() {
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4">
         {tree.length === 0 ? (
           <EmptyState title="还没有账户" hint="记一笔，账户会自动出现" />
         ) : (

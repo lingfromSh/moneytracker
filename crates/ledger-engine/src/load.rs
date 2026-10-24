@@ -682,11 +682,12 @@ pub fn txn_dto(rec: &TxnRecord, table: &CommodityTable) -> TxnDto {
         }),
         code: rec.txn.code.clone(),
         payee: rec.txn.payee.clone(),
-        comment: rec.txn.comment.clone(),
+        comment: strip_system_tokens(rec.txn.comment.as_deref()),
         tags: rec
             .txn
             .tags
             .iter()
+            .filter(|t| !is_system_tag(&t.key))
             .map(|t| crate::types::TagDto {
                 key: t.key.clone(),
                 value: t.value.clone(),
@@ -707,6 +708,46 @@ pub fn txn_dto(rec: &TxnRecord, table: &CommodityTable) -> TxnDto {
         balanced: rec.balanced,
         fx_missing: rec.fx_missing,
         editable: rec.editable,
+    }
+}
+
+/// Tag keys that belong to the bookkeeping engine rather than to the user.
+///
+/// They are written by capture/rewrite paths and must survive every edit, so the
+/// IPC surface hides them and the write path re-injects them.
+pub const SYSTEM_TAG_KEYS: [&str; 4] = ["txn", "rule", "query", "recomputed"];
+
+pub fn is_system_tag(key: &str) -> bool {
+    let key = key.trim().to_ascii_lowercase();
+    SYSTEM_TAG_KEYS.contains(&key.as_str())
+}
+
+/// Splits a header comment into the engine-owned tokens (`txn:…`, `rule:…`, …)
+/// and the free text the user typed.
+pub fn split_comment(comment: Option<&str>) -> (Vec<String>, String) {
+    let Some(comment) = comment else {
+        return (Vec::new(), String::new());
+    };
+    let mut system = Vec::new();
+    let mut user = Vec::new();
+    for token in comment.split_whitespace() {
+        let key = token.split(':').next().unwrap_or("");
+        if token.contains(':') && !key.is_empty() && is_system_tag(key) {
+            system.push(token.to_string());
+        } else {
+            user.push(token.to_string());
+        }
+    }
+    (system, user.join(" "))
+}
+
+/// The user-facing part of a transaction comment, without identity tokens.
+pub fn strip_system_tokens(comment: Option<&str>) -> Option<String> {
+    let (_, user) = split_comment(comment);
+    if user.is_empty() {
+        None
+    } else {
+        Some(user)
     }
 }
 

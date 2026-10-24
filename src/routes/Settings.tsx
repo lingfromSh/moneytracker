@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { Settings_Serialize } from "../lib/bindings";
 import { api, queryKeys } from "../lib/ipc";
 import { cn } from "../lib/format";
+import { ShortcutInput } from "../components/shortcut-input";
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Select, Switch } from "../components/ui";
 
 const THEMES = [
@@ -28,6 +29,11 @@ export function SettingsView() {
   const [error, setError] = React.useState<string | null>(null);
   const audit = useQuery({ queryKey: queryKeys.audit, queryFn: () => api.audit(30) });
   const version = useQuery({ queryKey: ["version"], queryFn: () => api.version() });
+  const shortcut = useQuery({
+    queryKey: queryKeys.shortcutStatus,
+    queryFn: () => api.shortcutStatus(),
+    retry: 0,
+  });
 
   React.useEffect(() => {
     if (settings.data) setDraft(settings.data);
@@ -68,7 +74,7 @@ export function SettingsView() {
   };
 
   return (
-    <div className="flex h-full flex-col overflow-auto">
+    <div className="flex h-full min-w-0 flex-col overflow-y-auto overflow-x-hidden">
       <div className="flex items-center justify-between border-b border-[var(--color-line)] px-4 py-3">
         <div>
           <div className="text-lg font-semibold">设置</div>
@@ -189,7 +195,11 @@ export function SettingsView() {
               />
             </Field>
             <Field label="主题">
-              <Select value={draft.theme} onChange={(e) => update("theme", e.target.value)}>
+              <Select
+                value={draft.theme}
+                onChange={(e) => update("theme", e.target.value)}
+                className="w-full"
+              >
                 {THEMES.map((theme) => (
                   <option key={theme.value} value={theme.value}>
                     {theme.label}
@@ -201,15 +211,20 @@ export function SettingsView() {
         </Card>
 
         <Card>
-          <CardHeader title="快捷键与汇率" hint="快捷键使用 Tauri accelerator 语法" />
+          <CardHeader title="快捷键与汇率" hint="系统级快录键，切换后会立即重新注册" />
           <div className="space-y-3 p-4">
-            <Field label="全局唤起快录">
-              <Input
+            <Field label="全局唤起快录" hint="点击后直接按下组合键，保存后立即生效">
+              <ShortcutInput
                 value={draft.shortcut}
-                onChange={(e) => update("shortcut", e.target.value)}
-                className="font-mono"
+                onChange={(next) => update("shortcut", next)}
+                invalid={shortcut.data ? !shortcut.data.ok : false}
               />
             </Field>
+            {shortcut.data && !shortcut.data.ok && shortcut.data.error ? (
+              <div className="rounded-lg border border-[var(--color-danger)] px-3 py-2 text-[11px] text-[var(--color-danger)]">
+                {shortcut.data.error}
+              </div>
+            ) : null}
             <div className="flex items-center justify-between rounded-lg border border-[var(--color-line)] px-3 py-2">
               <div>
                 <div className="text-sm">启用历史汇率</div>

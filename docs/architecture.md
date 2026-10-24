@@ -73,6 +73,14 @@ text ──▶ capture::parse_capture ──▶ ParsedCapture
 `editing` composes those primitives for transaction updates, deletions, bulk tag/account changes
 and rule recomputation; each call records an entry in `write-audit.jsonl`.
 
+### Engine-owned transaction tokens
+
+`txn:`, `rule:`, `query:` and `recomputed:` are bookkeeping metadata, not user tags. The IPC layer
+hides them (`load::txn_dto` filters `tags` and strips the comment through `strip_system_tokens`), and
+`editing::update_txn` re-injects them from the parsed record before writing. A client therefore never
+has to echo the identity tag back, and an edit cannot silently turn a transaction into a
+pseudo-id one.
+
 ## IPC surface
 
 Commands are declared once with `#[tauri::command]` + `#[specta::specta]`, collected by
@@ -116,6 +124,16 @@ Drop the patch once a `tauri-specta` release depends on `specta >= 2.0.0-rc.27`.
 - Charts are Recharts wrappers plus one `d3-sankey` diagram; every series coerces `null` to `0` for
   geometry while totals keep using the Rust-side decimal strings.
 - `src/lib/window.ts` guards all Tauri window calls so components also render under Vitest.
+
+### Global shortcut
+
+One handler only. `tauri-plugin-global-shortcut` dispatches both the plugin-wide handler and any
+per-shortcut handler for the same keypress, so registering the capture toggle in both places toggled
+the window open and closed again. `shortcut::register` therefore only registers the chord; the
+plugin-wide handler in `lib.rs` compares the pressed shortcut with `settings.shortcut` and toggles.
+`shortcut::rebind` registers the new chord *before* releasing the old one, so a chord that another
+application owns leaves the previous registration intact, and the failure is surfaced through
+`shortcut_status` instead of being written to settings.
 
 ## Testing strategy
 

@@ -1,9 +1,10 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { GridLayout, useContainerWidth } from "react-grid-layout";
+import { GridLayout } from "react-grid-layout";
 import type { Layout } from "react-grid-layout";
 import type { DashboardDto_Serialize } from "../lib/bindings";
 import { api, queryKeys } from "../lib/ipc";
+import { useElementWidth } from "../lib/use-element-width";
 import { cn, money, monthLabel, percent } from "../lib/format";
 import { Badge, Button, Card, CardHeader, EmptyState } from "../components/ui";
 import {
@@ -47,14 +48,14 @@ function Panel({
       <div className="drag-handle shrink-0 cursor-grab active:cursor-grabbing">
         <CardHeader title={title} hint={hint} />
       </div>
-      <div className="min-h-0 flex-1">{children}</div>
+      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
     </Card>
   );
 }
 
 export function Dashboard() {
   const [months, setMonths] = React.useState(12);
-  const { width, containerRef } = useContainerWidth();
+  const { ref: gridRef, width } = useElementWidth(960);
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.dashboard(months),
     queryFn: () => api.dashboard(months),
@@ -80,7 +81,11 @@ export function Dashboard() {
       timer = window.setTimeout(() => {
         const current = settings.data;
         if (!current) return;
-        void api.saveSettings({ ...current, dashboard_layout: JSON.stringify(next) }).catch(() => {
+        const serialised = JSON.stringify(next);
+        // The grid is remounted on every resize, which re-emits its layout; only
+        // persist when the arrangement actually changed.
+        if (current.dashboard_layout === serialised) return;
+        void api.saveSettings({ ...current, dashboard_layout: serialised }).catch(() => {
           /* layout persistence is best effort */
         });
       }, 600);
@@ -95,64 +100,73 @@ export function Dashboard() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-auto">
+    <div className="flex h-full min-w-0 flex-col">
       <Header data={data} months={months} onMonths={setMonths} />
-      <div ref={containerRef} className="flex-1 px-3 pb-4">
-        <GridLayout
-          width={width}
-          layout={layout}
-          gridConfig={GRID}
-          dragConfig={{ enabled: true, handle: ".drag-handle" }}
-          resizeConfig={{ enabled: true }}
-          autoSize
-          onLayoutChange={saveLayout}
-        >
-          <div key="months">
-            <Panel title="月度收支" hint={`最近 ${months} 个月`}>
-              <MonthlyBars months={data.months} />
-            </Panel>
-          </div>
-          <div key="categories">
-            <Panel title="本月支出结构" hint={data.kpis.month ? monthLabel(data.kpis.month) : ""}>
-              <CategoryDonut categories={data.categories} />
-            </Panel>
-          </div>
-          <div key="networth">
-            <Panel title="净资产曲线" hint="含所有资产与负债">
-              <NetWorthArea points={data.net_worth_series} />
-            </Panel>
-          </div>
-          <div key="budget">
-            <Panel title="预算 vs 实际" hint="来自 budgets.ledger">
-              <BudgetBars rows={data.budget} />
-            </Panel>
-          </div>
-          <div key="stacked">
-            <Panel title="分类趋势" hint="按二级分类堆叠">
-              <StackedArea stacked={data.stacked} />
-            </Panel>
-          </div>
-          <div key="forecast">
-            <Panel title="现金流预测" hint="虚线段为预测，不写入账本">
-              <ForecastLine points={data.forecast} />
-            </Panel>
-          </div>
-          <div key="sankey">
-            <Panel title="资金流向" hint="收入 → 账户 → 支出分类">
-              <SankeyDiagram data={data.sankey} />
-            </Panel>
-          </div>
-          <div key="heatmap">
-            <Panel title="支出日历" hint="颜色越深支出越多">
-              <div className="flex h-full flex-col justify-between">
-                <Heatmap points={data.heatmap} />
-                <div className="max-h-24 overflow-auto">
-                  <CategoryList categories={data.categories} />
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4">
+        <div ref={gridRef} className="w-full min-w-0">
+          {/*
+            `key={width}` remounts the grid whenever the measured width changes:
+            react-grid-layout only lays items out from the width it saw on its
+            first render, so an in-place width update would leave the items sized
+            for the previous window width and overflow the container.
+          */}
+          <GridLayout
+            key={width}
+            width={Math.max(320, width)}
+            layout={layout}
+            gridConfig={GRID}
+            dragConfig={{ enabled: true, handle: ".drag-handle" }}
+            resizeConfig={{ enabled: true }}
+            autoSize
+            onLayoutChange={saveLayout}
+          >
+            <div key="months">
+              <Panel title="月度收支" hint={`最近 ${months} 个月`}>
+                <MonthlyBars months={data.months} />
+              </Panel>
+            </div>
+            <div key="categories">
+              <Panel title="本月支出结构" hint={data.kpis.month ? monthLabel(data.kpis.month) : ""}>
+                <CategoryDonut categories={data.categories} />
+              </Panel>
+            </div>
+            <div key="networth">
+              <Panel title="净资产曲线" hint="含所有资产与负债">
+                <NetWorthArea points={data.net_worth_series} />
+              </Panel>
+            </div>
+            <div key="budget">
+              <Panel title="预算 vs 实际" hint="来自 budgets.ledger">
+                <BudgetBars rows={data.budget} />
+              </Panel>
+            </div>
+            <div key="stacked">
+              <Panel title="分类趋势" hint="按二级分类堆叠">
+                <StackedArea stacked={data.stacked} />
+              </Panel>
+            </div>
+            <div key="forecast">
+              <Panel title="现金流预测" hint="虚线段为预测，不写入账本">
+                <ForecastLine points={data.forecast} />
+              </Panel>
+            </div>
+            <div key="sankey">
+              <Panel title="资金流向" hint="收入 → 账户 → 支出分类">
+                <SankeyDiagram data={data.sankey} />
+              </Panel>
+            </div>
+            <div key="heatmap">
+              <Panel title="支出日历" hint="颜色越深支出越多">
+                <div className="flex h-full flex-col justify-between">
+                  <Heatmap points={data.heatmap} />
+                  <div className="max-h-24 overflow-auto">
+                    <CategoryList categories={data.categories} />
+                  </div>
                 </div>
-              </div>
-            </Panel>
-          </div>
-        </GridLayout>
+              </Panel>
+            </div>
+          </GridLayout>
+        </div>
       </div>
     </div>
   );

@@ -18,7 +18,10 @@ pub use capture::{
     analyze, expand, new_txn_id, parse_capture, CaptureAnalysis, ExpandedCapture, Kind,
     ParsedCapture,
 };
-pub use load::{diagnostic_dto, posting_dto, txn_dto, AccountInfo, TxnRecord, Vault};
+pub use load::{
+    diagnostic_dto, is_system_tag, posting_dto, split_comment, strip_system_tokens, txn_dto,
+    AccountInfo, TxnRecord, Vault,
+};
 pub use rules::{Direction, RuleDef, RuleSet};
 pub use vault::{create_vault, validate_vault, VaultOptions};
 

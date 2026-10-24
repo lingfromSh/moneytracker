@@ -12,7 +12,7 @@ use ledger_engine::capture::{merge_tag_comment as merge_tags, ExpandedCapture};
 use ledger_engine::rules::{Direction, RuleDef};
 use ledger_engine::types::*;
 use ledger_engine::vault::VaultOptions;
-use ledger_engine::{writer, Vault};
+use ledger_engine::{is_system_tag, split_comment, strip_system_tokens, writer, Vault};
 
 use crate::state::{CmdError, CmdResult};
 
@@ -175,34 +175,53 @@ pub fn update_txn(
             other => return Err(refused(format!("unknown status \"{other}\""))),
         };
     }
+    // `txn:` / `rule:` / `query:` / `recomputed:` belong to the engine: the UI never
+    // sees them, and they must survive whatever the client sends back.
+    let system_tags: Vec<Tag> = rec
+        .txn
+        .tags
+        .iter()
+        .filter(|t| is_system_tag(&t.key))
+        .cloned()
+        .collect();
+    let (system_tokens, user_text) = split_comment(rec.txn.comment.as_deref());
+    let mut user_tags: Vec<Tag> = rec
+        .txn
+        .tags
+        .iter()
+        .filter(|t| !is_system_tag(&t.key))
+        .cloned()
+        .collect();
+    let mut user_comment = if user_text.is_empty() {
+        None
+    } else {
+        Some(user_text)
+    };
     if let Some(tags) = &patch.tags {
-        let tags: Vec<Tag> = tags
+        user_tags = tags
             .iter()
-            .filter(|t| !t.key.trim().is_empty())
+            .filter(|t| !t.key.trim().is_empty() && !is_system_tag(&t.key))
             .map(|t| match &t.value {
                 Some(v) if !v.trim().is_empty() => Tag::kv(t.key.trim(), v.trim()),
                 _ => Tag::bare(t.key.trim()),
             })
             .collect();
-        txn.comment = merge_tags(txn.comment.as_deref(), &tags);
-        txn.tags = tags;
     }
     if let Some(comment) = &patch.comment {
-        let merged = merge_tags(
-            Some(comment),
-            &txn.tags
-                .iter()
-                .filter(|t| t.key != "txn")
-                .cloned()
-                .collect::<Vec<_>>(),
-        );
-        let with_id = match (&merged, txn.tag("txn")) {
-            (Some(text), Some(id)) => Some(format!("txn:{id} {text}")),
-            (None, Some(id)) => Some(format!("txn:{id}")),
-            (m, None) => m.clone(),
-        };
-        txn.comment = with_id;
+        user_comment = strip_system_tokens(Some(comment));
     }
+    txn.tags = system_tags
+        .into_iter()
+        .chain(user_tags.iter().cloned())
+        .collect();
+    let merged = merge_tags(user_comment.as_deref(), &user_tags);
+    let comment = match (&merged, system_tokens.is_empty()) {
+        (Some(text), true) => Some(text.clone()),
+        (Some(text), false) => Some(format!("{} {text}", system_tokens.join(" "))),
+        (None, true) => None,
+        (None, false) => Some(system_tokens.join(" ")),
+    };
+    txn.comment = comment;
     if let Some(patches) = &patch.postings {
         if patches.is_empty() {
             return Err(refused("a transaction needs at least two postings"));
@@ -586,6 +605,53 @@ mod tests {
             payee: Some(payee.into()),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn editing_keeps_the_engine_owned_txn_tag() {
+        let fx = Fixture::new();
+        let written = fx.capture("#2026-10-04 星巴克 45 @微信 +coffee", "01JA3KQ7TEST0002");
+
+        // The IPC surface hides the identity tag from the user, so a client edits
+        // and saves without ever sending `txn:` back.
+        let vault = fx.vault();
+        let dto = vault.txn_dto(vault.transaction_index(&written.txn_id).unwrap());
+        assert!(
+            dto.tags.iter().all(|t| t.key != "txn"),
+            "txn tag leaked into the DTO: {:?}",
+            dto.tags
+        );
+        assert!(
+            !dto.comment.clone().unwrap_or_default().contains("txn:"),
+            "txn id leaked into the comment: {:?}",
+            dto.comment
+        );
+
+        let patch = SaveTxnPatch {
+            payee: Some("星巴克臻选".into()),
+            comment: Some("和朋友一起".into()),
+            tags: Some(vec![TagDto {
+                key: "coffee".into(),
+                value: None,
+            }]),
+            ..Default::default()
+        };
+        update_txn(&vault, &written.txn_id, &patch, &fx.opts, &fx.audit).unwrap();
+
+        let reloaded = fx.vault();
+        let rec = reloaded
+            .transaction(&written.txn_id)
+            .expect("the txn id survives an edit");
+        assert_eq!(rec.txn.payee, "星巴克臻选");
+        assert!(rec.txn.tag("txn").is_some());
+        assert!(rec.txn.tags.iter().any(|t| t.key == "coffee"));
+        let comment = rec.txn.comment.clone().unwrap_or_default();
+        assert!(comment.starts_with("txn:"), "{comment}");
+        assert!(comment.contains("和朋友一起"), "{comment}");
+        assert_eq!(
+            split_comment(rec.txn.comment.as_deref()).1,
+            "和朋友一起 :coffee:"
+        );
     }
 
     #[test]

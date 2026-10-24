@@ -52,7 +52,7 @@ export function Rules({ onCapture }: { onCapture: () => void }) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
         {error ? (
           <EmptyState title="规则读取失败" hint={String((error as Error).message)} />
         ) : isLoading ? (

@@ -208,7 +208,7 @@ export function Field({
 }) {
   return (
     <label className="block space-y-1">
-      <span className="text-xs font-medium text-[var(--color-muted)]">{label}</span>
+      <span className="block text-xs font-medium text-[var(--color-muted)]">{label}</span>
       {children}
       {hint ? <span className="block text-[11px] text-[var(--color-muted)]">{hint}</span> : null}
     </label>

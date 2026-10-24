@@ -711,10 +711,19 @@ pub fn settings_set(
     settings: Settings,
 ) -> CmdResult<Settings> {
     let previous = state.settings();
-    state.store_settings(&settings)?;
     if previous.shortcut != settings.shortcut {
-        crate::shortcut::rebind(&app, &previous.shortcut, &settings.shortcut);
+        // Rebind before persisting: a chord another app owns must not be written
+        // to disk, otherwise the next launch would start with no working hotkey.
+        if let Err(err) = crate::shortcut::rebind(&app, &previous.shortcut, &settings.shortcut) {
+            state.set_shortcut_error(Some(err.clone()));
+            let mut kept = settings.clone();
+            kept.shortcut = previous.shortcut.clone();
+            state.store_settings(&kept)?;
+            return Err(CmdError::new("app.shortcut_unavailable", err));
+        }
+        state.set_shortcut_error(None);
     }
+    state.store_settings(&settings)?;
     if previous.vault_path != settings.vault_path
         || previous.base_commodity != settings.base_commodity
         || previous.base_precision != settings.base_precision
@@ -722,6 +731,20 @@ pub fn settings_set(
         refresh(&state, &app, Vec::new(), "settings");
     }
     Ok(state.settings())
+}
+
+/// Registration state of the global capture shortcut, so settings can warn about
+/// a chord that was rejected at boot or after a failed rebind.
+#[tauri::command]
+#[specta::specta]
+pub fn shortcut_status(state: State<'_, AppState>) -> CmdResult<ShortcutStatusDto> {
+    let settings = state.settings();
+    let error = state.shortcut_error();
+    Ok(ShortcutStatusDto {
+        shortcut: settings.shortcut,
+        ok: error.is_none(),
+        error,
+    })
 }
 
 #[tauri::command]

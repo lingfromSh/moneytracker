@@ -8,12 +8,39 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Shortcut recorder in **设置**: click and press the chord (Esc cancels, Backspace clears,
+  重置 restores `CmdOrCtrl+Shift+Space`); the chord is validated before it is stored and a rejected
+  accelerator is reported inline. New `shortcut_status` command exposes whether the global hotkey is
+  actually registered.
 - Dual-language documentation: `README.md` (English) and `README.zh-CN.md` (简体中文).
 - CI workflow: `cargo fmt` / `clippy -D warnings` / `cargo test`, Vitest, `pnpm build`, a
   bindings-freshness check, and the `hledger` differential test on macOS runners.
 - `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE` (MIT).
 - `crates/ledger-engine/examples/bench_load.rs` — generates a 100 000-transaction vault and times
   a cold load, snapshot and dashboard render.
+
+### Changed
+
+- The IPC surface no longer exposes engine-owned transaction tokens: `txn:`, `rule:`, `query:` and
+  `recomputed:` are stripped from `TxnDto.tags`/`TxnDto.comment` and re-injected by the write path,
+  so editing a transaction can never drop its identity.
+
+### Fixed
+
+- Dashboard scrolled horizontally and clipped its right-hand column after the window was
+  un-maximised. `react-grid-layout` only lays items out from the container width it saw on first
+  render, and its stylesheet (`position: relative` for the grid) was never imported; the grid is now
+  remounted on width change, the stylesheet is imported, every page scroller only scrolls
+  vertically, and scrollbars are thin and themed.
+- The `状态` select in **编辑交易** sat inline with its label and was narrower than the other fields
+  (`Field` labels were inline elements and `Select` had no width), and the toolbar's `排序` select
+  competed with the search input for width.
+- The global capture hotkey toggled the capture window twice per keypress — the plugin-wide handler
+  and a per-shortcut handler both fired — which looked like a dead shortcut. Only the plugin-wide
+  handler remains.
+- Changing the global shortcut now registers the new chord *before* releasing the old one, keeps the
+  old registration when the chord is taken by another app, and reports the failure instead of
+  silently persisting a shortcut that never worked.
 
 ## [0.1.0] — 2026-10-25
 

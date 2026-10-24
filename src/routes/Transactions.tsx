@@ -94,7 +94,12 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
           placeholder="acct:餐饮 date:2026-10 tag:coffee amt:>100"
           aria-label="查询"
         />
-        <Select value={order} onChange={(e) => setOrder(e.target.value)} aria-label="排序">
+        <Select
+          value={order}
+          onChange={(e) => setOrder(e.target.value)}
+          aria-label="排序"
+          className="shrink-0"
+        >
           {ORDERS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -122,7 +127,7 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
       ) : null}
 
       <div
-        className="min-h-0 flex-1 overflow-auto"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
       >
         {page.isLoading ? (
@@ -264,6 +269,14 @@ function TxnRow({
   );
 }
 
+/** The engine owns `txn:`/`rule:`/`query:`/`recomputed:` tokens; never show or
+ * re-submit them from the editor. */
+const SYSTEM_COMMENT = /\b(?:txn|rule|query|recomputed):\S+/g;
+
+export function userComment(comment: string | null | undefined): string {
+  return (comment ?? "").replace(SYSTEM_COMMENT, "").replace(/\s+/g, " ").trim();
+}
+
 function TxnEditor({
   txn,
   onClose,
@@ -276,8 +289,13 @@ function TxnEditor({
   const [payee, setPayee] = React.useState(txn.payee);
   const [date, setDate] = React.useState(txn.date);
   const [status, setStatus] = React.useState(txn.status ?? "");
-  const [comment, setComment] = React.useState(txn.comment ?? "");
-  const [tags, setTags] = React.useState(txn.tags.map((t) => `${t.key}${t.value ? `:${t.value}` : ""}`).join(" "));
+  const [comment, setComment] = React.useState(userComment(txn.comment));
+  const [tags, setTags] = React.useState(
+    txn.tags
+      .filter((t) => t.key !== "txn")
+      .map((t) => `${t.key}${t.value ? `:${t.value}` : ""}`)
+      .join(" "),
+  );
   const [postings, setPostings] = React.useState(
     txn.postings.map((p) => ({ account: p.account, amount: p.amount?.quantity ?? p.quantity, comment: p.comment ?? "" })),
   );
@@ -324,7 +342,11 @@ function TxnEditor({
             <Input value={payee} onChange={(e) => setPayee(e.target.value)} />
           </Field>
           <Field label="状态">
-            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <Select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full"
+            >
               <option value="">未标记</option>
               <option value="cleared">已清算</option>
               <option value="pending">待定</option>

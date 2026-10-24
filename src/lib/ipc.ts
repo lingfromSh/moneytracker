@@ -94,6 +94,7 @@ export const api = {
   settings: () => call(commands.settingsGet()),
   saveSettings: (settings: Settings_Serialize) => call(commands.settingsSet(settings)),
   version: () => call(commands.appVersion()),
+  shortcutStatus: () => call(commands.shortcutStatus()),
 
   // capture window
   showCapture: () => call(commands.captureShow()),
@@ -117,5 +118,6 @@ export const queryKeys = {
   settings: ["settings"] as const,
   fxMissing: ["fx-missing"] as const,
   audit: ["audit"] as const,
+  shortcutStatus: ["shortcut-status"] as const,
   ruleTest: (id: string) => ["rule-test", id] as const,
 };

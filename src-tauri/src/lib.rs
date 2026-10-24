@@ -54,6 +54,7 @@ pub fn build_specta() -> Builder<tauri::Wry> {
             commands::write_audit,
             commands::settings_get,
             commands::settings_set,
+            commands::shortcut_status,
             commands::sample_vault_path,
             commands::create_sample_vault,
             commands::app_version,
@@ -114,7 +115,10 @@ fn boot(app: &AppHandle) {
             watcher::watch(app.clone(), std::path::Path::new(&path).to_path_buf());
         }
     }
-    shortcut::register(app, &settings.shortcut);
+    if let Err(err) = shortcut::register(app, &settings.shortcut) {
+        eprintln!("moneytracker: {err}");
+        state.set_shortcut_error(Some(err));
+    }
 }
 
 pub fn run() {

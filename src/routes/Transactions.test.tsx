@@ -155,6 +155,25 @@ describe("Transactions", () => {
     expect((patch as { payee: string }).payee).toBe("星巴克臻选");
   });
 
+  it("never exposes the engine-owned txn tag to the editor", async () => {
+    queryMock.mockResolvedValue({
+      ...page,
+      items: [txn({ tags: [{ key: "txn", value: "01JA3KQ7" }, { key: "coffee", value: null }] })],
+      total: 1,
+    });
+    renderList();
+    await userEvent.click(await screen.findByText("星巴克"));
+
+    const tags = (await screen.findByLabelText(/标签/)) as HTMLInputElement;
+    expect(tags.value).toBe("coffee");
+
+    await userEvent.click(screen.getByText("保存"));
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
+    const [, patch] = updateMock.mock.calls[0];
+    const sent = (patch as { tags: { key: string }[] }).tags;
+    expect(sent.map((t) => t.key)).toEqual(["coffee"]);
+  });
+
   it("deletes through txn_delete", async () => {
     renderList();
     await userEvent.click(await screen.findByText("地铁"));

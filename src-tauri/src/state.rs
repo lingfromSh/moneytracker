@@ -106,6 +106,8 @@ pub struct AppState {
     pub settings: RwLock<Settings>,
     pub vault: RwLock<Option<Arc<Vault>>>,
     pub watcher: Mutex<Option<notify::RecommendedWatcher>>,
+    /// Last failure while (re)registering the global capture shortcut.
+    pub shortcut_error: RwLock<Option<String>>,
 }
 
 impl AppState {
@@ -116,6 +118,7 @@ impl AppState {
             settings: RwLock::new(settings),
             vault: RwLock::new(None),
             watcher: Mutex::new(None),
+            shortcut_error: RwLock::new(None),
         }
     }
 
@@ -139,6 +142,17 @@ impl AppState {
 
     pub fn set_vault(&self, vault: Option<Arc<Vault>>) {
         *self.vault.write().expect("vault poisoned") = vault;
+    }
+
+    pub fn shortcut_error(&self) -> Option<String> {
+        self.shortcut_error
+            .read()
+            .expect("shortcut poisoned")
+            .clone()
+    }
+
+    pub fn set_shortcut_error(&self, error: Option<String>) {
+        *self.shortcut_error.write().expect("shortcut poisoned") = error;
     }
 
     pub fn audit_path(&self) -> PathBuf {
