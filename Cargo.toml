@@ -1,0 +1,30 @@
+[workspace]
+members = ["crates/ledger-core", "crates/ledger-query", "crates/ledger-engine", "src-tauri"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+rust_decimal = { version = "1.36", features = ["serde-with-str"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+blake3 = "1"
+rayon = "1.10"
+regex = "1"
+specta = { version = "=2.0.0-rc.26", features = ["derive"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+# specta 2.0.0-rc.26 uses `std::fmt::from_fn`, which is unstable on stable
+# Rust 1.91. The vendored copy replaces that one call with an equivalent
+# `Debug` wrapper; no other code is changed. Drop this patch once a specta
+# release (or tauri-specta depending on one) is stable-safe.
+[patch.crates-io]
+specta = { path = "vendor/specta" }
