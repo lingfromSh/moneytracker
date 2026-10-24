@@ -939,6 +939,123 @@ fn segment_matches(pattern: &str, name: &str) -> bool {
     go(&p, &n)
 }
 
+/// One transaction, normalised. Built in parallel; folded into the vault in order.
+struct BuiltTxn {
+    id: String,
+    file: String,
+    span: Span,
+    txn: Transaction,
+    balanced: bool,
+    fx_missing: bool,
+    base_value: Option<Decimal>,
+    values: Vec<TxnValue>,
+    info: TxnRecordInfo,
+    diagnostics: Vec<Diagnostic>,
+    editable: bool,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_txn(
+    file: &FileEntry,
+    txn: &Transaction,
+    commodities: &CommodityTable,
+    prices: &PriceTable,
+    decls: &HashMap<String, char>,
+    account_type_map: &[(String, String)],
+    base_commodity: &str,
+) -> BuiltTxn {
+    let mut txn = txn.clone();
+    let mut diagnostics = Vec::new();
+    let balanced = match balance(&mut txn.postings, commodities, base_commodity) {
+        Ok(()) => true,
+        Err(issues) => {
+            for issue in issues {
+                diagnostics.push(Diagnostic {
+                    severity: Severity::Warning,
+                    code: issue.code,
+                    message: issue.message,
+                    file: file.rel.clone(),
+                    span: txn.span,
+                    line: 0,
+                    col: 0,
+                });
+            }
+            false
+        }
+    };
+
+    let id = match txn.tag("txn") {
+        Some(id) if !id.trim().is_empty() => id.trim().to_string(),
+        _ => pseudo_id(&file.rel, &txn),
+    };
+
+    let mut values = Vec::new();
+    let mut fx_missing = false;
+    let mut cash = Decimal::ZERO;
+    let mut cash_complete = true;
+    for p in &txn.postings {
+        let Some(eff) = p.effective_amount() else {
+            continue;
+        };
+        let kind = kind_of(&p.account, decls, account_type_map);
+        let base = if eff.commodity.is_empty() || eff.commodity == base_commodity {
+            Some(eff.quantity)
+        } else {
+            prices
+                .convert(&eff, base_commodity, txn.date)
+                .map(|a| a.quantity)
+        };
+        if base.is_none() {
+            fx_missing = true;
+        }
+        if p.is_balanced() && matches!(kind, 'A' | 'L') {
+            match base {
+                Some(b) => cash += b,
+                None => cash_complete = false,
+            }
+        }
+        values.push(TxnValue {
+            account: p.account.clone(),
+            kind,
+            amount: eff,
+            base,
+        });
+    }
+    let base_value = if cash_complete && !fx_missing {
+        Some(-cash)
+    } else {
+        None
+    };
+
+    let account_names: Vec<String> = txn.postings.iter().map(|p| p.account.clone()).collect();
+    let tag_pairs: Vec<(String, Option<String>)> = txn
+        .tags
+        .iter()
+        .map(|t| (t.key.clone(), t.value.clone()))
+        .collect();
+    let amounts: Vec<Decimal> = values.iter().map(|v| v.amount.quantity).collect();
+    let commodities: Vec<String> = values.iter().map(|v| v.amount.commodity.clone()).collect();
+
+    BuiltTxn {
+        id,
+        file: file.rel.clone(),
+        span: txn.span,
+        editable: !file.diagnostics.iter().any(|d| d.is_error()),
+        txn,
+        balanced,
+        fx_missing,
+        base_value,
+        values,
+        info: TxnRecordInfo {
+            account_names,
+            tag_pairs,
+            amounts,
+            commodities,
+        },
+        diagnostics,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1139,122 +1256,5 @@ mod tests {
         assert!(segment_matches("*.ledger", "2026-10-25.ledger"));
         assert!(!segment_matches("*.ledger", "2026-10-25.txt"));
         assert!(segment_matches("2026-??-25.ledger", "2026-10-25.ledger"));
-    }
-}
-
-/// One transaction, normalised. Built in parallel; folded into the vault in order.
-struct BuiltTxn {
-    id: String,
-    file: String,
-    span: Span,
-    txn: Transaction,
-    balanced: bool,
-    fx_missing: bool,
-    base_value: Option<Decimal>,
-    values: Vec<TxnValue>,
-    info: TxnRecordInfo,
-    diagnostics: Vec<Diagnostic>,
-    editable: bool,
-}
-
-#[allow(clippy::too_many_arguments)]
-fn build_txn(
-    file: &FileEntry,
-    txn: &Transaction,
-    commodities: &CommodityTable,
-    prices: &PriceTable,
-    decls: &HashMap<String, char>,
-    account_type_map: &[(String, String)],
-    base_commodity: &str,
-) -> BuiltTxn {
-    let mut txn = txn.clone();
-    let mut diagnostics = Vec::new();
-    let balanced = match balance(&mut txn.postings, commodities, base_commodity) {
-        Ok(()) => true,
-        Err(issues) => {
-            for issue in issues {
-                diagnostics.push(Diagnostic {
-                    severity: Severity::Warning,
-                    code: issue.code,
-                    message: issue.message,
-                    file: file.rel.clone(),
-                    span: txn.span,
-                    line: 0,
-                    col: 0,
-                });
-            }
-            false
-        }
-    };
-
-    let id = match txn.tag("txn") {
-        Some(id) if !id.trim().is_empty() => id.trim().to_string(),
-        _ => pseudo_id(&file.rel, &txn),
-    };
-
-    let mut values = Vec::new();
-    let mut fx_missing = false;
-    let mut cash = Decimal::ZERO;
-    let mut cash_complete = true;
-    for p in &txn.postings {
-        let Some(eff) = p.effective_amount() else {
-            continue;
-        };
-        let kind = kind_of(&p.account, decls, account_type_map);
-        let base = if eff.commodity.is_empty() || eff.commodity == base_commodity {
-            Some(eff.quantity)
-        } else {
-            prices
-                .convert(&eff, base_commodity, txn.date)
-                .map(|a| a.quantity)
-        };
-        if base.is_none() {
-            fx_missing = true;
-        }
-        if p.is_balanced() && matches!(kind, 'A' | 'L') {
-            match base {
-                Some(b) => cash += b,
-                None => cash_complete = false,
-            }
-        }
-        values.push(TxnValue {
-            account: p.account.clone(),
-            kind,
-            amount: eff,
-            base,
-        });
-    }
-    let base_value = if cash_complete && !fx_missing {
-        Some(-cash)
-    } else {
-        None
-    };
-
-    let account_names: Vec<String> = txn.postings.iter().map(|p| p.account.clone()).collect();
-    let tag_pairs: Vec<(String, Option<String>)> = txn
-        .tags
-        .iter()
-        .map(|t| (t.key.clone(), t.value.clone()))
-        .collect();
-    let amounts: Vec<Decimal> = values.iter().map(|v| v.amount.quantity).collect();
-    let commodities: Vec<String> = values.iter().map(|v| v.amount.commodity.clone()).collect();
-
-    BuiltTxn {
-        id,
-        file: file.rel.clone(),
-        span: txn.span,
-        editable: !file.diagnostics.iter().any(|d| d.is_error()),
-        txn,
-        balanced,
-        fx_missing,
-        base_value,
-        values,
-        info: TxnRecordInfo {
-            account_names,
-            tag_pairs,
-            amounts,
-            commodities,
-        },
-        diagnostics,
     }
 }

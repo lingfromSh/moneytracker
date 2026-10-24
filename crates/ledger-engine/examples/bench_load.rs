@@ -7,7 +7,7 @@
 use std::time::Instant;
 
 use chrono::NaiveDate;
-use ledger_engine::vault::{create_vault, VaultOptions, VaultCreateOptions};
+use ledger_engine::vault::{create_vault, VaultCreateOptions, VaultOptions};
 use ledger_engine::writer;
 use ledger_engine::Vault;
 
