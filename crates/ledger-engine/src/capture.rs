@@ -16,6 +16,9 @@ use crate::rules::{
     parse_rule_line, rule_from_line, split_percent, Direction, ParsedRuleLine, RuleDef,
 };
 use crate::types::{CaptureParseDto, PostingDto, RulePreviewDto};
+use crate::vault::VaultOptions;
+use crate::writer;
+use crate::{EngineError, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Kind {
@@ -992,5 +995,119 @@ mod tests {
         assert_ne!(a, b);
         assert_eq!(a.len(), 36);
         assert_eq!(&a[14..15], "7");
+    }
+}
+
+/// A block that has been appended to its day file.
+#[derive(Debug, Clone)]
+pub struct CommittedBlock {
+    pub rel: String,
+    pub span: ledger_core::Span,
+    pub canonical: String,
+    pub created_file: bool,
+}
+
+/// Append an already expanded capture to its day file, creating the include chain.
+///
+/// This is the only place that writes a transaction block, so the engine tests can
+/// assert that `hledger` accepts what the capture window produced.
+pub fn commit_to_day_file(
+    vault: &Vault,
+    expanded: &ExpandedCapture,
+    txn_id: &str,
+    opts: &VaultOptions,
+) -> Result<CommittedBlock> {
+    if !expanded.errors.is_empty() {
+        return Err(EngineError::Refused(expanded.errors.join("; ")));
+    }
+    let mut txn = expanded.txn.clone();
+    let mut tags = txn.tags.clone();
+    if !tags.iter().any(|t| t.key == "txn") {
+        tags.insert(0, ledger_core::Tag::kv("txn", txn_id));
+    }
+    txn.comment = merge_tag_comment(txn.comment.as_deref(), &tags);
+    txn.tags = tags;
+
+    let default_commodity = vault.opts.base_commodity.clone();
+    if let Err(issues) = balance(&mut txn.postings, &vault.commodities, &default_commodity) {
+        return Err(EngineError::Refused(
+            issues
+                .iter()
+                .map(|i| i.message.clone())
+                .collect::<Vec<_>>()
+                .join("; "),
+        ));
+    }
+    let canonical = ledger_core::printer::print_transaction(&txn);
+
+    let day = writer::ensure_day_file(&vault.root, txn.date, opts)?;
+    let (src, state) = writer::read_rel(&vault.root, &day.rel)?;
+    let mut next = src.clone();
+    if !next.is_empty() && !next.ends_with('\n') {
+        next.push('\n');
+    }
+    if !next.trim().is_empty() && !next.ends_with("\n\n") {
+        next.push('\n');
+    }
+    let start = next.len();
+    next.push_str(&canonical);
+    next.push('\n');
+
+    writer::snapshot(&vault.root, &day.rel, opts.max_backups)?;
+    writer::write_rel(&vault.root, &day.rel, &next, Some(&state), opts)?;
+
+    Ok(CommittedBlock {
+        rel: day.rel.to_string_lossy().to_string(),
+        span: ledger_core::Span {
+            start,
+            end: start + canonical.len(),
+        },
+        canonical,
+        created_file: day.created,
+    })
+}
+
+/// Drop tag tokens (`:a:b:` and `k:v`) from a free-form comment.
+pub fn strip_tag_tokens(comment: &str) -> String {
+    comment
+        .split_whitespace()
+        .filter(|token| {
+            let looks_bare = token.len() >= 3 && token.starts_with(':') && token.ends_with(':');
+            let looks_kv = token
+                .split_once(':')
+                .map(|(k, v)| !k.is_empty() && !v.is_empty() && is_word(k))
+                .unwrap_or(false);
+            !(looks_bare || looks_kv)
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn is_word(s: &str) -> bool {
+    s.chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
+}
+
+/// Render `tags` as hledger comment tags and merge them back into `comment`.
+pub fn merge_tag_comment(comment: Option<&str>, tags: &[ledger_core::Tag]) -> Option<String> {
+    let base = strip_tag_tokens(comment.unwrap_or(""));
+    let mut parts: Vec<String> = Vec::new();
+    if !base.is_empty() {
+        parts.push(base);
+    }
+    let mut bare: Vec<String> = Vec::new();
+    for tag in tags {
+        match &tag.value {
+            None => bare.push(tag.key.clone()),
+            Some(value) => parts.push(format!("{}:{value}", tag.key)),
+        }
+    }
+    if !bare.is_empty() {
+        parts.push(format!(":{}:", bare.join(":")));
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" "))
     }
 }

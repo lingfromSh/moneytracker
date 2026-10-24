@@ -512,27 +512,40 @@ impl Vault {
     }
 
     /// Flat balances per account (base commodity only).
+    /// Native balances, one row per account and commodity — the same numbers
+    /// `hledger balance --flat --no-total` prints. Base-commodity valuation lives in
+    /// `net_worth()` and `account_tree()`, never here.
     pub fn balances(&self) -> Vec<BalanceRowDto> {
-        let mut totals: BTreeMap<String, Decimal> = BTreeMap::new();
+        let mut totals: BTreeMap<(String, String), Decimal> = BTreeMap::new();
         for t in &self.txns {
-            for v in &t.values {
-                if let Some(base) = v.base {
-                    *totals.entry(v.account.clone()).or_insert(Decimal::ZERO) += base;
-                }
+            for p in &t.txn.postings {
+                let Some(amount) = p.amount.as_ref() else {
+                    continue;
+                };
+                let commodity = if amount.commodity.is_empty() {
+                    self.commodities.base.clone()
+                } else {
+                    amount.commodity.clone()
+                };
+                *totals
+                    .entry((p.account.clone(), commodity))
+                    .or_insert(Decimal::ZERO) += amount.quantity;
             }
         }
         totals
             .into_iter()
-            .map(|(account, qty)| BalanceRowDto {
-                account,
-                commodity: self.commodities.base.clone(),
-                quantity: qty.to_string(),
-                value: crate::amounts::f64_of(qty),
-                display: self.commodities.format(&ledger_core::Amount::canonical(
-                    qty,
-                    &self.commodities.base,
-                    self.commodities.base_precision,
-                )),
+            .filter(|(_, qty)| !qty.is_zero())
+            .map(|((account, commodity), qty)| {
+                let precision = self.commodities.precision_of(&commodity);
+                BalanceRowDto {
+                    account,
+                    quantity: qty.to_string(),
+                    value: crate::amounts::f64_of(qty),
+                    display: self
+                        .commodities
+                        .format(&ledger_core::Amount::canonical(qty, &commodity, precision)),
+                    commodity,
+                }
             })
             .collect()
     }

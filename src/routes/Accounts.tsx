@@ -21,6 +21,15 @@ export function Accounts() {
     retry: 0,
   });
 
+  const snapshot = useQuery({
+    queryKey: queryKeys.snapshot,
+    queryFn: () => api.snapshot(),
+    retry: 0,
+  });
+  const foreign = (snapshot.data?.balances ?? []).filter(
+    (row) => row.commodity !== snapshot.data?.vault.base_commodity,
+  );
+
   const tree = data ?? [];
   const totals = React.useMemo(() => {
     const sum = (nodes: AccountNodeDto[], kind: string) =>
@@ -61,6 +70,25 @@ export function Accounts() {
         <Stat label="收入" value={totals.income} />
         <Stat label="支出" value={totals.expenses} />
       </div>
+
+      {foreign.length > 0 ? (
+        <div className="px-4 pb-2">
+          <Card className="divide-y divide-[var(--color-line)]">
+            <div className="px-3 py-2 text-[11px] text-[var(--color-muted)]">
+              原币余额（未折算，仅作参考）
+            </div>
+            {foreign.map((row) => (
+              <div
+                key={`${row.account}-${row.commodity}`}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs"
+              >
+                <span className="min-w-0 flex-1 truncate">{row.account}</span>
+                <span className="font-mono">{row.display}</span>
+              </div>
+            ))}
+          </Card>
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
         {tree.length === 0 ? (

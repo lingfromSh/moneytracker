@@ -125,7 +125,12 @@ Drop the patch once a `tauri-specta` release depends on `specta >= 2.0.0-rc.27`.
   reports, writer safety, and the checked-in `fixtures/vault/sample` vault end to end.
 - `src`: mocked IPC with Testing Library; assertions on what would be sent over IPC, not on
   implementation details.
-- `scripts/smoke.sh` optionally cross-checks balances with the real `hledger` binary.
+- `crates/ledger-engine/tests/hledger_diff.rs` (skipped when `hledger` is absent) compares
+  `hledger balance --flat --no-total -O csv` with `Vault::balances()` for the sample vault, and
+  asserts `hledger check` accepts a vault the engine just wrote; `scripts/smoke.sh` runs the same
+  cross-check as part of the full pass.
+- `Vault::balances()` reports native amounts (one row per account and commodity, exactly like
+  hledger); base-commodity valuation only appears in `net_worth()` and the account tree totals.
 
 ## Performance
 

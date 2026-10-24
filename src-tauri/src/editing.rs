@@ -8,7 +8,7 @@ use chrono::Local;
 use ledger_core::ast::{Posting, Status, Tag, Transaction, VirtualKind};
 use ledger_core::{parse_amount, printer, Span};
 use ledger_engine::amounts::{self, CommodityTable};
-use ledger_engine::capture::ExpandedCapture;
+use ledger_engine::capture::{merge_tag_comment as merge_tags, ExpandedCapture};
 use ledger_engine::rules::{Direction, RuleDef};
 use ledger_engine::types::*;
 use ledger_engine::vault::VaultOptions;
@@ -22,50 +22,6 @@ fn refused(msg: impl Into<String>) -> CmdError {
 
 fn now_iso() -> String {
     Local::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-}
-
-/// Render `tags` into hledger comment syntax and merge them into `comment`.
-pub fn merge_tags(comment: Option<&str>, tags: &[Tag]) -> Option<String> {
-    let base = strip_tag_tokens(comment.unwrap_or(""));
-    let mut parts: Vec<String> = Vec::new();
-    if !base.is_empty() {
-        parts.push(base);
-    }
-    let mut bare: Vec<String> = Vec::new();
-    for tag in tags {
-        match &tag.value {
-            None => bare.push(tag.key.clone()),
-            Some(v) => parts.push(format!("{}:{}", tag.key, v)),
-        }
-    }
-    if !bare.is_empty() {
-        parts.push(format!(":{}:", bare.join(":")));
-    }
-    if parts.is_empty() {
-        None
-    } else {
-        Some(parts.join(" "))
-    }
-}
-
-pub fn strip_tag_tokens(comment: &str) -> String {
-    comment
-        .split_whitespace()
-        .filter(|token| {
-            let looks_bare = token.len() >= 3 && token.starts_with(':') && token.ends_with(':');
-            let looks_kv = token
-                .split_once(':')
-                .map(|(k, v)| !k.is_empty() && !v.is_empty() && is_word(k))
-                .unwrap_or(false);
-            !(looks_bare || looks_kv)
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn is_word(s: &str) -> bool {
-    s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
 }
 
 fn splice(
@@ -556,62 +512,26 @@ pub fn commit(
     opts: &VaultOptions,
     audit_path: &Path,
 ) -> CmdResult<CaptureCommitDto> {
-    if !expanded.errors.is_empty() {
-        return Err(refused(
-            expanded
-                .errors
-                .iter()
-                .map(|e| e.as_str())
-                .collect::<Vec<_>>()
-                .join("; "),
-        ));
-    }
-    let mut txn = expanded.txn.clone();
-    let mut tags: Vec<Tag> = txn.tags.clone();
-    if !tags.iter().any(|t| t.key == "txn") {
-        tags.insert(0, Tag::kv("txn", txn_id));
-    }
-    txn.comment = merge_tags(txn.comment.as_deref(), &tags);
-    txn.tags = tags;
-    let base = vault.opts.base_commodity.clone();
-    balance_or_refuse(&mut txn.postings, &vault.commodities, &base)?;
-    let canonical = printer::print_transaction(&txn);
-
-    let day = writer::ensure_day_file(&vault.root, txn.date, opts)?;
-    let (src, state) = writer::read_rel(&vault.root, &day.rel)?;
-    let mut next = src.clone();
-    if !next.is_empty() && !next.ends_with('\n') {
-        next.push('\n');
-    }
-    if !next.trim().is_empty() && !next.ends_with("\n\n") {
-        next.push('\n');
-    }
-    let start = next.len();
-    next.push_str(&canonical);
-    next.push('\n');
-
-    writer::snapshot(&vault.root, &day.rel, opts.max_backups)?;
-    writer::write_rel(&vault.root, &day.rel, &next, Some(&state), opts)?;
-    let end = start + canonical.len();
+    let block = ledger_engine::capture::commit_to_day_file(vault, expanded, txn_id, opts)?;
     let _ = writer::append_audit(
         audit_path,
         &AuditEntryDto {
             ts: now_iso(),
             op: "capture_commit".into(),
-            file: day.rel.to_string_lossy().to_string(),
-            span_start: start,
-            span_end: end,
+            file: block.rel.clone(),
+            span_start: block.span.start,
+            span_end: block.span.end,
             before: String::new(),
-            after: canonical.chars().take(400).collect(),
+            after: block.canonical.chars().take(400).collect(),
         },
     );
     Ok(CaptureCommitDto {
-        file: day.rel.to_string_lossy().to_string(),
-        span_start: start,
-        span_end: end,
+        file: block.rel,
+        span_start: block.span.start,
+        span_end: block.span.end,
         txn_id: txn_id.to_string(),
-        canonical_text: canonical,
-        created_file: day.created,
+        canonical_text: block.canonical,
+        created_file: block.created_file,
     })
 }
 
