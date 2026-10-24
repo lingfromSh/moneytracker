@@ -226,8 +226,7 @@ pub fn parse_amount(text: &str) -> Result<Amount, AmountError> {
         .ok_or_else(|| AmountError::NoDigits(text.to_string()))?;
     let last_digit = rest
         .char_indices()
-        .filter(|(_, c)| c.is_ascii_digit())
-        .next_back()
+        .rfind(|(_, c)| c.is_ascii_digit())
         .map(|(i, c)| i + c.len_utf8())
         .unwrap();
     // Reject digits appearing after the numeric core through a symbol (e.g. `USD4X`).

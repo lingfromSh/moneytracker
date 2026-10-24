@@ -1,0 +1,6 @@
+# Pinned so that local builds and CI agree on the exact compiler and lints.
+# Bump deliberately (and re-run ./scripts/smoke.sh) rather than tracking stable.
+[toolchain]
+channel = "1.91"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
