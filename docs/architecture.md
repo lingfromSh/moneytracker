@@ -135,6 +135,12 @@ plugin-wide handler in `lib.rs` compares the pressed shortcut with `settings.sho
 application owns leaves the previous registration intact, and the failure is surfaced through
 `shortcut_status` instead of being written to settings.
 
+The settings recorder listens on `window` in the capture phase rather than on the button: WebKit does
+not focus buttons on click, and the chord being recorded may well be the one that is currently
+registered. `shortcut_recording(true|false)` therefore unregisters and re-registers the stored chord
+around a recording session, and the component restores it on Esc, click-away, window blur and
+unmount — a released hotkey must never outlive the recorder.
+
 ## Testing strategy
 
 - `ledger-core`: grammar corpus (`fixtures/grammar/*.ledger`) parses clean, round-trips and prints

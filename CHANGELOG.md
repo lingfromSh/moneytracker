@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The shortcut recorder records from a window-level listener (WebKit does not focus buttons on
+  click), previews the modifiers as they are held, rejects `⇧`-only and macOS menu-owned chords
+  inline, and cancels on Esc, a click elsewhere or a window blur.
+- `shortcut_recording` command: the settings recorder releases the live global hotkey while it
+  listens and restores it afterwards, so pressing the current chord cannot open the capture window
+  and steal focus mid-recording.
+
 - Shortcut recorder in **设置**: click and press the chord (Esc cancels, Backspace clears,
   重置 restores `CmdOrCtrl+Shift+Space`); the chord is validated before it is stored and a rejected
   accelerator is reported inline. New `shortcut_status` command exposes whether the global hotkey is

@@ -1,7 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ShortcutInput, keyToAccelerator } from "./shortcut-input";
+import {
+  ShortcutInput,
+  chordProblem,
+  keyToAccelerator,
+} from "./shortcut-input";
 import { formatAccelerator } from "../lib/shortcut";
 
 function chord(init: KeyboardEventInit & { code: string; key: string }): KeyboardEvent {
@@ -31,26 +35,98 @@ describe("shortcut-input", () => {
     expect(keyToAccelerator(chord({ code: "KeyK", key: "k" }))).toBeNull();
   });
 
+  it("explains why a chord is unusable", () => {
+    const mac = true;
+    expect(chordProblem(chord({ code: "KeyK", key: "k" }), mac)).toMatch(/按住修饰键/);
+    expect(chordProblem(chord({ code: "KeyA", key: "A", shiftKey: true }), mac)).toMatch(
+      /只有 ⇧ 不够/,
+    );
+    // ⌘A is owned by the macOS app menu and never reaches the webview.
+    expect(chordProblem(chord({ code: "KeyA", key: "a", metaKey: true }), mac)).toMatch(
+      /macOS 菜单占用/,
+    );
+    expect(chordProblem(chord({ code: "KeyA", key: "A", metaKey: true, shiftKey: true }), mac)).toBeNull();
+    // A held modifier on its own is not a problem, just an incomplete chord.
+    expect(chordProblem(chord({ code: "MetaLeft", key: "Meta", metaKey: true }), mac)).toBeNull();
+  });
+
   it("formats an accelerator for display", () => {
     expect(formatAccelerator("CmdOrCtrl+Shift+Space")).toBe("⌘ ⇧ Space");
     expect(formatAccelerator("")).toBe("—");
   });
 
-  it("emits the recorded accelerator and warns on a bare key", async () => {
+  it("records from a window level listener and releases the hotkey meanwhile", async () => {
+    const onChange = vi.fn();
+    const onRecordingChange = vi.fn();
+    render(
+      <ShortcutInput
+        value="CmdOrCtrl+Shift+Space"
+        onChange={onChange}
+        onRecordingChange={onRecordingChange}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText("录制全局快捷键"));
+    expect(onRecordingChange).toHaveBeenCalledWith(true);
+    expect(screen.getByText(/请按下新的快捷键/)).toBeInTheDocument();
+
+    // Modifiers alone update the preview without committing.
+    fireEvent.keyDown(window, { code: "ControlLeft", key: "Control", ctrlKey: true });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/新快捷键：⌘/)).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { code: "KeyK", key: "k", ctrlKey: true, shiftKey: true });
+    expect(onChange).toHaveBeenCalledWith("CmdOrCtrl+Shift+K");
+    expect(onRecordingChange).toHaveBeenCalledWith(false);
+  });
+
+  it("warns instead of committing a shift-only chord", async () => {
     const onChange = vi.fn();
     render(<ShortcutInput value="CmdOrCtrl+Shift+Space" onChange={onChange} />);
 
     await userEvent.click(screen.getByLabelText("录制全局快捷键"));
-    await userEvent.type(screen.getByLabelText("录制全局快捷键"), "{k}");
-    expect(screen.getByText(/请同时按下修饰键/)).toBeInTheDocument();
+    fireEvent.keyDown(window, { code: "KeyA", key: "A", shiftKey: true });
+
+    expect(screen.getByText(/只有 ⇧ 不够/)).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("cancels with Escape and restores the hotkey", async () => {
+    const onChange = vi.fn();
+    const onRecordingChange = vi.fn();
+    render(
+      <ShortcutInput
+        value="CmdOrCtrl+Shift+Space"
+        onChange={onChange}
+        onRecordingChange={onRecordingChange}
+      />,
+    );
 
     await userEvent.click(screen.getByLabelText("录制全局快捷键"));
-    await userEvent.type(
-      screen.getByLabelText("录制全局快捷键"),
-      "{Control>}{Alt>}{Shift>}k{/Shift}{/Alt}{/Control}",
+    fireEvent.keyDown(window, { code: "Escape", key: "Escape" });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onRecordingChange).toHaveBeenLastCalledWith(false);
+    expect(screen.getByText(/当前：⌘ ⇧ Space/)).toBeInTheDocument();
+  });
+
+  it("stops recording and restores the hotkey when the user clicks away", async () => {
+    const onChange = vi.fn();
+    const onRecordingChange = vi.fn();
+    render(
+      <ShortcutInput
+        value="CmdOrCtrl+Shift+Space"
+        onChange={onChange}
+        onRecordingChange={onRecordingChange}
+      />,
     );
-    expect(onChange).toHaveBeenCalledWith("CmdOrCtrl+Alt+Shift+K");
+
+    await userEvent.click(screen.getByLabelText("录制全局快捷键"));
+    fireEvent.pointerDown(document.body);
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onRecordingChange).toHaveBeenLastCalledWith(false);
+    expect(screen.getByText(/当前：⌘ ⇧ Space/)).toBeInTheDocument();
   });
 
   it("restores the default with the reset button", async () => {

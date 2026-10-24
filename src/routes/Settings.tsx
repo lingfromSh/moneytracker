@@ -218,6 +218,16 @@ export function SettingsView() {
                 value={draft.shortcut}
                 onChange={(next) => update("shortcut", next)}
                 invalid={shortcut.data ? !shortcut.data.ok : false}
+                onRecordingChange={(active) => {
+                  // Release the live chord so pressing it cannot open the capture
+                  // window mid-recording; restore it when the recorder closes.
+                  void api
+                    .shortcutRecording(active)
+                    .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.shortcutStatus }))
+                    .catch(() => {
+                      /* the recorder still works; the save path re-reports errors */
+                    });
+                }}
               />
             </Field>
             {shortcut.data && !shortcut.data.ok && shortcut.data.error ? (

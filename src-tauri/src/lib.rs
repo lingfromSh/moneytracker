@@ -55,6 +55,7 @@ pub fn build_specta() -> Builder<tauri::Wry> {
             commands::settings_get,
             commands::settings_set,
             commands::shortcut_status,
+            commands::shortcut_recording,
             commands::sample_vault_path,
             commands::create_sample_vault,
             commands::app_version,

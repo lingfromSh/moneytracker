@@ -45,6 +45,12 @@ export const commands = {
 	 *  a chord that was rejected at boot or after a failed rebind.
 	 */
 	shortcutStatus: () => typedError<ShortcutStatusDto_Serialize, CmdError>(__TAURI_INVOKE("shortcut_status")),
+	/**
+	 *  Releases the global capture shortcut while 设置 records a new chord, then
+	 *  re-registers the stored one. Without this, pressing the current combination
+	 *  opens the capture window and takes focus away mid-recording.
+	 */
+	shortcutRecording: (active: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("shortcut_recording", { active })),
 	sampleVaultPath: () => typedError<string, CmdError>(__TAURI_INVOKE("sample_vault_path")),
 	createSampleVault: () => typedError<OpenVaultResultDto_Serialize, CmdError>(__TAURI_INVOKE("create_sample_vault")),
 	appVersion: () => typedError<string, CmdError>(__TAURI_INVOKE("app_version")),

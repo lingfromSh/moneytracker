@@ -747,6 +747,33 @@ pub fn shortcut_status(state: State<'_, AppState>) -> CmdResult<ShortcutStatusDt
     })
 }
 
+/// Releases the global capture shortcut while 设置 records a new chord, then
+/// re-registers the stored one. Without this, pressing the current combination
+/// opens the capture window and takes focus away mid-recording.
+#[tauri::command]
+#[specta::specta]
+pub fn shortcut_recording(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    active: bool,
+) -> CmdResult<()> {
+    let settings = state.settings();
+    if active {
+        crate::shortcut::unregister(&app, &settings.shortcut);
+        return Ok(());
+    }
+    match crate::shortcut::register(&app, &settings.shortcut) {
+        Ok(()) => {
+            state.set_shortcut_error(None);
+            Ok(())
+        }
+        Err(err) => {
+            state.set_shortcut_error(Some(err.clone()));
+            Err(CmdError::new("app.shortcut_unavailable", err))
+        }
+    }
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn sample_vault_path(state: State<'_, AppState>) -> CmdResult<String> {

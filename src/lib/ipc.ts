@@ -95,6 +95,7 @@ export const api = {
   saveSettings: (settings: Settings_Serialize) => call(commands.settingsSet(settings)),
   version: () => call(commands.appVersion()),
   shortcutStatus: () => call(commands.shortcutStatus()),
+  shortcutRecording: (active: boolean) => call(commands.shortcutRecording(active)),
 
   // capture window
   showCapture: () => call(commands.captureShow()),
