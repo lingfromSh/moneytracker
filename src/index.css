@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-surface: oklch(0.99 0.002 250);
+  --color-surface-2: oklch(0.97 0.004 250);
+  --color-line: oklch(0.9 0.006 250);
+  --color-ink: oklch(0.22 0.01 250);
+  --color-muted: oklch(0.52 0.01 250);
+  --color-accent: oklch(0.62 0.14 155);
+  --color-danger: oklch(0.58 0.19 25);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-card: 14px;
+}
+
+:root {
+  color-scheme: light;
+}
+
+:root.dark {
+  color-scheme: dark;
+  --color-surface: oklch(0.2 0.006 260);
+  --color-surface-2: oklch(0.25 0.008 260);
+  --color-line: oklch(0.33 0.01 260);
+  --color-ink: oklch(0.94 0.004 260);
+  --color-muted: oklch(0.68 0.01 260);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The capture palette is a frameless, transparent window. */
+.capture-window {
+  background: transparent;
+}
+
+.capture-window body,
+.capture-window #root {
+  background: transparent;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-accent) 30%, transparent);
+}
