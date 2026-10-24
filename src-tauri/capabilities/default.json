@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the MoneyTracker windows.",
+  "windows": ["main", "capture"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-center",
+    "core:window:allow-is-visible",
+    "core:window:allow-start-dragging",
+    "core:window:allow-close",
+    "core:app:default",
+    "core:path:default",
+    "core:webview:default",
+    "global-shortcut:default",
+    "dialog:default",
+    "opener:default"
+  ]
+}

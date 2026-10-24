@@ -1,0 +1,36 @@
+[package]
+name = "moneytracker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Plain-text double-entry bookkeeping, capture first"
+
+[lib]
+name = "moneytracker_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
+tauri-specta = { version = "=2.0.0-rc.26", features = ["derive", "typescript"] }
+specta-typescript = "0.0.13"
+specta = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+blake3.workspace = true
+rust_decimal.workspace = true
+notify = "6"
+dirs = "5"
+ledger-core = { path = "../crates/ledger-core" }
+ledger-query = { path = "../crates/ledger-query" }
+ledger-engine = { path = "../crates/ledger-engine" }
+
+[dev-dependencies]
+tempfile = "3"
