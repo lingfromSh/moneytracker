@@ -104,10 +104,14 @@ impl Settings {
 pub struct AppState {
     pub config_dir: PathBuf,
     pub settings: RwLock<Settings>,
-    pub vault: RwLock<Option<Arc<Vault>>>,
+    /// Private on purpose: reloads must go through [`AppState::reload_from_disk`],
+    /// which never holds a read guard across the store (see its doc comment).
+    vault: RwLock<Option<Arc<Vault>>>,
     pub watcher: Mutex<Option<notify::RecommendedWatcher>>,
     /// Last failure while (re)registering the global capture shortcut.
     pub shortcut_error: RwLock<Option<String>>,
+    /// Serialises reloads so two commands cannot interleave a load and store.
+    reload_lock: Mutex<()>,
 }
 
 impl AppState {
@@ -119,6 +123,7 @@ impl AppState {
             vault: RwLock::new(None),
             watcher: Mutex::new(None),
             shortcut_error: RwLock::new(None),
+            reload_lock: Mutex::new(()),
         }
     }
 
@@ -142,6 +147,21 @@ impl AppState {
 
     pub fn set_vault(&self, vault: Option<Arc<Vault>>) {
         *self.vault.write().expect("vault poisoned") = vault;
+    }
+
+    /// Re-reads the vault from disk and swaps it in.
+    ///
+    /// `std::sync::RwLock` is not re-entrant: taking the write lock while this
+    /// thread still holds a read guard deadlocks it, and because commands are
+    /// driven from the app's event loop that hangs the whole UI. So the current
+    /// handle is cloned into a local, the guard is dropped, and only then does
+    /// the (potentially slow) load and the store happen — keep it that way.
+    pub fn reload_from_disk(&self, opts: &VaultOptions) -> Option<Arc<Vault>> {
+        let _serialised = self.reload_lock.lock().expect("reload poisoned");
+        let root = self.vault().ok()?.root.clone();
+        let vault = Arc::new(Vault::load(&root, opts).ok()?);
+        self.set_vault(Some(vault.clone()));
+        Some(vault)
     }
 
     pub fn shortcut_error(&self) -> Option<String> {
@@ -186,4 +206,72 @@ pub fn save_settings(config_dir: &Path, settings: &Settings) -> CmdResult<()> {
     std::fs::write(settings_path(config_dir), json)
         .map_err(|e| CmdError::new("app.io", e.to_string()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use ledger_engine::capture::{analyze, commit_to_day_file, new_txn_id};
+    use ledger_engine::vault::{create_vault, VaultCreateOptions};
+
+    use super::*;
+
+    /// Runs `body` on a worker thread and fails instead of hanging forever: a
+    /// `RwLock` deadlock in the write path froze the UI, and a plain call would
+    /// simply block the test suite.
+    fn with_timeout<F: FnOnce() -> bool + Send + 'static>(name: &str, body: F) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(body());
+        });
+        match rx.recv_timeout(Duration::from_secs(20)) {
+            Ok(true) => {}
+            Ok(false) => panic!("{name}: reload reported failure"),
+            Err(_) => panic!("{name}: deadlocked"),
+        }
+    }
+
+    fn open_state(dir: &std::path::Path, opts: &VaultOptions) -> (AppState, Arc<Vault>) {
+        create_vault(dir, &VaultCreateOptions::default()).unwrap();
+        let state = AppState::new(dir.to_path_buf());
+        let vault = Arc::new(Vault::load(dir, opts).unwrap());
+        state.set_vault(Some(vault.clone()));
+        (state, vault)
+    }
+
+    /// A read guard alive while `set_vault` runs deadlocks `std::sync::RwLock`,
+    /// and since commands are driven by the app's event loop that froze the whole
+    /// UI the moment a capture was committed.
+    #[test]
+    fn reloading_does_not_deadlock_while_a_vault_handle_is_alive() {
+        let dir = tempfile::tempdir().unwrap();
+        let opts = VaultOptions::default();
+        let (state, alive) = open_state(dir.path(), &opts);
+        let state = Arc::new(state);
+
+        with_timeout("reload", move || state.reload_from_disk(&opts).is_some());
+        // The handle stays usable after the swap: readers hold Arcs, not guards.
+        assert!(alive.root.exists());
+    }
+
+    /// The reported freeze: recording an entry reloaded the vault while a read
+    /// guard was still alive, which blocked the main thread forever.
+    #[test]
+    fn committing_a_capture_and_reloading_keeps_the_index() {
+        let dir = tempfile::tempdir().unwrap();
+        let opts = VaultOptions::default();
+        let (state, vault) = open_state(dir.path(), &opts);
+        let state = Arc::new(state);
+
+        let id = new_txn_id();
+        let expected = id.clone();
+        with_timeout("capture commit", move || {
+            let analysis = analyze(&vault, "咖啡 4.5 @微信");
+            let expanded = analysis.expanded.expect("capture expands");
+            commit_to_day_file(&vault, &expanded, &id, &opts).expect("commit");
+            let reloaded = state.reload_from_disk(&opts).expect("reload");
+            reloaded.transactions().iter().any(|txn| txn.id == expected)
+        });
+    }
 }

@@ -76,7 +76,7 @@ fn open_and_store(app: &AppHandle, state: &AppState, path: &Path) -> CmdResult<O
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn vault_create(
     app: AppHandle,
@@ -97,7 +97,7 @@ pub fn vault_create(
     open_and_store(&app, &state, &root)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn vault_open(
     app: AppHandle,
@@ -108,7 +108,7 @@ pub fn vault_open(
     open_and_store(&app, &state, &root)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn vault_close(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
     state.set_vault(None);
@@ -123,48 +123,43 @@ pub fn vault_recent(state: State<'_, AppState>) -> CmdResult<Vec<String>> {
     Ok(state.settings().recent_vaults)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn vault_info(state: State<'_, AppState>) -> CmdResult<Option<VaultInfoDto>> {
-    Ok(state
-        .vault
-        .read()
-        .expect("vault poisoned")
-        .as_ref()
-        .map(|v| v.info_dto()))
+    Ok(state.vault().ok().map(|vault| vault.info_dto()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn ledger_snapshot(state: State<'_, AppState>) -> CmdResult<SnapshotDto> {
     Ok(state.vault()?.snapshot())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn ledger_query(state: State<'_, AppState>, req: QueryRequest) -> CmdResult<TxnPageDto> {
     let vault = state.vault()?;
     Ok(report::query_txns(&vault, &req)?)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn dashboard(state: State<'_, AppState>, months: Option<u32>) -> CmdResult<DashboardDto> {
     let vault = state.vault()?;
     Ok(report::dashboard(&vault, months.unwrap_or(12) as usize))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn reload_vault(app: AppHandle, state: State<'_, AppState>) -> CmdResult<VaultInfoDto> {
-    let current = state.vault()?;
     let opts = state.settings().vault_options();
-    let vault = Arc::new(Vault::load(&current.root, &opts)?);
+    let vault = state
+        .reload_from_disk(&opts)
+        .ok_or_else(|| CmdError::new("engine.vault", "could not reload the vault"))?;
     let info = vault.info_dto();
-    state.set_vault(Some(vault));
     emit_ledger_changed(
         &app,
-        vec![current.root.to_string_lossy().to_string()],
+        vec![vault.root.to_string_lossy().to_string()],
         "reloaded",
     );
     Ok(info)
@@ -172,7 +167,7 @@ pub fn reload_vault(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Vau
 
 // ---------------------------------------------------------------- capture
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn capture_parse(state: State<'_, AppState>, text: String) -> CmdResult<CaptureParseDto> {
     let vault = state.vault()?;
@@ -180,7 +175,7 @@ pub fn capture_parse(state: State<'_, AppState>, text: String) -> CmdResult<Capt
     Ok(analysis.to_dto())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn capture_commit(
     app: AppHandle,
@@ -218,11 +213,7 @@ pub fn capture_commit(
 
 fn refresh(state: &AppState, app: &AppHandle, paths: Vec<String>, reason: &str) {
     let opts = state.settings().vault_options();
-    if let Some(current) = state.vault.read().expect("vault poisoned").as_ref() {
-        if let Ok(vault) = Vault::load(&current.root, &opts) {
-            state.set_vault(Some(Arc::new(vault)));
-        }
-    }
+    state.reload_from_disk(&opts);
     if let Ok(vault) = state.vault() {
         broadcast_diagnostics(app, vault.diagnostics().len());
     }
@@ -231,7 +222,7 @@ fn refresh(state: &AppState, app: &AppHandle, paths: Vec<String>, reason: &str) 
 
 // ---------------------------------------------------------------- transactions
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn txn_get(state: State<'_, AppState>, id: String) -> CmdResult<TxnDto> {
     let vault = state.vault()?;
@@ -241,7 +232,7 @@ pub fn txn_get(state: State<'_, AppState>, id: String) -> CmdResult<TxnDto> {
     Ok(vault.txn_dto(idx))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn txn_update(
     app: AppHandle,
@@ -264,7 +255,7 @@ pub fn txn_update(
     Ok(vault.txn_dto(idx))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn txn_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> CmdResult<()> {
     let vault = state.vault()?;
@@ -278,7 +269,7 @@ pub fn txn_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> Cmd
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn txn_bulk_update(
     app: AppHandle,
@@ -317,7 +308,7 @@ fn rule_dto(vault: &Vault, rule: &ledger_engine::RuleDef) -> RuleDto {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn rule_list(state: State<'_, AppState>) -> CmdResult<Vec<RuleDto>> {
     let vault = state.vault()?;
@@ -329,7 +320,7 @@ pub fn rule_list(state: State<'_, AppState>) -> CmdResult<Vec<RuleDto>> {
         .collect())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn rule_upsert(
     app: AppHandle,
@@ -400,7 +391,7 @@ pub fn rule_upsert(
     Ok(rule_dto(&vault, rule))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn rule_toggle(app: AppHandle, state: State<'_, AppState>, id: String) -> CmdResult<RuleDto> {
     let vault = state.vault()?;
@@ -441,7 +432,7 @@ pub fn rule_toggle(app: AppHandle, state: State<'_, AppState>, id: String) -> Cm
     Ok(rule_dto(&vault, updated))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn rule_test(state: State<'_, AppState>, id: String, n: u32) -> CmdResult<RuleTestDto> {
     let vault = state.vault()?;
@@ -494,7 +485,7 @@ pub fn rule_test(state: State<'_, AppState>, id: String, n: u32) -> CmdResult<Ru
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn rule_recompute(
     app: AppHandle,
@@ -510,13 +501,13 @@ pub fn rule_recompute(
 
 // ---------------------------------------------------------------- accounts
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn accounts_tree(state: State<'_, AppState>) -> CmdResult<Vec<AccountNodeDto>> {
     Ok(state.vault()?.account_tree())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn account_upsert(
     app: AppHandle,
@@ -570,13 +561,13 @@ pub fn account_upsert(
 
 // ---------------------------------------------------------------- budgets & fx
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn budget_list(state: State<'_, AppState>) -> CmdResult<Vec<BudgetDto>> {
     Ok(report::budgets(state.vault()?.as_ref()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn forecast(
     state: State<'_, AppState>,
@@ -588,7 +579,7 @@ pub fn forecast(
     ))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn fx_missing(state: State<'_, AppState>) -> CmdResult<Vec<FxMissingDto>> {
     Ok(report::fx_missing(state.vault()?.as_ref()))
@@ -604,7 +595,7 @@ pub struct FxRateRow {
 
 /// Append externally fetched rates as `P` directives (the frontend performs the
 /// HTTP call so the app itself stays offline).
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn fx_apply_rates(
     app: AppHandle,
@@ -662,7 +653,7 @@ pub fn fx_apply_rates(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn write_audit(state: State<'_, AppState>, limit: u32) -> CmdResult<Vec<AuditEntryDto>> {
     let path = state.audit_path();
@@ -784,7 +775,7 @@ pub fn sample_vault_path(state: State<'_, AppState>) -> CmdResult<String> {
         .to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn create_sample_vault(
     app: AppHandle,

@@ -26,6 +26,17 @@ file system ──▶ Vault::load ──▶ Arc<Vault> (immutable snapshot)
 `notify::RecommendedWatcher`. Every window shares the same snapshot, so a dashboard and a
 transaction list can never disagree about the books.
 
+Two rules keep that lock out of trouble:
+
+- **Commands that touch the vault are `#[tauri::command(async)]`**, so a parse of a large vault
+  never runs on the event-loop thread — a synchronous command would freeze every window while it
+  works.
+- **Reloads go through `AppState::reload_from_disk`.** `std::sync::RwLock` is not re-entrant, so
+  taking the write lock while the same thread still holds a read guard deadlocks it; because the
+  caller is the event loop, that hangs the app permanently. The reload clones the current `Arc`,
+  drops the guard, loads, and only then stores. The field is private and every path (commit,
+  delete, bulk edit, watcher) funnels through that method.
+
 ## Parser design
 
 Line-oriented recursive descent, hand-written:

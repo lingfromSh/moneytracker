@@ -69,9 +69,9 @@ pub fn watch(app: AppHandle, root: PathBuf) {
                 // Our own write: the in-memory vault already matches the disk.
                 continue;
             }
-            if let Ok(vault) = Vault::load(&current.root.clone(), &opts) {
-                state.set_vault(Some(std::sync::Arc::new(vault)));
-            }
+            // Same entry point as the commands, so a watcher reload cannot
+            // interleave with, and clobber, one triggered by a write.
+            state.reload_from_disk(&opts);
             let _ = crate::commands::LedgerChanged {
                 paths: vec!["*".to_string()],
                 reason: "external_change".to_string(),

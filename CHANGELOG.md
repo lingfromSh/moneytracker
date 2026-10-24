@@ -34,6 +34,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Recording an entry froze the window. `refresh()` kept the vault `RwLock` read guard alive while
+  storing the reloaded vault, and because `std::sync::RwLock` is not re-entrant the write lock
+  blocked the event-loop thread forever. Reloads now funnel through `AppState::reload_from_disk`
+  (clone the `Arc`, drop the guard, load, store) and every vault-touching command runs off the main
+  thread, so a slow parse can no longer stall the UI.
+
 - Dashboard scrolled horizontally and clipped its right-hand column after the window was
   un-maximised. `react-grid-layout` only lays items out from the container width it saw on first
   render, and its stylesheet (`position: relative` for the grid) was never imported; the grid is now
