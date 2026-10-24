@@ -1,0 +1,25 @@
+commodity 1,000.00 CNY
+
+2026-10-01 金额写法
+    expenses:misc        1,234.56 CNY
+    assets:bank         -1,234.56 CNY
+
+2026-10-02 前缀符号
+    expenses:misc          ¥88.00
+    assets:cash           -¥88.00
+
+2026-10-03 小数逗号
+    expenses:misc          1.234,56 EUR
+    assets:bank           -1.234,56 EUR
+
+2026-10-04 千分位与省略金额
+    expenses:misc          12,000 CNY
+    assets:bank
+
+2026-10-05 * 单位价格
+    expenses:travel        100.00 USD @ 7.12 CNY
+    assets:bank           -712.00 CNY
+
+2026-10-06 * 总价
+    expenses:travel        100.00 USD @@ 720.00 CNY
+    assets:bank           -720.00 CNY

@@ -1,0 +1,7 @@
+2026-09-01 * 工资  ; txn:01JA3KQ70SEED0001
+    assets:bank:checking     12,000.00 CNY
+    income:salary           -12,000.00 CNY
+
+2026-09-03 * 九月房租  ; txn:01JA3KQ70SEED0002
+    expenses:home:rent        3,200.00 CNY
+    assets:bank:checking     -3,200.00 CNY

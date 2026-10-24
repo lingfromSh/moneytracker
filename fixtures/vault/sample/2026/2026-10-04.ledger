@@ -1,0 +1,12 @@
+2026-10-04 * 星巴克  ; txn:01JA3KQ70SEED0005 rule:r-star query:desc:星巴克
+    expenses:food:coffee         31.50 CNY
+    expenses:food                13.50 CNY
+    assets:wallet:alipay        -45.00 CNY
+
+2026-10-05 * 咖啡豆  ; txn:01JA3KQ70SEED0006
+    expenses:food                88.00 CNY
+    assets:cash                 -88.00 CNY
+
+2026-10-08 * 东京出差  ; txn:01JA3KQ70SEED0007
+    expenses:travel             100.00 USD @@ 712.00 CNY
+    assets:bank:checking       -712.00 CNY

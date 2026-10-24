@@ -1,0 +1,8 @@
+; Recurring / budget envelopes. hledger only uses these with --forecast.
+~ monthly from 2026-01-01
+    expenses:home:rent          3,200.00 CNY
+    assets:bank:checking       -3,200.00 CNY
+
+~ monthly from 2026-01-01
+    expenses:food                 800.00 CNY
+    assets:cash                  -800.00 CNY

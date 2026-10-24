@@ -1,0 +1,13 @@
+; line comment
+# hash comment
+% percent comment
+| pipe comment
+* star comment
+
+comment
+A block comment that is skipped entirely.
+end comment
+
+2026-10-22 * 带标签的交易  ; :trip:  type:business
+    expenses:travel          500.00 CNY  ; 高铁票
+    assets:bank             -500.00 CNY

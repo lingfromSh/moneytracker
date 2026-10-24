@@ -1,0 +1,5 @@
+; MoneyTracker rules — read by the app, never included by index.ledger.
+= desc:星巴克  ; rule:r-star order:10 enabled:true from:assets:wallet:alipay
+    expenses:food:coffee      70.00%
+    expenses:food             30.00%
+    assets:wallet:alipay

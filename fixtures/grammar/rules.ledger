@@ -1,0 +1,8 @@
+= desc:星巴克 and amt:>0
+    expenses:food:coffee      70.00%
+    expenses:food:beans       30.00%
+    assets:wallet:alipay
+
+= acct:餐饮 or tag:coffee
+    expenses:food            100.00%
+    assets:cash

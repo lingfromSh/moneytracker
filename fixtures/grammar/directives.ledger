@@ -1,0 +1,16 @@
+account assets:cash        ; type:A
+account liabilities:card   ; type:L
+account expenses:food      ; type:X
+account income:salary      ; type:R
+
+commodity 1,000.00 CNY
+commodity 1,000.00 USD
+
+D 1,000.00 CNY
+Y 2026
+
+P 2026-10-01 USD 7.10 CNY
+P 2026-10-15 USD 7.12 CNY
+
+include accounts.ledger
+!include optional-extra.ledger

@@ -1,0 +1,7 @@
+lot-price.ledger|core.parse.unsupported_lot_price|2
+conversion.ledger|core.parse.unsupported_conversion|1
+csv-rule.ledger|core.parse.unsupported_csv_rule|1
+orphan-posting.ledger|core.parse.orphan_posting|1
+bad-date.ledger|core.parse.bad_date|1
+bad-amount.ledger|core.parse.amount_no_digits|2
+unknown-directive.ledger|core.parse.unknown_directive|1

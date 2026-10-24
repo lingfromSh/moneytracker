@@ -1,0 +1,6 @@
+2026-10-10 * 预算信封
+    expenses:food           100.00 CNY
+    assets:cash            -100.00 CNY
+    (budget:food)          -100.00 CNY
+    [savings:goal]          100.00 CNY
+    [assets:cash]          -100.00 CNY

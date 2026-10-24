@@ -1,0 +1,8 @@
+; A plain transaction with two postings.
+2026-10-25 * 星巴克
+    expenses:food:coffee      4.50 CNY
+    assets:wallet:alipay     -4.50 CNY
+
+2026-10-25 ! (1042) 待确认的转账  ; pending until the bank settles
+    assets:bank:checking     -200.00 CNY
+    assets:wallet:alipay      200.00 CNY
