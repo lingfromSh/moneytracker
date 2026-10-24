@@ -2,8 +2,33 @@
   "name": "moneytracker",
   "private": true,
   "version": "0.1.0",
+  "description": "Plain-text double-entry bookkeeping for macOS: a hledger-compatible ledger with a fast capture window, rules, multi-currency and a rich dashboard.",
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@12.4.1",
+  "homepage": "https://github.com/lingfromSh/moneytracker#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lingfromSh/moneytracker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lingfromSh/moneytracker/issues"
+  },
+  "keywords": [
+    "bookkeeping",
+    "double-entry",
+    "hledger",
+    "plain-text-accounting",
+    "ledger",
+    "tauri",
+    "macos",
+    "finance",
+    "multicurrency"
+  ],
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

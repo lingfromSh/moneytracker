@@ -1,16 +1,23 @@
 # MoneyTracker
 
-A macOS-first desktop bookkeeping app whose database is **plain text you can read, grep, diff and
-commit**: a [hledger](https://hledger.org)-compatible ledger on disk, with a fast capture box,
-rules, multi-currency conversion and a rich dashboard on top.
+**Plain-text double-entry bookkeeping for macOS — your ledger stays a file you can read, grep, diff and commit.**
 
-- **On disk:** `index.ledger` → year index → month index → day file, all wired with `include`.
-- **In the app:** a global-hotkey capture window, span-level editing, rule table, FX, budgets,
-  forecast and a draggable dashboard.
-- **Interop:** everything the app writes is readable by `hledger -f index.ledger …`. Nothing is
-  stored in a proprietary format; delete the app and you still have your books.
+[![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Rust tests](https://img.shields.io/badge/rust_tests-105_passing-brightgreen.svg)](#testing)
+[![Front-end tests](https://img.shields.io/badge/vitest-15_passing-brightgreen.svg)](#testing)
+[![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
+[![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
+[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
 
-```
+**English** · [简体中文](README.zh-CN.md)
+
+MoneyTracker is a desktop app whose database is a [hledger](https://hledger.org)-compatible
+plain-text ledger: a global-hotkey capture box, rules, multi-currency conversion, budgets and a
+rich dashboard — with **zero proprietary storage**. Delete the app and you still have your books;
+`hledger` can read every byte it writes.
+
+```ledger
 2026-10-04 * 星巴克  ; txn:01JA3KQ70SEED0005 rule:r-star query:desc:星巴克
     expenses:food:coffee         31.50 CNY
     expenses:food                13.50 CNY
@@ -19,16 +26,75 @@ rules, multi-currency conversion and a rich dashboard on top.
 
 ---
 
-## Quick start
+## Table of contents
+
+- [Why another bookkeeping app](#why-another-bookkeeping-app)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Install](#install)
+- [Usage](#usage)
+- [Capture syntax](#capture-syntax)
+- [Where your data lives](#where-your-data-lives)
+- [Safety guarantees](#safety-guarantees)
+- [Development](#development)
+- [Testing](#testing)
+- [Project layout](#project-layout)
+- [Limitations](#limitations)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Why another bookkeeping app
+
+Most finance apps lock your history in a database only they can open. MoneyTracker makes the file
+the source of truth and treats the UI as a fast editor for it:
+
+- **Your ledger is a git repository.** Every transaction is a stable text block with a `txn:<id>`
+  tag; edits touch only that block's byte span, so diffs stay small and reviewable.
+- **Interop by construction.** `hledger balance`, `hledger register`, `hledger check` all work on
+  the same vault — verified by a differential test against the real binary.
+- **Fast entry, no ceremony.** One line in a floating window becomes a balanced, tagged,
+  rule-expanded transaction.
+
+## Features
+
+| | |
+| --- | --- |
+| **Capture** | 640×148 always-on-top panel on a global hotkey; parses every keystroke in Rust, `Enter` saves and stays for the next entry |
+| **Rules** | `= desc:星巴克 -> 餐饮=70%, 咖啡豆=30% from 支付宝`, expanded at write time with `; rule:` provenance, decimal-exact split with the remainder on the last posting |
+| **Multi-currency** | rates come only from `P` directives; missing rates are flagged, greyed out and excluded from totals — never assumed 1:1 |
+| **Dashboard** | KPI + month-over-month, income/expense bars, net-worth curve, category donut, stacked area, calendar heatmap, budget vs actual, forecast, Sankey — draggable/resizable layout persisted per user |
+| **Transactions** | windowed list, inline editor, bulk tag/account rename, saved queries (`acct:`, `desc:`, `date:`, `tag:`, `amt:` with `and`/`or`/`not`) |
+| **Accounts & categories** | account tree with own/total balances and type inference; category view by account or by tag |
+| **Bilingual UI strings** | interface is zh-CN; ledger content and code comments are language-neutral |
+| **Safety** | pre-write snapshots, atomic replace, external-change detection, JSONL write audit |
+
+## Requirements
+
+- macOS 13+ (Apple Silicon or Intel). The capture window uses `macos-private-api` for transparency.
+- Rust 1.91+ (stable) and Node.js 22+ with pnpm 10+ — only when building from source.
+
+## Install
+
+Prebuilt `.app` bundles are attached to [releases](https://github.com/lingfromSh/moneytracker/releases)
+when published. To build it yourself:
 
 ```bash
-pnpm install                 # front-end deps
-pnpm tauri dev              # runs Vite on :1420 and the Tauri shell
-pnpm tauri build            # bundled .app / .dmg in src-tauri/target/release/bundle
+git clone https://github.com/lingfromSh/moneytracker.git
+cd moneytracker
+pnpm install
+pnpm tauri build                 # → src-tauri/target/release/bundle/macos/MoneyTracker.app
 ```
 
-First launch shows **Welcome**: create a vault, open an existing one, or create the sample vault
-(the same content as `fixtures/vault/sample`).
+For development:
+
+```bash
+pnpm tauri dev                   # Vite on :1420 + the Tauri shell with hot reload
+```
+
+## Usage
+
+First launch shows **Welcome**: create a vault, open an existing folder, or create the sample vault
+(identical to `fixtures/vault/sample`).
 
 | Shortcut | Action |
 | --- | --- |
@@ -36,85 +102,13 @@ First launch shows **Welcome**: create a vault, open an existing one, or create 
 | `⌘K` | command palette |
 | `⌘N` | capture window |
 | `⌘F` | transactions / search |
-| `⌘1`…`⌘6` | dashboard, transactions, accounts, categories, rules, settings |
+| `⌘1` … `⌘6` | dashboard, transactions, accounts, categories, rules, settings |
 | `Enter` / `⌘Enter` / `Esc` | capture: save and stay / save and hide / hide |
 
-## Verification
+The tray icon opens the capture panel next to the menu bar; `⌘,`-style settings cover theme,
+shortcut, base commodity, default funding account, unclassified account, backups and FX sync.
 
-```bash
-cargo test --workspace         # 103 Rust tests (parser, engine, reports, write path, sample vault)
-cargo clippy --workspace --all-targets
-cargo fmt --all -- --check
-pnpm test                      # 15 Vitest tests (capture, dashboard, transactions)
-pnpm build                     # tsc --noEmit && vite build
-pnpm bindings                  # regenerate src/lib/bindings.ts from the Rust commands
-./scripts/smoke.sh             # all of the above + optional hledger cross-check
-```
-
-`scripts/smoke.sh` compares `hledger -f fixtures/vault/sample/index.ledger balance --flat --no-total`
-against the engine when `hledger` is installed, and skips that step otherwise.
-
-Performance is checked with a generated vault (100 000 transactions over 5 183 files):
-
-```bash
-cargo run -q --release -p ledger-engine --example bench_load -- 100000
-# loaded 100000 txns from 5183 files in ~760 ms · snapshot ~70 ms · dashboard ~100 ms
-```
-
-See `docs/architecture.md` for the measurement table and why the indexing pass is parallel.
-
----
-
-## On-disk format (the contract)
-
-```
-<vault>/
-  index.ledger                 # the only entry point: options + declarations + includes
-  accounts.ledger              # account declarations with `; type:A|L|E|R|X`
-  prices.ledger                # `P` directives — the only source of exchange rates
-  budgets.ledger               # `~ monthly` recurring/budget transactions
-  rules.ledger                 # MoneyTracker rules — NEVER included by index.ledger
-  2026/
-    2026.ledger                # includes the month indexes
-    2026-10.ledger             # includes the day files
-    2026-10-04.ledger          # the transactions of one day
-  .bak/                        # pre-write snapshots (git-ignored)
-```
-
-`index.ledger`:
-
-```ledger
-commodity 1,000.00 CNY
-
-include accounts.ledger
-include prices.ledger
-include budgets.ledger
-include 2026/2026.ledger
-```
-
-**`rules.ledger` is intentionally not included.** Rules are expanded *when a transaction is
-written* and the result is stored as ordinary postings; the `; rule:<id> query:<原始输入>`
-tag records where it came from. Including the rule file would make `hledger --auto` apply them a
-second time and produce different numbers. See `docs/vault-format.md` for the full grammar subset,
-the transaction tag conventions (`txn:`, `rule:`, `recomputed:`) and the exact rejection rules.
-
-### Supported hledger subset
-
-Supported: `include` / `!include` (with globs and cycle detection), `account` (+ `type:` tags),
-`commodity`, `D`, `Y`, `P`, `~` periodic blocks in `budgets.ledger`, `=` auto-postings rules,
-`comment`/`end comment`, `;` `#` `%` `|` `*` comments, transaction headers
-`DATE[=DATE2] [*|!] [(CODE)] DESC [; COMMENT]`, postings with elided amounts, virtual `(a)` /
-`[a]`, `@` / `@@` prices, balance assertions, and tags (`:a:b:` and `key:value`).
-
-Rejected with a diagnostic that carries file, line, column and a stable code: amount expressions,
-lot/cost prices `{}`, `C` / `N` conversion directives, timeclock, `csv:` rules, `--auto` /
-`--forecast` CLI semantics. The app never silently drops a line it does not understand.
-
----
-
-## Capture syntax (one line → a canonical block)
-
-Parsing happens in Rust (`capture_parse`); the UI only renders the preview.
+## Capture syntax
 
 ```
 [#date] [*|!] description amount [@account]... [+tag]... [; comment]
@@ -126,99 +120,142 @@ Parsing happens in Rust (`capture_parse`); the UI only renders the preview.
 | `工资 +12000 @招行 +收入` | `assets:招行 12000.00 CNY` / `income:工资 -12000.00 CNY` |
 | `转 500 > @招行 > @现金` | `assets:招行 -500` / `assets:现金 500` |
 | `酒店 100usd@@720cny @旅行` | `expenses:旅行 100 USD @@ 720 CNY` / `assets:<default> -720 CNY` |
-| `"iPhone 15" 8999 @数码` | description keeps the quotes, `8999` is the amount |
-| `#昨天 咖啡 4.5` | dated yesterday |
-| `= desc:星巴克 -> 餐饮=70%, 咖啡豆=30% from 支付宝` | creates or updates a rule |
-| `/acct:餐饮` | switches to the transaction list with that query |
+| `"iPhone 15" 8999 @数码` | quoted description, `8999` is the amount |
+| `#昨天 咖啡 4.5` | dated yesterday (`#前天`, `#+3d`, `#2026-10-01` also work) |
+| `= desc:星巴克 -> 餐饮=70%, 咖啡豆=30% from 支付宝` | create or update a rule |
+| `/acct:餐饮` | open the transaction list with that query |
 | `:settings` | command palette |
 
-Sign conventions: no sign or `-` is an **expense** (money leaves a funding account), `+` before a
-number is **income**. `@account` once = one side, chosen by account type (`A`/`L` → funding,
-`R`/`X` → category); `@` twice = `category funding`; no `@` = rules decide. When nothing matches
-the entry lands in `expenses:unclassified` with an `:inbox:` tag so it shows up in the Inbox badge.
+Sign convention: no sign or `-` is an **expense** (money leaves a funding account), `+` before the
+amount is **income**. One `@account` leaves the other side to the account type (`A`/`L` → funding,
+`R`/`X` → category) or to a matching rule; two `@` accounts read as `category funding`. An entry no
+rule and no category covers lands in `expenses:unclassified` with an `:inbox:` tag.
 
-Rules are written with the flat form above and stored as native hledger auto-postings:
+## Where your data lives
 
-```ledger
-= desc:星巴克  ; rule:r-star order:10 enabled:true from:assets:wallet:alipay
-    expenses:food:coffee      70.00%
-    expenses:food             30.00%
-    assets:wallet:alipay
+```
+<vault>/
+  index.ledger                 # the only entry point: options, declarations, includes
+  accounts.ledger              # account declarations with `; type:A|L|E|R|X`
+  prices.ledger                # `P` directives — the only source of exchange rates
+  budgets.ledger               # `~ monthly` budget envelopes
+  rules.ledger                 # MoneyTracker rules — intentionally NOT included by index.ledger
+  2026/
+    2026.ledger                # includes the month indexes
+    2026-10.ledger             # includes the day files
+    2026-10-04.ledger          # one day of transactions
+  .bak/                        # pre-write snapshots (git-ignored)
 ```
 
-Percentages are split with `Decimal` (28 digits) and **the rounding remainder goes to the last
-posting**, so a 70/30 split of `4.50` is exactly `3.15 + 1.35` — never off by a cent. The first
-matching rule (by `order`) wins, at write time only; later rule edits do not rewrite history until
-you explicitly press 重算 (`rule_recompute`), which appends `; recomputed:<ISO8601>`.
+Everything is plain hledger syntax: `include` / `!include` (globs and cycle detection), `account`
+with `type:` tags, `commodity`, `D`, `Y`, `P`, `~` periodic blocks, `=` auto-postings,
+`comment`/`end comment`, `;` `#` `%` `|` comments, virtual postings `(a)` / `[a]`, `@` / `@@`
+prices, balance assertions and tags (`:a:b:` and `key:value`).
 
----
+Anything outside that subset — amount expressions, lot prices `{}`, `C` / `N` conversions,
+timeclock, `csv:` rules — fails loudly with `file:line:col` and a stable diagnostic code. The app
+never silently drops a line it does not understand. Details: [`docs/vault-format.md`](docs/vault-format.md).
 
-## Money and currencies
+**Why `rules.ledger` is not included.** Rules are expanded when a transaction is written and the
+result is stored as ordinary postings, with `; rule:<id> query:<original input>` recording the
+provenance. Including the rule file would make `hledger --auto` apply them a second time and
+produce different numbers.
 
-- The base commodity and its display precision come from `commodity 1,000.00 CNY`; amounts are
-  kept as `rust_decimal` end to end and only turned into `f64` for chart geometry.
-- `P 2026-10-01 USD 7.12 CNY` lines are the single source of truth. A transaction converts at the
-  latest rate **on or before its date**. Without a rate the transaction is marked `fx_missing`,
-  shown in a grey "未折算" column, and **excluded from totals** — the app never assumes 1:1.
-- Settings → 汇率 can enable `fx_sync`, which fetches ECB rates from `api.frankfurter.app` and
-  appends `P` lines to `prices.ledger`. Off by default, always a manual click.
-
-Forecasts combine `~` budget envelopes with the six-month moving average per category. They exist
-only in memory and are labelled 预测 everywhere.
-
----
-
-## Write safety
+## Safety guarantees
 
 Every mutation goes through `crates/ledger-engine/src/writer.rs`:
 
-1. the target file must have parsed without errors (`editable` transaction),
+1. the target file must have parsed without errors,
 2. a snapshot is copied to `<vault>/.bak/<relative path>.<timestamp>` (200 kept by default),
-3. the new bytes go to a same-directory temp file → `fsync` → `rename` → directory `fsync`,
+3. new bytes go to a same-directory temp file → `fsync` → `rename` → directory `fsync`,
 4. the `(mtime, size, blake3)` recorded at parse time must still match, otherwise the write is
-   refused with *"file was modified outside MoneyTracker — refresh and try again"*,
+   refused with *“file was modified outside MoneyTracker — refresh and try again”*,
 5. the operation is appended to `<appSupport>/dev.moneytracker.app/write-audit.jsonl`.
 
-Editing a transaction rewrites **only that block's byte span**; the rest of the file is untouched
-(asserted byte-for-byte by the engine tests). A `notify` watcher with a 300 ms debounce reloads
-external changes and broadcasts `ledger:changed`, so a `git pull` or `vim` edit shows up live.
+Editing rewrites **only that transaction's byte span** — byte-for-byte asserted by the engine
+tests. A `notify` watcher with a 300 ms debounce reloads external changes, so a `git pull` or a
+`vim` edit appears live.
 
----
+## Development
 
-## Architecture
+```bash
+pnpm install
+pnpm tauri dev                   # app with hot reload
+pnpm bindings                    # regenerate src/lib/bindings.ts from the Rust commands
+./scripts/smoke.sh               # the full verification pass (see below)
+```
+
+Prerequisites: Rust stable 1.91+, Node 22+, pnpm 10+, and optionally `hledger` for the differential
+check (`brew install hledger`).
+
+## Testing
+
+```bash
+cargo test --workspace                        # 105 Rust tests, 12 suites
+cargo clippy --workspace --all-targets -D warnings
+cargo fmt --all -- --check
+pnpm test                                     # 15 Vitest tests
+pnpm build                                    # tsc --noEmit && vite build
+```
+
+| Layer | What is covered |
+| --- | --- |
+| `crates/ledger-core/tests/corpus.rs` | `fixtures/grammar/*.ledger` parse clean, print→parse→print is byte-identical, and `fixtures/errors/*.ledger` produce the documented codes with the documented lines |
+| `crates/ledger-engine` | include graph, globs, cycles, account kind inference, FX, rules, capture expansion, reports, writer safety, plus the checked-in sample vault end to end |
+| `crates/ledger-engine/tests/hledger_diff.rs` | `Vault::balances()` equals `hledger balance --flat --no-total -O csv`; `hledger check` accepts a vault the engine just wrote (skipped when `hledger` is missing) |
+| `src-tauri/src/editing.rs` | capture → commit → reload, span-level update, delete, bulk edit, and refusal when the file changed outside the app |
+| `src/**/*.test.tsx` | capture palette, dashboard and transaction list against a mocked IPC layer |
+
+`scripts/smoke.sh` runs all of the above plus the `hledger` cross-check and fails if the committed
+TypeScript bindings are stale.
+
+Performance, measured on an M-series laptop with a generated 100 000-transaction vault spread over
+5 183 files (`cargo run -q --release -p ledger-engine --example bench_load -- 100000`):
+
+| Phase | Time |
+| --- | --- |
+| cold `Vault::load` (read + parse + index) | ~760 ms |
+| `snapshot()` (account tree, balances) | ~70 ms |
+| `dashboard(12 months)` | ~100 ms |
+
+## Project layout
 
 ```
-crates/ledger-core     AST, byte-span parser, printer, diagnostics        (~4.0k lines)
-crates/ledger-query    hledger query subset: acct:/desc:/date:/tag:/amt:, and/or/not
-crates/ledger-engine   include graph, index, balances, capture, rules, reports, writer
-src-tauri              windows, tray, global shortcut, watcher, IPC (tauri-specta)
+crates/ledger-core     AST, byte-span parser, printer, diagnostics
+crates/ledger-query    hledger query subset: acct/desc/date/tag/amt, and/or/not
+crates/ledger-engine   include graph, index, balances, capture, rules, FX, reports, safe writes
+src-tauri              windows, tray, global shortcut, watcher, IPC
 src                    React 19 + Vite + Tailwind v4 + Recharts + d3-sankey
-fixtures/              grammar + error corpora, sample vault
+fixtures/              grammar and error corpora, sample vault
+docs/                  architecture, vault format
 ```
 
-- **Types are generated, never hand-written:** `pnpm bindings` runs
-  `src-tauri/examples/export_bindings.rs`, which exports every command and event through
-  `tauri-specta` into `src/lib/bindings.ts`. `src/lib/ipc.ts` is the only place the UI touches IPC.
-- **One snapshot per process:** `Arc<RwLock<Option<Arc<Vault>>>>`; every window reads the same
-  immutable snapshot and TanStack Query invalidates on `ledger:changed`.
-- **Parser choice:** hand-written line-oriented recursive descent instead of `nom`, because
-  span-accurate rewrites, precise `line:col` diagnostics and graceful recovery matter more than
-  combinator ergonomics.
+Types are generated, never hand-written: `src-tauri/examples/export_bindings.rs` exports every
+command and event through `tauri-specta` into `src/lib/bindings.ts`. See
+[`docs/architecture.md`](docs/architecture.md) for the module map, the command surface and the
+capture state machine.
 
-`docs/architecture.md` has the module map, the command surface and the state machine of a capture.
+## Limitations
 
----
-
-## Known limitations
-
-- Not implemented on purpose: bank import/reconciliation, attachments, multi-user sync, automatic
-  budget rollover, and cloud storage (put the vault in iCloud/git yourself).
-- The supported ledger dialect is the subset above; anything else fails loudly rather than being
+- Deliberately out of scope: bank import/reconciliation, attachments, multi-user sync, automatic
+  budget rollover, cloud storage (put the vault in iCloud or git yourself).
+- The supported dialect is the subset above; everything else fails loudly instead of being
   approximated.
-- `hledger` is not bundled. Cross-checks run only when it is on `PATH`.
-- `specta` 2.0.0-rc.26 is vendored in `vendor/specta` with a two-line patch (stable Rust lacks the
-  `fmt::from_fn` it uses); see `docs/architecture.md` for why the version cannot be bumped yet.
+- `hledger` is not bundled — cross-checks run only when it is on `PATH`.
+- macOS only for now; the Rust core is portable, the window/tray layer is not.
+- `specta` 2.0.0-rc.26 is vendored in `vendor/specta` with a two-line patch, because stable Rust
+  lacks the `fmt::from_fn` helper it uses and `tauri-specta` pins that exact version.
+
+## Contributing
+
+Bug reports, fixture files and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Please run `./scripts/smoke.sh` before opening a PR; the release notes live in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-Private project; no license granted yet.
+[MIT](LICENSE) © 2026 lingfromSh
+
+---
+
+**[简体中文文档 →](README.zh-CN.md)**
