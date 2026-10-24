@@ -13,6 +13,7 @@ import {
   Select,
   Textarea,
 } from "../components/ui";
+import { useShortcutLabel } from "../lib/shortcut";
 
 const PAGE = 200;
 const ROW_HEIGHT = 56;
@@ -33,6 +34,7 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
   const [order, setOrder] = React.useState("date_desc");
   const [offset, setOffset] = React.useState(0);
   const [editing, setEditing] = React.useState<TxnDto_Serialize | null>(null);
+  const shortcutLabel = useShortcutLabel();
   const [selection, setSelection] = React.useState<Selection>(new Set());
   const [bulkOpen, setBulkOpen] = React.useState(false);
   const [scrollTop, setScrollTop] = React.useState(0);
@@ -135,7 +137,7 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
         ) : items.length === 0 ? (
           <EmptyState
             title="没有匹配的交易"
-            hint={query ? `查询 ${query} 没有结果` : "按 ⌘⇧Space 记第一笔"}
+            hint={query ? `查询 ${query} 没有结果` : `按 ${shortcutLabel} 记第一笔`}
             action={
               <Button variant="primary" className="mt-2" onClick={() => void api.showCapture()}>
                 快速记账

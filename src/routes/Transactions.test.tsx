@@ -8,6 +8,7 @@ const queryMock = vi.fn();
 const updateMock = vi.fn();
 const deleteMock = vi.fn();
 const bulkMock = vi.fn();
+const settingsMock = vi.fn();
 
 vi.mock("../lib/ipc", () => ({
   api: {
@@ -16,9 +17,11 @@ vi.mock("../lib/ipc", () => ({
     txnDelete: (id: string) => deleteMock(id),
     txnBulkUpdate: (ids: string[], patch: unknown) => bulkMock(ids, patch),
     showCapture: vi.fn(),
+    settings: () => settingsMock(),
   },
   queryKeys: {
     transactions: (req: unknown) => ["transactions", req],
+    settings: ["settings"],
   },
 }));
 
@@ -122,6 +125,7 @@ describe("Transactions", () => {
     updateMock.mockResolvedValue(txn({ payee: "星巴克臻选" }));
     deleteMock.mockResolvedValue(null);
     bulkMock.mockResolvedValue(2);
+    settingsMock.mockResolvedValue({ shortcut: "CmdOrCtrl+Shift+Space" });
   });
 
   it("groups transactions by day and renders amounts", async () => {
@@ -133,6 +137,13 @@ describe("Transactions", () => {
     expect(screen.getByText("10月23日")).toBeInTheDocument();
     expect(screen.getByText("45.00 CNY")).toBeInTheDocument();
     expect(screen.getByText("3 笔 · 显示 1–3")).toBeInTheDocument();
+  });
+
+  it("shows the configured capture shortcut in the empty state", async () => {
+    settingsMock.mockResolvedValue({ shortcut: "CmdOrCtrl+Alt+K" });
+    queryMock.mockResolvedValue({ items: [], total: 0, offset: 0, limit: 200 });
+    renderList();
+    expect(await screen.findByText("按 ⌘ ⌥ K 记第一笔")).toBeInTheDocument();
   });
 
   it("marks inbox transactions", async () => {

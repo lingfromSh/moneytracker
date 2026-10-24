@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "../lib/format";
+import { DEFAULT_ACCELERATOR, formatAccelerator } from "../lib/shortcut";
 
 /**
  * Records a key chord and serialises it as a Tauri accelerator string
@@ -60,27 +61,6 @@ export function keyToAccelerator(
   if (!key) return null;
   if (mods.length === 0) return null; // a bare letter would hijack the whole system
   return [...mods, key].join("+");
-}
-
-/** `CmdOrCtrl+Shift+Space` → `⌘ ⇧ Space` for display. */
-export function formatAccelerator(accelerator: string): string {
-  const parts = accelerator.split("+").map((part) => part.trim()).filter(Boolean);
-  if (parts.length === 0) return "—";
-  const symbols: Record<string, string> = {
-    cmdorctrl: "⌘",
-    commandorcontrol: "⌘",
-    cmd: "⌘",
-    command: "⌘",
-    super: "⌘",
-    ctrl: "⌃",
-    control: "⌃",
-    alt: "⌥",
-    option: "⌥",
-    shift: "⇧",
-  };
-  return parts
-    .map((part) => symbols[part.toLowerCase()] ?? part.replace(/^Key/, "").replace(/^Arrow/, "→ "))
-    .join(" ");
 }
 
 export function ShortcutInput({
@@ -145,7 +125,7 @@ export function ShortcutInput({
         <button
           type="button"
           onClick={() => {
-            onChange("CmdOrCtrl+Shift+Space");
+            onChange(DEFAULT_ACCELERATOR);
             setWarning(null);
             setRecording(false);
           }}

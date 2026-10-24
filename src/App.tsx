@@ -11,6 +11,7 @@ import { Categories } from "./routes/Categories";
 import { Rules } from "./routes/Rules";
 import { SettingsView } from "./routes/Settings";
 import { Welcome } from "./routes/Welcome";
+import { useShortcutLabel } from "./lib/shortcut";
 
 type Route =
   | "capture"
@@ -63,6 +64,7 @@ export function App() {
 
 function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
   const queryClient = useQueryClient();
+  const shortcutLabel = useShortcutLabel();
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [paletteQuery, setPaletteQuery] = React.useState("");
   const [diagCount, setDiagCount] = React.useState(0);
@@ -138,7 +140,7 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
 
         <Button variant="primary" className="mb-2 justify-start" onClick={() => void api.showCapture()}>
           快速记账
-          <span className="ml-auto text-[11px] opacity-70">⌘⇧Space</span>
+          <span className="ml-auto text-[11px] opacity-70">{shortcutLabel}</span>
         </Button>
 
         {NAV.map((item) => (

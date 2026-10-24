@@ -3,12 +3,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/ipc";
 import { Button, Card, Field, Input } from "../components/ui";
+import { useShortcutLabel } from "../lib/shortcut";
 
 /**
  * First-run screen: create a vault, open an existing one, or drop in the sample
  * ledger. Everything here writes plain files — nothing is locked inside the app.
  */
 export function Welcome() {
+  const shortcutLabel = useShortcutLabel();
   const queryClient = useQueryClient();
   const [path, setPath] = React.useState("");
   const [commodity, setCommodity] = React.useState("CNY");
@@ -128,7 +130,7 @@ export function Welcome() {
 
         {error ? <div className="text-center text-xs text-[var(--color-danger)]">{error}</div> : null}
         <div className="text-center text-[11px] text-[var(--color-muted)]">
-          ⌘⇧Space 随时唤起快录窗口
+          {shortcutLabel} 随时唤起快录窗口
         </div>
       </div>
     </div>

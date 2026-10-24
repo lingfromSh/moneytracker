@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ShortcutInput, formatAccelerator, keyToAccelerator } from "./shortcut-input";
+import { ShortcutInput, keyToAccelerator } from "./shortcut-input";
+import { formatAccelerator } from "../lib/shortcut";
 
 function chord(init: KeyboardEventInit & { code: string; key: string }): KeyboardEvent {
   return new KeyboardEvent("keydown", { ...init });
