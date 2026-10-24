@@ -41,7 +41,7 @@ pub fn create_capture_window(app: &AppHandle) -> tauri::Result<()> {
     let window =
         WebviewWindowBuilder::new(app, CAPTURE, WebviewUrl::App("index.html#/capture".into()))
             .title("MoneyTracker Capture")
-            .inner_size(640.0, 148.0)
+            .inner_size(640.0, 208.0)
             .resizable(false)
             .decorations(false)
             .transparent(true)

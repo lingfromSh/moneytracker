@@ -7,6 +7,45 @@ import { hideCaptureWindow, focusMain } from "../lib/window";
 
 const DEBOUNCE_MS = 60;
 
+const Code = ({ children }: { children: React.ReactNode }) => (
+  <code className="rounded bg-[var(--color-surface-2)] px-1 font-mono text-[10.5px] text-[var(--color-ink)]">
+    {children}
+  </code>
+);
+
+/** Cheat sheet shown while the field is empty, so the grammar is discoverable. */
+function SyntaxHint() {
+  return (
+    <div className="space-y-1 text-[11px] leading-4 text-[var(--color-muted)]">
+      <div className="flex gap-2">
+        <span className="w-7 shrink-0 opacity-60">账户</span>
+        <span className="min-w-0">
+          <Code>assets:</Code> <Code>liabilities:</Code> <Code>income:</Code>{" "}
+          <Code>expenses:</Code> <Code>equity:</Code> — 写全名如 <Code>@assets:cash</Code>
+          ，也可只写 <Code>@现金</Code> 由程序补全
+        </span>
+      </div>
+      <div className="flex gap-2">
+        <span className="w-7 shrink-0 opacity-60">日期</span>
+        <span className="min-w-0">
+          <Code>#今天</Code> <Code>#昨天</Code> <Code>#前天</Code> <Code>#-1d</Code>{" "}
+          <Code>#+3d</Code> <Code>#2026-10-05</Code> — 不写就是今天
+        </span>
+      </div>
+      <div className="flex gap-2">
+        <span className="w-7 shrink-0 opacity-60">其他</span>
+        <span className="min-w-0">
+          <Code>+餐饮</Code> 加标签 · <Code>&gt; @a &gt; @b</Code> 转账 · <Code>=</Code>{" "}
+          新规则 · <Code>/</Code> 搜索
+        </span>
+      </div>
+      <div className="opacity-70">
+        Enter 记一笔并继续 · ⌘Enter 记完隐藏 · Tab 补全账户 · Esc 关闭
+      </div>
+    </div>
+  );
+}
+
 /**
  * The capture palette: one flat line in, one canonical hledger block out.
  *
@@ -158,7 +197,7 @@ export function CaptureWindow() {
               completion.current.index = 0;
             }}
             onKeyDown={onKeyDown}
-            placeholder="咖啡 4.5 @微信 +餐饮   ·   = 规则   ·   / 搜索"
+            placeholder="咖啡 4.5 @assets:cash +餐饮 #昨天"
             className="w-full bg-transparent text-[15px] outline-none placeholder:text-[var(--color-muted)]"
             aria-label="快录输入"
             spellCheck={false}
@@ -181,9 +220,7 @@ export function CaptureWindow() {
           ) : status ? (
             <div className="text-[var(--color-accent)]">{status}</div>
           ) : (
-            <div className="text-[var(--color-muted)]">
-              Enter 记一笔并继续 · ⌘Enter 记完隐藏 · Tab 补全账户 · Esc 关闭
-            </div>
+            <SyntaxHint />
           )}
           {warnings.length > 0 && !error ? (
             <div className="mt-1 text-amber-600 dark:text-amber-400">{warnings[0]}</div>

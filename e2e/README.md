@@ -15,7 +15,7 @@ you want to keep the fixture pristine — copy it first).
 
 ## Capture window
 
-1. Press `⌘⇧Space` from another app. The 640×148 panel appears above the frontmost window.
+1. Press `⌘⇧Space` from another app. The 640×208 panel appears above the frontmost window.
 2. Type `咖啡 4.5 @微信 +餐饮` — the preview shows two postings and a `:餐饮:` tag; `Enter` saves and
    keeps the panel open with an empty input.
 3. Enter four more entries in a row: `工资 +12000 @招行 +收入`, `转 500 > @招行 > @现金`,

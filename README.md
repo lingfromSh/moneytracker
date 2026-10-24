@@ -59,7 +59,7 @@ the source of truth and treats the UI as a fast editor for it:
 
 | | |
 | --- | --- |
-| **Capture** | 640×148 always-on-top panel on a global hotkey; parses every keystroke in Rust, `Enter` saves and stays for the next entry |
+| **Capture** | 640×208 always-on-top panel on a global hotkey; parses every keystroke in Rust, `Enter` saves and stays for the next entry |
 | **Rules** | `= desc:星巴克 -> 餐饮=70%, 咖啡豆=30% from 支付宝`, expanded at write time with `; rule:` provenance, decimal-exact split with the remainder on the last posting |
 | **Multi-currency** | rates come only from `P` directives; missing rates are flagged, greyed out and excluded from totals — never assumed 1:1 |
 | **Dashboard** | KPI + month-over-month, income/expense bars, net-worth curve, category donut, stacked area, calendar heatmap, budget vs actual, forecast, Sankey — draggable/resizable layout persisted per user |
