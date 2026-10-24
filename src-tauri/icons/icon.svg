@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5CC491"/>
+      <stop offset="0.52" stop-color="#3F9E6A"/>
+      <stop offset="1" stop-color="#22704A"/>
+    </linearGradient>
+    <linearGradient id="page" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E8F2EB"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#D3E7DA"/>
+      <stop offset="1" stop-color="#B7D6C3"/>
+    </linearGradient>
+    <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#46A873"/>
+      <stop offset="1" stop-color="#257349"/>
+    </linearGradient>
+    <radialGradient id="gloss" cx="0.5" cy="0.05" r="0.75">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.32"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="16" stdDeviation="28" flood-color="#07301C" flood-opacity="0.30"/>
+    </filter>
+    <filter id="pageShadow" x="-40%" y="-40%" width="180%" height="190%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#0B3A24" flood-opacity="0.24"/>
+    </filter>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+    <clipPath id="squircle">
+      <rect x="64" y="64" width="896" height="896" rx="224"/>
+    </clipPath>
+  </defs>
+
+  <!-- squircle plate -->
+  <g filter="url(#shadow)">
+    <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#bg)"/>
+  </g>
+
+  <g clip-path="url(#squircle)">
+    <rect x="64" y="64" width="896" height="896" fill="url(#gloss)"/>
+    <rect x="66" y="66" width="892" height="892" rx="222" fill="none"
+          stroke="#FFFFFF" stroke-opacity="0.20" stroke-width="3"/>
+  </g>
+
+  <!-- ledger page + committed badge, optically centred -->
+  <g transform="translate(-26 6)">
+    <g transform="rotate(-7 512 486)">
+      <g filter="url(#pageShadow)">
+        <path d="M292 278a46 46 0 0 1 46-46h262l132 132v362a46 46 0 0 1-46 46H338a46 46 0 0 1-46-46z"
+              fill="url(#page)"/>
+      </g>
+      <path d="M600 232l132 132H644a44 44 0 0 1-44-44z" fill="url(#fold)"/>
+
+      <!-- ledger entries: description column + amount column -->
+      <g fill="#9AC8AF">
+        <rect x="344" y="352" width="184" height="24" rx="12"/>
+        <rect x="344" y="424" width="222" height="24" rx="12"/>
+        <rect x="344" y="496" width="158" height="24" rx="12"/>
+        <rect x="344" y="568" width="196" height="24" rx="12"/>
+      </g>
+      <g fill="#3F9E6A">
+        <rect x="596" y="352" width="80" height="24" rx="12"/>
+        <rect x="596" y="424" width="62" height="24" rx="12"/>
+        <rect x="596" y="496" width="80" height="24" rx="12"/>
+        <rect x="596" y="568" width="54" height="24" rx="12"/>
+      </g>
+
+      <!-- double rule + total -->
+      <rect x="344" y="638" width="332" height="8" rx="4" fill="#CBE0D5"/>
+      <rect x="344" y="672" width="196" height="32" rx="16" fill="#2A7A50"/>
+    </g>
+
+    <!-- committed badge -->
+    <circle cx="700" cy="736" r="118" fill="#0A3320" opacity="0.22" filter="url(#soft)"/>
+    <circle cx="700" cy="736" r="110" fill="url(#badge)"/>
+    <circle cx="700" cy="736" r="110" fill="none" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="5"/>
+    <path d="M648 738l36 36 68-80" fill="none" stroke="#FFFFFF" stroke-width="28"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -34,6 +34,24 @@ bindings and commit them:
 pnpm bindings         # cargo run -p moneytracker --example export_bindings
 ```
 
+## Icons
+
+`src-tauri/icons/icon.svg` is the source of the app icon and `trayTemplate.svg` of the menu-bar
+glyph; both are plain SVG so a change is reviewable. Regenerate the raster set with
+
+```bash
+rsvg-convert -w 1024 -h 1024 src-tauri/icons/icon.svg -o src-tauri/icons/icon.png
+rsvg-convert -w 22 -h 22 src-tauri/icons/trayTemplate.svg -o src-tauri/icons/trayTemplate.png
+rsvg-convert -w 44 -h 44 src-tauri/icons/trayTemplate.svg -o src-tauri/icons/trayTemplate@2x.png
+pnpm tauri icon src-tauri/icons/icon.png
+rm -rf src-tauri/icons/android src-tauri/icons/ios src-tauri/icons/Square*Logo.png \
+       src-tauri/icons/StoreLogo.png src-tauri/icons/icon.ico
+```
+
+`pnpm tauri icon` also emits Windows and mobile assets; the last line drops them again because the
+app ships for macOS only. The menu-bar glyph must stay pure black with alpha — macOS recolours
+template images itself, so a coloured tray icon looks broken in dark mode.
+
 ## Where things go
 
 | Change | Location |

@@ -99,8 +99,16 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             }
         });
 
-    if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
+    // A full-colour icon in the menu bar looks like a smudge; the template glyph is
+    // pure black alpha so macOS can recolour it for light, dark and tinted menu bars.
+    // 22px is one point-per-pixel at the menu bar height, so the icon lands at 22pt.
+    match tauri::image::Image::from_bytes(include_bytes!("../icons/trayTemplate.png")) {
+        Ok(icon) => builder = builder.icon(icon).icon_as_template(true),
+        Err(_) => {
+            if let Some(icon) = app.default_window_icon() {
+                builder = builder.icon(icon.clone());
+            }
+        }
     }
     builder.build(app)?;
     Ok(())

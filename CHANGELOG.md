@@ -28,6 +28,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- New app icon drawn from `src-tauri/icons/icon.svg` (green squircle, ledger page, committed
+  checkmark) instead of the generated green square, and a proper monochrome template glyph for the
+  menu bar — the tray used to show the full-colour window icon, which reads as a smudge in dark mode.
+
 - The IPC surface no longer exposes engine-owned transaction tokens: `txn:`, `rule:`, `query:` and
   `recomputed:` are stripped from `TxnDto.tags`/`TxnDto.comment` and re-injected by the write path,
   so editing a transaction can never drop its identity.
