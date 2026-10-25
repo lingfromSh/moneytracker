@@ -3,6 +3,7 @@
     windows_subsystem = "windows"
 )]
 
+mod advisor;
 mod commands;
 mod editing;
 mod llm;
@@ -86,6 +87,9 @@ pub fn build_specta() -> Builder<tauri::Wry> {
             commands::write_audit,
             commands::insights,
             commands::llm_ask,
+            commands::advisor_load,
+            commands::advisor_ask,
+            commands::advisor_clear,
             commands::settings_get,
             commands::settings_set,
             commands::shortcut_status,

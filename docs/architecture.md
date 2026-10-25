@@ -8,7 +8,7 @@
 | `crates/ledger-query` | Query subset: `acct:` `desc:` `date:` `tag:` `amt:` `status:` `cur:` with `and` / `or` / `not` / parentheses. |
 | `crates/ledger-engine` | Vault loading (include graph), index, balances, account types, capture parsing/expansion, rules, FX, budgets, forecast, reports, safe writing. |
 | `crates/ledger-sync` | S3/MinIO mirror: SigV4 signing, object store trait, three-way diff, two-phase commit, conflict reporting. No Tauri, no UI. |
-| `src-tauri` | Tauri shell: windows, tray, global shortcut, file watcher, IPC command layer, generated TypeScript bindings. |
+| `src-tauri` | Tauri shell: windows, tray, global shortcut, file watcher, IPC command layer, LLM adapters (`llm.rs` capture/plan, `advisor.rs` read-only agent), generated TypeScript bindings. |
 | `src` | React 19 UI. |
 
 `ledger-engine` depends on `ledger-core` and `ledger-query`; `ledger-sync` depends on `ledger-engine`
@@ -182,6 +182,35 @@ or the write audit.
 resolves accounts through the catalogue and `Vault::resolve_account`, discards unparseable dates, runs
 the plan, and makes a second call with `answer_prompt` to phrase the result — a failure there is not an
 error, the fact table still answers the question. Bad JSON surfaces as `llm.bad_plan`.
+
+Both prompts now receive a **brief** (`advisor::brief`), because without it a small local model turns
+“can I spend 5000 on a phone this month?” into “spend, today, expenses:food — 0 results”. `llm_ask`
+also keeps a deterministic guard: when the plan's window collapses to a single day and the question
+does not mention one (今天/今日/昨天/前天/当日/那一天), the window is widened to the last twelve months.
+Two invariants survive: the model never computes a figure, and it never writes.
+
+## Advisor
+
+`src-tauri/src/advisor.rs` is the read-only agent behind the 顾问 page. Same contract as 问一句 —
+model decides *what to look at* and *how to say it*, engine decides every number — with three
+additions:
+
+- **Context.** `brief(vault, today)` renders ~1.2 k tokens: net worth, cash and reserve months, the
+  three FIRE targets with their ETAs, debts with payoff dates, twelve months of income/expense, the
+  top eight expense accounts, budget envelopes, declared schedules, the last few transactions. The
+  one-line `headline` is what the planner gets; the full text goes to the chat model.
+- **Tools.** `query`, `breakdown`, `cashflow`, `goals`, `simulate` — all executed by
+  `run_tool` against the open `Vault` (and therefore unable to write). `simulate` answers
+  “what does spending X do to cash, reserve months and FIRE progress” arithmetically.
+- **Loop.** At most four rounds; each reply must be a JSON object (`{"action":"tool",…}` or
+  `{"action":"answer","text":…}`). An invalid reply is fed back once as a correction; when the rounds
+  run out the model is forced to answer from what it already has, and if even that fails the reply
+  falls back to the brief's headline so the user still sees numbers.
+
+The transcript lives in `advisor.json` in the app config directory (`0600`), is trimmed to the last
+`MAX_TURNS` (24) turns, is never written into the vault and never travels through sync. An empty
+completion is reported as a model problem (reasoning models spend `max_tokens` on thinking), not as a
+ledger problem.
 
 ## Personalisation
 

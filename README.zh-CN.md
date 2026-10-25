@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-229_passing-brightgreen.svg)](#测试)
-[![Front-end tests](https://img.shields.io/badge/vitest-95_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-236_passing-brightgreen.svg)](#测试)
+[![Front-end tests](https://img.shields.io/badge/vitest-103_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#环境要求)
@@ -40,6 +40,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 - [多端同步](#多端同步)
 - [安卓](#安卓)
 - [洞察与提问](#洞察与提问)
+  - [顾问（只读对话）](#顾问)
 - [个性化](#个性化)
 - [规划与报表](#规划与报表)
 - [数据放在哪](#数据放在哪)
@@ -77,6 +78,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 | **自动化** | 自动发现按月重复的收支（同摘要、同金额、同分录，≥3 个月），一键记入下个月并打 `recur:<id>@<月份>` 标签；每月生成 `reports/` 报告、可选提交 git、预算超 90% 提醒 |
 | **同步** | 把账本镜像到任意 S3 兼容存储（MinIO / R2 / S3），靠 manifest 做三方比对；两边都改过的文件**停下来问你**，绝不静默覆盖 |
 | **规划** | `goals.ledger` 驱动财富自由测算（SWR 3.0/3.5/4.0%）、储备月数、带目标日期的账户目标、负债还清日期（含“多还一点能省多少”）以及按 `class:` 标签的配置偏离 |
+| **顾问** | 只读智能体对话：带着净资产、现金流、储备月数和 FIRE 目标回答「这个月能不能花 5000」，需要数字时自己调五个只读工具，数字全部由引擎算 |
 | **报表** | 资产负债表、任意月/季/年的损益表，以及把期末净资产对齐到「期初 + 收入 − 支出」的净值变动表 |
 | **账户与分类** | 账户树显示自身/合计余额与类型推断；分类视图可按账户或按标签统计 |
 | **双语界面文案** | 当前界面为简体中文；账本内容与代码注释保持中立 |
@@ -331,6 +333,22 @@ adb install -r build/android/moneytracker-*.apk
 看板的「洞察」面板完全由规则算出，不经过模型：超过 90% 的预算、相对上月变化最大的两个分类、
 异常大额支出（超过六个月均值 3 倍）、储蓄率、净资产新高、缺少汇率的交易。离线、可解释。
 
+### 顾问
+
+「顾问」页把同一件事推远一步：一个**只读的智能体**，而且手里有账本的全景。第一轮之前，引擎先拼一段
+**brief** —— 净资产、现金与储备月数、FIRE 三档目标和到达时间、负债、12 个月收支、支出前八的账户、
+预算、固定收支日程、最近几笔 —— 大约 1.2k token，全是模型编不出来的数字，因为它从来不负责算。
+
+有了 brief，模型还能调五个工具，全部由引擎对着当前账本执行：`query`（按账户/标签/日期聚合某个口径）、
+`breakdown`（按账户、月份或标签拆）、`cashflow`（逐月收支）、`goals`（FIRE、储备、债务明细）、
+`simulate`（假设花掉一笔钱，现金、储备月数、FIRE 进度各变成多少）。最多四轮，所以答案里的每个数字
+都来自引擎。会话存在 App 配置目录的 `advisor.json`（`0600`），不进账本、不参与同步。
+
+这段 brief 也修掉了「问一句」的一个真 bug：计划阶段原来只拿到问题本身，于是本地小模型会把
+「我这个月可以支出 5000 买手机吗？」翻译成「spend / 今天 / expenses:food / 0 笔」。现在计划阶段也看
+同一份 brief，并且加了一条确定性兜底 —— 窗口只有一天时，除非问题问的就是某一天，否则按近 12 个月算。
+4B 以上的小模型能跑顺；再小就容易不守 JSON 协议。
+
 「规划」页还有一个只读的「问一句」。配置了 LLM 时，模型只负责把问题翻成一份 **JSON 查询计划**
 （口径、账户、标签、时间范围、分组、条数），随后每个字段都会对着当前账本校验（不存在的账户丢弃、
 非法日期忽略、条数收敛），数字由引擎算，最后才允许模型基于这些算好的数字写一段话。关掉开关，
@@ -455,10 +473,10 @@ pnpm bindings                    # 由 Rust 命令重新生成 src/lib/bindings.
 ## 测试
 
 ```bash
-cargo test --workspace                        # 229 个 Rust 测试，15 个 suite
+cargo test --workspace                        # 236 个 Rust 测试，15 个 suite
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 95 个 Vitest 测试
+pnpm test                                     # 103 个 Vitest 测试
 pnpm build                                    # tsc --noEmit && vite build
 ```
 

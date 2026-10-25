@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-25
+
+### Added
+
+- **顾问（只读智能体对话）**: a new 顾问 page where the model answers questions like「这个月可以支出
+  5000 买手机吗？」with the whole ledger in view. Before the first turn the engine composes a brief
+  (net worth, cash and reserve months, the three FIRE targets with ETAs, debts and payoff dates,
+  twelve months of income/expense, the top eight expense accounts, budgets, declared schedules, the
+  last few transactions); on top of it the model may call five engine-side tools — `query`,
+  `breakdown`, `cashflow`, `goals`, `simulate` — for at most four rounds. Every figure is computed by
+  the engine; the model never writes. The transcript is stored in `advisor.json` in the app config
+  directory (`0600`), never in the vault and never through sync. 看板 → 问一句 has a 「接着聊」 that
+  carries the last question and answer into the advisor.
+
+### Fixed
+
+- **问一句 没有把账本交给模型**: the planner was handed only the question, so a small local model
+  translated「我这个月可以支出 5000 买手机吗？」into「spend / 今天 / expenses:food / 0 笔」and the
+  answer degenerated to「没有相关数据」. Both prompts now receive the same brief, and a deterministic
+  guard widens a one-day window to twelve months unless the question really is about one day. An empty
+  completion is reported as a model problem (reasoning models burn `max_tokens` on thinking,
+  `max_tokens` raised 700 → 1200) instead of as missing data.
+
 ## [0.1.3] - 2026-10-25
 
 ### Fixed
@@ -272,6 +295,7 @@ First complete release: the ledger format, the engine and every view are in plac
 - The app targets macOS 13+; the Rust core is portable but the window/tray layer is not.
 
 [Unreleased]: https://github.com/lingfromSh/moneytracker/compare/v0.1.3...HEAD
+[0.1.4]: https://github.com/lingfromSh/moneytracker/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/lingfromSh/moneytracker/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/lingfromSh/moneytracker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/lingfromSh/moneytracker/releases/tag/v0.1.1

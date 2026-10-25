@@ -2,6 +2,7 @@ import * as React from "react";
 import { Sparkles } from "lucide-react";
 import type { AskResultDto_Serialize } from "../lib/bindings";
 import { api } from "../lib/ipc";
+import { seedAdvisor } from "../lib/advisor";
 import { Badge, Button, Card, Input } from "./ui";
 
 const EXAMPLES = [
@@ -46,6 +47,17 @@ export function AskCard() {
         <span className="text-[11px] text-[var(--color-muted)]">
           只读：模型把问题翻译成查询，数字由本地账本算出
         </span>
+        <button
+          type="button"
+          className="ml-auto text-[11px] text-[var(--color-muted)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+          onClick={() => {
+            // 顾问带着全景上下文接着聊，刚才这轮问答原样带过去。
+            seedAdvisor(question.trim() || "（继续上一次的问题）", result?.answer ?? null);
+            window.location.hash = "#/advisor";
+          }}
+        >
+          接着聊 →
+        </button>
       </div>
       <form
         className="flex items-center gap-2"

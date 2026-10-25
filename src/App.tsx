@@ -13,6 +13,7 @@ import { Rules } from "./routes/Rules";
 import { Import } from "./routes/Import";
 import { Plan } from "./routes/Plan";
 import { Schedule } from "./routes/Schedule";
+import { Advisor } from "./routes/Advisor";
 import { Reports } from "./routes/Reports";
 import { SettingsView } from "./routes/Settings";
 import { Welcome } from "./routes/Welcome";
@@ -30,6 +31,7 @@ type Route =
   | "rules"
   | "plan"
   | "schedule"
+  | "advisor"
   | "reports"
   | "settings";
 
@@ -45,6 +47,7 @@ const NAV: { route: Route; label: string; hint: string }[] = [
   { route: "rules", label: "规则", hint: "⌘6" },
   { route: "plan", label: "规划", hint: "⌘7" },
   { route: "schedule", label: "日程", hint: "⌘8" },
+  { route: "advisor", label: "顾问", hint: "" },
   { route: "reports", label: "报表", hint: "⌘9" },
   { route: "settings", label: "设置", hint: "⌘0" },
 ];
@@ -255,6 +258,7 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
             {route === "rules" && <Rules onCapture={capture} />}
             {route === "plan" && <Plan />}
             {route === "schedule" && <Schedule />}
+            {route === "advisor" && <Advisor />}
             {route === "reports" && <Reports />}
             {route === "settings" && <SettingsView />}
           </>

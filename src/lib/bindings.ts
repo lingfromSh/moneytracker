@@ -86,11 +86,14 @@ export const commands = {
 	writeAudit: (limit: number) => typedError<AuditEntryDto[], CmdError>(__TAURI_INVOKE("write_audit", { limit })),
 	/**  Deterministic insight bullets for the dashboard. */
 	insights: () => typedError<InsightDto_Serialize[], CmdError>(__TAURI_INVOKE("insights")),
+	llmAsk: (question: string) => typedError<AskResultDto_Serialize, CmdError>(__TAURI_INVOKE("llm_ask", { question })),
 	/**
 	 *  Ask a question in plain language: the model picks query fields, the engine
 	 *  computes the numbers, and only then does the model get to phrase an answer.
 	 */
-	llmAsk: (question: string) => typedError<AskResultDto_Serialize, CmdError>(__TAURI_INVOKE("llm_ask", { question })),
+	advisorLoad: () => typedError<AdvisorHistoryDto_Serialize, CmdError>(__TAURI_INVOKE("advisor_load")),
+	advisorAsk: (question: string, history: AdvisorTurnDto[]) => typedError<AdvisorReplyDto_Serialize, CmdError>(__TAURI_INVOKE("advisor_ask", { question, history })),
+	advisorClear: () => typedError<null, CmdError>(__TAURI_INVOKE("advisor_clear")),
 	settingsGet: () => typedError<Settings_Serialize, CmdError>(__TAURI_INVOKE("settings_get")),
 	settingsSet: (settings: Settings_Deserialize) => typedError<Settings_Serialize, CmdError>(__TAURI_INVOKE("settings_set", { settings })),
 	/**
@@ -150,6 +153,49 @@ export type AccountNodeDto = {
 	total: AmountDto[],
 	txn_count: number | null,
 	children: AccountNodeDto[],
+};
+
+export type AdvisorHistoryDto = AdvisorHistoryDto_Serialize | AdvisorHistoryDto_Deserialize;
+
+export type AdvisorHistoryDto_Deserialize = {
+	turns: AdvisorTurnDto[],
+	updated_at?: string | null,
+};
+
+export type AdvisorHistoryDto_Serialize = {
+	turns: AdvisorTurnDto[],
+	updated_at: string | null,
+};
+
+export type AdvisorReplyDto = AdvisorReplyDto_Serialize | AdvisorReplyDto_Deserialize;
+
+export type AdvisorReplyDto_Deserialize = {
+	content: string,
+	tools: AdvisorToolDto[],
+	rounds: number,
+	context_chars: number | null,
+	error?: string | null,
+};
+
+export type AdvisorReplyDto_Serialize = {
+	content: string,
+	tools: AdvisorToolDto[],
+	rounds: number,
+	context_chars: number | null,
+	error: string | null,
+};
+
+export type AdvisorToolDto = {
+	tool: string,
+	input: string,
+	output: string,
+};
+
+export type AdvisorTurnDto = {
+	/**  `user` | `assistant` */
+	role: string,
+	content: string,
+	at: string,
 };
 
 export type AllocationDto = AllocationDto_Serialize | AllocationDto_Deserialize;

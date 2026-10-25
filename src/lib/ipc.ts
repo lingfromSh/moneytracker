@@ -11,6 +11,7 @@ import {
   events,
 } from "./bindings";
 import type {
+  AdvisorTurnDto,
   BulkPatch_Deserialize,
   CaptureParseDto_Serialize,
   ImportProfileDto_Deserialize,
@@ -161,6 +162,12 @@ export const api = {
   insights: () => call(commands.insights()),
   llmAsk: (question: string) => call(commands.llmAsk(question)),
 
+  // read-only advisor (multi-turn, engine-computed context)
+  advisorLoad: () => call(commands.advisorLoad()),
+  advisorAsk: (question: string, history: AdvisorTurnDto[]) =>
+    call(commands.advisorAsk(question, history)),
+  advisorClear: () => call(commands.advisorClear()),
+
   // capture window
   showCapture: () => call(commands.captureShow()),
   hideCapture: () => call(commands.captureHide()),
@@ -183,6 +190,7 @@ export const queryKeys = {
   rules: ["rules"] as const,
   settings: ["settings"] as const,
   sync: ["sync"] as const,
+  advisor: ["advisor"] as const,
   fxMissing: ["fx-missing"] as const,
   importPreview: (path: string) => ["import-preview", path],
   reconcile: (account: string, asOf: string | null) => ["reconcile", account, asOf],

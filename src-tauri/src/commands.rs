@@ -1550,6 +1550,77 @@ pub async fn insights(state: State<'_, AppState>) -> CmdResult<Vec<InsightDto>> 
 
 /// Ask a question in plain language: the model picks query fields, the engine
 /// computes the numbers, and only then does the model get to phrase an answer.
+// ─── advisor: 只读财务顾问对话 ────────────────────────────────────────────────
+
+#[tauri::command]
+#[specta::specta]
+pub fn advisor_load(state: State<'_, AppState>) -> CmdResult<crate::advisor::AdvisorHistoryDto> {
+    Ok(crate::advisor::load_history(&state.config_dir))
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn advisor_ask(
+    state: State<'_, AppState>,
+    question: String,
+    history: Vec<crate::advisor::AdvisorTurnDto>,
+) -> CmdResult<crate::advisor::AdvisorReplyDto> {
+    let question = question.trim().to_string();
+    if question.is_empty() {
+        return Err(CmdError::refused("先写一个问题"));
+    }
+    let settings = state.settings();
+    if !settings.llm_enabled {
+        return Err(CmdError::new(
+            "llm.disabled",
+            "顾问没有启用，先到设置 → 模型里打开",
+        ));
+    }
+    let config = llm_config(&state);
+    if let Some(reason) = config.block_reason() {
+        return Err(CmdError::new("llm.not_configured", reason));
+    }
+    let vault = state.vault()?;
+
+    let reply = crate::advisor::chat(&vault, &config, &history, &question)
+        .map_err(|message| CmdError::new("llm.failed", message))?;
+
+    let mut turns = history;
+    turns.push(crate::advisor::AdvisorTurnDto {
+        role: "user".into(),
+        content: question,
+        at: crate::advisor::now_stamp(),
+    });
+    turns.push(crate::advisor::AdvisorTurnDto {
+        role: "assistant".into(),
+        content: reply.content.clone(),
+        at: crate::advisor::now_stamp(),
+    });
+    let keep = crate::advisor::MAX_TURNS * 2;
+    if turns.len() > keep {
+        let drop = turns.len() - keep;
+        turns.drain(..drop);
+    }
+    if let Err(message) = crate::advisor::save_history(&state.config_dir, &turns) {
+        eprintln!("moneytracker: 无法保存顾问会话: {message}");
+    }
+    Ok(reply)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn advisor_clear(state: State<'_, AppState>) -> CmdResult<()> {
+    crate::advisor::clear_history(&state.config_dir)
+        .map_err(|message| CmdError::new("app.io", message))
+}
+
+/// 问题本身是否就在问「某一天」——只有这种时候才保留单日窗口。
+fn asks_about_a_single_day(question: &str) -> bool {
+    ["今天", "今日", "昨天", "前天", "当日", "那一天"]
+        .iter()
+        .any(|word| question.contains(word))
+}
+
 #[tauri::command(async)]
 #[specta::specta]
 pub async fn llm_ask(state: State<'_, AppState>, question: String) -> CmdResult<AskResultDto> {
@@ -1575,8 +1646,10 @@ pub async fn llm_ask(state: State<'_, AppState>, question: String) -> CmdResult<
     }
 
     let catalog = crate::llm::AccountCatalog::from_names(account_context(&vault));
+    let brief = crate::advisor::brief(&vault, chrono::Local::now().date_naive());
     let today = chrono::Local::now().date_naive().to_string();
-    let system = crate::llm::plan_system_prompt(&today, &settings.base_commodity, &catalog);
+    let system =
+        crate::llm::plan_system_prompt(&today, &settings.base_commodity, &catalog, &brief.headline);
     let user = format!("Question: {question}");
     let (reply, _) =
         tauri::async_runtime::spawn_blocking(move || crate::llm::complete(&config, &system, &user))
@@ -1585,8 +1658,23 @@ pub async fn llm_ask(state: State<'_, AppState>, question: String) -> CmdResult<
             .map_err(|err| CmdError::new("llm.request_failed", err))?;
     let value =
         crate::llm::extract_json(&reply).map_err(|err| CmdError::new("llm.bad_plan", err))?;
-    let draft =
+    let mut draft =
         crate::llm::plan_from_json(&value).map_err(|err| CmdError::new("llm.bad_plan", err))?;
+
+    // 小模型很爱把「这个月能不能花 5000」翻成「今天 + 某个分类」。窗口只有一天时，
+    // 除非问题本身问的就是某一天，否则按默认为近 12 个月 —— 否则结果永远是 0 笔。
+    let single_day = draft.date_from.is_some() && draft.date_from == draft.date_to;
+    if single_day && !asks_about_a_single_day(&question) {
+        let today = chrono::Local::now().date_naive();
+        draft.date_from = Some(
+            (today - chrono::Months::new(11))
+                .with_day(1)
+                .unwrap_or(today)
+                .format("%Y-%m-%d")
+                .to_string(),
+        );
+        draft.date_to = Some(today.format("%Y-%m-%d").to_string());
+    }
 
     // Validate every field against the real ledger before running anything.
     let mut accounts: Vec<String> = Vec::new();
@@ -1645,9 +1733,9 @@ pub async fn llm_ask(state: State<'_, AppState>, question: String) -> CmdResult<
     // Phrasing is optional: if this second call fails, the facts still answer it.
     let answer = {
         let config = llm_config(&state);
-        let prompt = crate::llm::answer_prompt(&question, &markdown);
+        let prompt = crate::llm::answer_prompt(&question, &markdown, &brief.full);
         let system = format!(
-            "You are a careful bookkeeping assistant. Base commodity: {}.",
+            "You are a careful bookkeeping assistant. Base commodity: {}. Answer in Chinese, and only with numbers that appear in the prompt.",
             settings.base_commodity
         );
         tauri::async_runtime::spawn_blocking(move || {

@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-229_passing-brightgreen.svg)](#testing)
-[![Front-end tests](https://img.shields.io/badge/vitest-95_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-236_passing-brightgreen.svg)](#testing)
+[![Front-end tests](https://img.shields.io/badge/vitest-103_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
@@ -41,6 +41,7 @@ rich dashboard — with **zero proprietary storage**. Delete the app and you sti
 - [Multi-device sync](#multi-device-sync)
 - [Android](#android)
 - [Insights & questions](#insights--questions)
+  - [Advisor](#advisor)
 - [Personalising](#personalising)
 - [Planning & reports](#planning--reports)
 - [Where your data lives](#where-your-data-lives)
@@ -79,6 +80,7 @@ the source of truth and treats the UI as a fast editor for it:
 | **Automation** | detects monthly patterns (payee + amount + postings, ≥3 months), offers a one-click "record next month", tags what it writes with `recur:<id>@<month>`, keeps a monthly report in `reports/`, can snapshot the vault into git, and warns when a budget passes 90 % |
 | **Sync** | mirrors the vault into an S3-compatible bucket (MinIO, R2, S3) with a 3-way merge against a manifest; a file edited on two devices is **stopped on**, never silently overwritten, and the settings page asks which side to keep |
 | **Planning** | `goals.ledger` drives a FIRE projection (SWR 3.0/3.5/4.0 %), a reserve-months gauge, per-account goals with target dates, debt payoff dates (plus what an extra payment saves) and allocation drift against `class:` tags |
+| **Advisor** | read-only agent chat about affordability: net worth, cash flow, reserve months and FIRE targets are already in context, and it can call five read-only tools for more numbers — all computed by the engine |
 | **Reports** | balance sheet, income statement for any month/quarter/year, and a net-worth bridge that reconciles closing net worth to opening plus income minus expense |
 | **Accounts & categories** | account tree with own/total balances and type inference; category view by account or by tag |
 | **Bilingual UI strings** | interface is zh-CN; ledger content and code comments are language-neutral |
@@ -362,6 +364,27 @@ The dashboard's 洞察 panel is computed by rules, not by a model: budget envelo
 biggest category moves against last month, an unusually large expense (3× the six-month average), the
 savings rate, a net-worth high, and missing FX rates. They are cheap, deterministic, and offline.
 
+### 顾问 (advisor)
+
+The 顾问 page is the same idea taken one step further: a **read-only agent** with the ledger's whole
+picture in hand. Before the first turn the engine composes a *brief* — net worth, cash and reserve
+months, the FIRE targets with their ETAs, debts, twelve months of income/expense, the top eight
+expense accounts, budget envelopes, declared schedules and the last few transactions — roughly 1.2 k
+tokens of numbers the model can never invent because it never computes them.
+
+On top of that brief the model may call five tools, all executed by the engine against the open
+vault: `query` (a metric over accounts/tags/dates), `breakdown` (by account, month or tag),
+`cashflow` (month-by-month), `goals` (FIRE, reserve and debt detail) and `simulate` (what a given
+purchase does to cash, reserve months and FIRE progress). It gets at most four rounds; every number
+in the answer therefore comes from the engine. The conversation is stored in `advisor.json` in the
+app config directory (`0600`) — never in the vault, never through sync.
+
+That brief also fixed a real bug in 问一句: the planner used to be handed nothing but a question, so
+a small local model happily translated “can I spend 5000 on a phone this month?” into “spend, today,
+expenses:food, 0 results”. The planner now sees the same brief, and a deterministic guard widens a
+one-day window to twelve months unless the question really is about one day. Small models (4B and
+up) are usable; anything smaller tends to ignore the JSON protocol.
+
 规划 also has a read-only 问一句 card. When an LLM is configured, the model is asked for a **JSON query
 plan** — metric, accounts, tags, date range, grouping, limit — and nothing else. Every field is then
 validated against the open ledger (unknown accounts are dropped, bad dates ignored, `limit` clamped),
@@ -494,7 +517,7 @@ check (`brew install hledger`).
 ## Testing
 
 ```bash
-cargo test --workspace                        # 229 Rust tests, 15 suites
+cargo test --workspace                        # 236 Rust tests, 15 suites
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
 pnpm test                                     # 95 Vitest tests

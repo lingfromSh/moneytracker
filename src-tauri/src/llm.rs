@@ -142,7 +142,7 @@ impl LlmConfig {
             model,
             api_key: api_key.trim().to_string(),
             timeout: Duration::from_secs(30),
-            max_tokens: 700,
+            max_tokens: 1200,
         }
     }
 
@@ -471,11 +471,19 @@ const PLAN_METRICS: [&str; 5] = ["spend", "income", "net", "balance", "count"];
 const PLAN_GROUPS: [&str; 3] = ["month", "account", "tag"];
 
 /// Prompt for the read-only question path: the answer is a plan, not prose.
-pub fn plan_system_prompt(today: &str, base_commodity: &str, catalog: &AccountCatalog) -> String {
+pub fn plan_system_prompt(
+    today: &str,
+    base_commodity: &str,
+    catalog: &AccountCatalog,
+    context: &str,
+) -> String {
     let accounts = catalog.render(60);
     format!(
         r#"You turn a bookkeeping question into a JSON query plan for a plain-text ledger.
 Today is {today}. The base commodity is {base_commodity}.
+
+What the ledger looks like right now (computed by the engine — use it to choose the right window):
+{context}
 
 Return ONE JSON object and nothing else (no prose, no code fences):
 {{"metric":"spend|income|net|balance|count",
@@ -497,6 +505,11 @@ Rules:
 - "哪个月花得最多" means metric spend, group_by month. "哪类花得最多" means group_by account.
 - limit defaults to 12 and must be between 1 and 50.
 - min_amount is a decimal string, only when the question asks about large transactions.
+- Default the window to the last 12 months. Use a single month or day ONLY when the question
+  says so explicitly ("本月"/"今天"/"这个月").
+- Questions like "能不能花 5000 买 X"/"够不够"/"有没有压力" are affordability questions, not
+  category lookups: prefer metric balance (cash and debts), or metric spend grouped by month over
+  12 months, and do not narrow to one account unless the question names a category.
 
 Accounts in this ledger:
 {accounts}
@@ -564,9 +577,9 @@ pub fn plan_from_json(value: &Value) -> Result<PlanDraft, String> {
 }
 
 /// Second call, only when the user wants prose: describe the numbers we computed.
-pub fn answer_prompt(question: &str, facts: &str) -> String {
+pub fn answer_prompt(question: &str, facts: &str, context: &str) -> String {
     format!(
-        "Question: {question}\n\nVerified numbers from the ledger:\n{facts}\n\n         Write one short paragraph (2-3 sentences, Chinese) answering the question using ONLY these          numbers. Do not invent figures, accounts or dates. If the numbers are empty, say so plainly."
+        "Question: {question}\n\nQuery result (verified numbers from the ledger):\n{facts}\n\nLedger overview (computed by the engine, equally authoritative):\n{context}\n\nWrite one short paragraph (2-3 sentences, Chinese) answering the question using ONLY these numbers. Do not invent figures, accounts or dates. If the query result is empty but the overview answers it, answer from the overview and say which figure you used. If neither has the number, say so plainly."
     )
 }
 
@@ -807,7 +820,7 @@ pub fn extract_text(protocol: Protocol, body: &Value) -> Result<String, String> 
     };
     let text = text.trim().to_string();
     if text.is_empty() {
-        return Err("模型返回了空内容".into());
+        return Err("模型返回了空内容。推理模型（gemma/nemotron 之类）的思考过程不算正文，\n把 max_tokens 调大或者换一个非推理模型；顾问也要多花几轮对话，模型最好在 4B 以上。".into());
     }
     Ok(text)
 }
@@ -1432,11 +1445,19 @@ mod tests {
     fn plan_prompt_names_the_schema_and_the_ledger_accounts() {
         let catalog =
             AccountCatalog::from_names(["assets:cash", "expenses:food:coffee", "income:salary"]);
-        let prompt = plan_system_prompt("2026-10-25", "CNY", &catalog);
+        let prompt = plan_system_prompt(
+            "2026-10-25",
+            "CNY",
+            &catalog,
+            "净资产 100,000.00 CNY，现金 41,000.00 CNY，月支出 1,000.00 CNY，储备 41.0 个月",
+        );
         assert!(prompt.contains("Today is 2026-10-25"));
         assert!(prompt.contains("expenses:food:coffee"));
         assert!(prompt.contains("group_by"));
         assert!(prompt.contains("month|account|tag"));
+        // 没有上下文的计划会把「能不能花 5000」查成 expenses:food 的一天空窗。
+        assert!(prompt.contains("储备 41.0 个月"));
+        assert!(prompt.contains("Default the window to the last 12 months"));
     }
 
     #[test]
@@ -1475,9 +1496,14 @@ mod tests {
 
     #[test]
     fn answer_prompt_carries_only_the_computed_numbers() {
-        let prompt = answer_prompt("今年餐饮花了多少", "支出合计 2,200.00 CNY");
+        let prompt = answer_prompt(
+            "今年餐饮花了多少",
+            "支出合计 2,200.00 CNY",
+            "现金 41,000.00 CNY，月支出 1,000.00 CNY",
+        );
         assert!(prompt.contains("今年餐饮花了多少"));
         assert!(prompt.contains("2,200.00 CNY"));
+        assert!(prompt.contains("现金 41,000.00 CNY"));
         assert!(prompt.contains("ONLY"));
     }
 
