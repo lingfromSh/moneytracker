@@ -71,19 +71,21 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Decode signing key
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          test -n "$ANDROID_KEYSTORE_BASE64" || { echo "缺少 ANDROID_KEYSTORE_BASE64 secret" >&2; exit 1; }
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          test -s "$RUNNER_TEMP/release.keystore"
 
       - name: Build, sign and align
         env:
           KEYSTORE: ${{ runner.temp }}/release.keystore
           KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
-        run: bash scripts/android-apk.sh "$ABI"
+        run: |
+          export NDK_HOME="$ANDROID_HOME/ndk/${NDK_VERSION}"
+          bash scripts/android-apk.sh "$ABI"
 
       - name: Checksum
         run: |
