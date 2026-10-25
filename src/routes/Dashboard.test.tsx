@@ -1,10 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardDto_Serialize, Settings_Serialize } from "../lib/bindings";
 
 const dashboardMock = vi.fn();
 const settingsMock = vi.fn();
+const reloadMock = vi.fn();
 
 vi.mock("../lib/ipc", () => ({
   api: {
@@ -12,6 +14,7 @@ vi.mock("../lib/ipc", () => ({
     settings: () => settingsMock(),
     saveSettings: vi.fn(),
     showCapture: vi.fn(),
+    reload: reloadMock,
   },
   queryKeys: {
     dashboard: (months: number) => ["dashboard", months],
@@ -190,5 +193,29 @@ describe("Dashboard", () => {
     renderDashboard();
     await screen.findByText("16,800.00 CNY");
     expect(dashboardMock).toHaveBeenCalledWith(12);
+  });
+
+  it("re-reads the ledger from the refresh button", async () => {
+    reloadMock.mockResolvedValue({});
+    renderDashboard();
+    await screen.findByText("16,800.00 CNY");
+    const callsBefore = dashboardMock.mock.calls.length;
+
+    await userEvent.click(screen.getByRole("button", { name: "刷新账本" }));
+
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+    // The refreshed data is re-fetched, and the user gets a short confirmation.
+    await waitFor(() => expect(dashboardMock.mock.calls.length).toBeGreaterThan(callsBefore));
+    expect(await screen.findByText("已刷新")).toBeInTheDocument();
+  });
+
+  it("shows why a refresh failed instead of pretending it worked", async () => {
+    reloadMock.mockRejectedValue(new Error("vault error: index.ledger was deleted"));
+    renderDashboard();
+    await screen.findByText("16,800.00 CNY");
+
+    await userEvent.click(screen.getByRole("button", { name: "刷新账本" }));
+    expect(await screen.findByText(/刷新失败：vault error/)).toBeInTheDocument();
+    expect(screen.queryByText("已刷新")).not.toBeInTheDocument();
   });
 });

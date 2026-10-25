@@ -1,5 +1,6 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { GridLayout } from "react-grid-layout";
 import type { Layout } from "react-grid-layout";
 import type { DashboardDto_Serialize } from "../lib/bindings";
@@ -55,6 +56,10 @@ function Panel({
 
 export function Dashboard() {
   const [months, setMonths] = React.useState(12);
+  const [reloading, setReloading] = React.useState(false);
+  const [reloadedAt, setReloadedAt] = React.useState<number | null>(null);
+  const [reloadError, setReloadError] = React.useState<string | null>(null);
+  const queryClient = useQueryClient();
   const { ref: gridRef, width } = useElementWidth(960);
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.dashboard(months),
@@ -62,6 +67,28 @@ export function Dashboard() {
     retry: 0,
   });
   const settings = useQuery({ queryKey: queryKeys.settings, queryFn: () => api.settings() });
+
+  // Re-reads every ledger file from disk. The watcher covers external edits, but
+  // a manual button is what people reach for after editing in another editor.
+  const reload = React.useCallback(async () => {
+    setReloading(true);
+    setReloadError(null);
+    try {
+      await api.reload();
+      await queryClient.invalidateQueries();
+      setReloadedAt(Date.now());
+    } catch (cause) {
+      setReloadError((cause as Error).message);
+    } finally {
+      setReloading(false);
+    }
+  }, [queryClient]);
+
+  React.useEffect(() => {
+    if (reloadedAt === null) return;
+    const timer = window.setTimeout(() => setReloadedAt(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [reloadedAt]);
 
   const layout = React.useMemo<Layout>(() => {
     const raw = settings.data?.dashboard_layout;
@@ -101,7 +128,15 @@ export function Dashboard() {
 
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <Header data={data} months={months} onMonths={setMonths} />
+      <Header
+        data={data}
+        months={months}
+        onMonths={setMonths}
+        onReload={reload}
+        reloading={reloading}
+        justReloaded={reloadedAt !== null}
+        reloadError={reloadError}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4">
         <div ref={gridRef} className="w-full min-w-0">
           {/*
@@ -176,10 +211,18 @@ function Header({
   data,
   months,
   onMonths,
+  onReload,
+  reloading,
+  justReloaded,
+  reloadError,
 }: {
   data: DashboardDto_Serialize;
   months: number;
   onMonths: (next: number) => void;
+  onReload: () => void;
+  reloading: boolean;
+  justReloaded: boolean;
+  reloadError: string | null;
 }) {
   const kpi = data.kpis;
   return (
@@ -193,6 +236,23 @@ function Header({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {reloadError ? (
+            <span className="max-w-[22rem] truncate text-xs text-[var(--color-danger)]" title={reloadError}>
+              刷新失败：{reloadError}
+            </span>
+          ) : justReloaded ? (
+            <span className="text-xs text-[var(--color-muted)]">已刷新</span>
+          ) : null}
+          <Button
+            variant="ghost"
+            onClick={onReload}
+            disabled={reloading}
+            title="重新读取账本文件（外部改动也会自动检测）"
+            aria-label="刷新账本"
+          >
+            <RefreshCw className={cn("mr-1 h-3.5 w-3.5", reloading && "animate-spin")} />
+            {reloading ? "刷新中" : "刷新"}
+          </Button>
           <Button
             variant="ghost"
             onClick={() => onMonths(months === 12 ? 24 : 12)}
