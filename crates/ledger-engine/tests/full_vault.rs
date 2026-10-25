@@ -211,11 +211,11 @@ fn schedule_templates_describe_the_showcase_fixed_costs() {
     let salary = &overview.templates[0];
     assert_eq!(salary.kind, "salary");
     assert_eq!(salary.day, 5);
-    // 应发 30,000 + 公司缴 16,422 = 52,122 收入,代扣 9,460.50 到手 26,239.50。
-    assert_eq!(salary.income.display, "52,122.00 CNY");
+    // 应发 30,000 + 公司缴 12,300 = 42,300 收入,代扣 6,450.00 到手 23,550.00。
+    assert_eq!(salary.income.display, "42,300.00 CNY");
     assert_eq!(salary.expense.display, "3,750.00 CNY");
-    assert_eq!(salary.assets.display, "47,659.50 CNY");
-    assert_eq!(salary.settle.display, "26,239.50 CNY");
+    assert_eq!(salary.assets.display, "45,874.50 CNY");
+    assert_eq!(salary.settle.display, "23,550.00 CNY");
     assert!(salary.legs.iter().all(|leg| leg.amount.value != 0.0));
 
     // 房贷的现金腿是负数,本金那条腿算负债减少。

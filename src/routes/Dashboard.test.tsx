@@ -229,6 +229,41 @@ it("hides cards and keeps only the chosen KPIs", async () => {
   expect(screen.queryByText("储蓄率")).not.toBeInTheDocument();
 });
 
+  it("adds panels that are newer than the saved layout", async () => {
+    // A layout saved before 日程 existed has no `schedule` slot at all; the card
+    // must still show up instead of staying invisible forever.
+    settingsMock.mockResolvedValue({
+      vault_path: "/tmp/vault",
+      recent_vaults: [],
+      theme: "system",
+      shortcut: "CmdOrCtrl+Shift+Space",
+      base_commodity: "CNY",
+      base_precision: 2,
+      default_funding: "assets:cash",
+      default_unclassified: "expenses:unclassified",
+      fx_enabled: false,
+      max_backups: 200,
+      dashboard_layout: JSON.stringify([
+        { i: "months", x: 0, y: 0, w: 8, h: 4, minW: 4, minH: 3, moved: false, static: false },
+      ]),
+      llm_enabled: false,
+      llm_provider: "openai",
+      llm_protocol: "",
+      llm_base_url: "",
+      llm_model: "",
+      auto_recur: false,
+      git_auto_commit: false,
+      density: "comfortable",
+      week_start: 1,
+      hidden_cards: [],
+      kpi_cards: [],
+      saved_views: null,
+    } satisfies Settings_Serialize);
+    renderDashboard();
+    expect(await screen.findByText("固定收支")).toBeInTheDocument();
+    expect(screen.getByText("月度收支")).toBeInTheDocument();
+  });
+
   it("lists the rule-based insights", async () => {
     renderDashboard();
     expect(await screen.findByText("expenses:food 比上月多了 22%")).toBeInTheDocument();

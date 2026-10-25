@@ -123,7 +123,20 @@ export function Dashboard() {
     if (!raw) return DEFAULT_LAYOUT;
     try {
       const parsed = JSON.parse(raw) as Layout;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_LAYOUT;
+      if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_LAYOUT;
+      // A panel added by a newer version is missing from an older saved layout;
+      // stack the missing ones below the arrangement the user already has
+      // instead of silently hiding them.
+      const known = new Set(parsed.map((item) => item.i));
+      const missing = DEFAULT_LAYOUT.filter((item) => !known.has(item.i));
+      if (missing.length === 0) return parsed;
+      let bottom = parsed.reduce((low, item) => Math.max(low, item.y + item.h), 0);
+      const appended = missing.map((item) => {
+        const placed = { ...item, x: 0, y: bottom };
+        bottom += item.h;
+        return placed;
+      });
+      return [...parsed, ...appended];
     } catch {
       return DEFAULT_LAYOUT;
     }

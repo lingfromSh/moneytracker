@@ -512,7 +512,9 @@ struct Rate {
     kind: char,
 }
 
-/// 个人部分: 养老 8% · 医疗 2% · 失业 0.5% · 公积金 12% · 年金 4%.
+/// 个人部分: 养老 8% · 医疗 2% · 失业 0.5% · 公积金 7% · 年金 4%.
+///
+/// 公积金按上海口径 7% + 7%；其他城市常在 5%–12% 之间，改这两个 `bps` 即可。
 const PERSONAL_RATES: [Rate; 5] = [
     Rate {
         key: "pension",
@@ -531,7 +533,7 @@ const PERSONAL_RATES: [Rate; 5] = [
     },
     Rate {
         key: "fund",
-        bps: 1200,
+        bps: 700,
         kind: 'A',
     },
     Rate {
@@ -541,7 +543,7 @@ const PERSONAL_RATES: [Rate; 5] = [
     },
 ];
 
-/// 公司部分: 养老 16% · 医疗 8% · 失业 0.5% · 工伤 0.5% · 生育 1% · 公积金 12% · 年金 8%.
+/// 公司部分: 养老 16% · 医疗 8% · 失业 0.5% · 工伤 0.5% · 生育 1% · 公积金 7% · 年金 8%.
 const EMPLOYER_RATES: [Rate; 7] = [
     Rate {
         key: "pension",
@@ -570,7 +572,7 @@ const EMPLOYER_RATES: [Rate; 7] = [
     },
     Rate {
         key: "fund",
-        bps: 1200,
+        bps: 700,
         kind: 'A',
     },
     Rate {
@@ -694,9 +696,9 @@ pub fn render_salary(
 
     let mut out = String::new();
     out.push_str("; 工资与五险二金 — 应发 / 公司缴纳 / 个人代扣 / 到手\n");
-    out.push_str("; 个人: 养老8% 医疗2% 失业0.5% 公积金12% 年金4%\n");
+    out.push_str("; 个人: 养老8% 医疗2% 失业0.5% 公积金7% 年金4%\n");
     if request.employer {
-        out.push_str("; 公司: 养老16% 医疗8% 失业0.5% 工伤0.5% 生育1% 公积金12% 年金8%\n");
+        out.push_str("; 公司: 养老16% 医疗8% 失业0.5% 工伤0.5% 生育1% 公积金7% 年金8%\n");
     }
     out.push_str("; 比例写死在生成器里,直接改下面的数字即可;改完记得保存。\n");
     out.push_str(&format!(
@@ -1237,10 +1239,10 @@ mod tests {
         let sum: Decimal = legs.iter().map(|leg| leg.amount).sum();
         assert_eq!(sum, Decimal::ZERO, "salary block must balance:\n{text}");
         let totals = template.totals(&legs);
-        assert_eq!(totals.income, Decimal::from(52122));
+        assert_eq!(totals.income, Decimal::from(50337));
         assert_eq!(totals.expense, Decimal::from(4462) + Decimal::new(50, 2));
-        assert_eq!(totals.assets, Decimal::from(47659) + Decimal::new(50, 2));
-        assert_eq!(totals.settle, Decimal::from(26239) + Decimal::new(50, 2));
+        assert_eq!(totals.assets, Decimal::from(45874) + Decimal::new(50, 2));
+        assert_eq!(totals.settle, Decimal::from(28024) + Decimal::new(50, 2));
         assert!(text.contains("assets:cn:fund"), "{text}");
         assert!(text.contains("expenses:cn:medical"), "{text}");
     }

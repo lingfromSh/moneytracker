@@ -167,15 +167,15 @@ plain periodic syntax:
 ```
 ~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
     income:salary                        -30,000.00 CNY
-    income:benefit                       -16,422.00 CNY  ; 公司缴纳侧合计
-    assets:cn:fund                         7,200.00 CNY
+    income:benefit                       -12,300.00 CNY  ; 公司缴纳侧合计
+    assets:cn:fund                         4,200.00 CNY
     assets:cn:pension                      7,200.00 CNY
     assets:cn:annuity                      3,600.00 CNY
     expenses:insurance:medical             3,000.00 CNY
     expenses:insurance:unemployment          300.00 CNY
     expenses:insurance:injury                150.00 CNY
     expenses:insurance:maternity             300.00 CNY
-    assets:bank:cmb                       26,239.50 CNY  ; 到手
+    assets:bank:cmb                       23,550.00 CNY  ; 到手
 ```
 
 - The header comment holds whitespace-separated `key:value` metadata: `id:` (defaults to the label plus

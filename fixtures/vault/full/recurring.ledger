@@ -12,19 +12,20 @@
 ; 由引擎按「恰好一条缺失」的规则补平。
 ; kind 只影响界面上的标签：salary 工资 / loan 还款 / income 收入 / expense 支出。
 
-; 工资：应发 30,000.00 + 公司缴 16,422.00，个人代扣 9,460.50，到手 26,239.50。
+; 工资：应发 30,000.00 + 公司缴 12,300.00，个人代扣 6,450.00，到手 23,550.00。
+; 公积金按上海口径各付 7%（其他城市改这两个数字即可）。
 ; 个人与公司两侧同账户合并成一行，注释里写清楚拆分。
 ~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
     income:salary                        -30,000.00 CNY
-    income:benefit                       -16,422.00 CNY  ; 公司缴纳侧合计
-    assets:cn:fund                         7,200.00 CNY  ; 公积金 个人 3,600 + 公司 3,600
+    income:benefit                       -12,300.00 CNY  ; 公司缴纳侧合计
+    assets:cn:fund                         4,200.00 CNY  ; 公积金 个人 2,100 + 公司 2,100
     assets:cn:pension                      7,200.00 CNY  ; 养老 个人 2,400 + 公司 4,800
     assets:cn:annuity                      3,600.00 CNY  ; 年金 个人 1,200 + 公司 2,400
     expenses:insurance:medical             3,000.00 CNY  ; 医疗 个人 714 + 公司 2,400
     expenses:insurance:unemployment          300.00 CNY  ; 失业 个人 150.00 + 公司 150.00
     expenses:insurance:injury                150.00 CNY  ; 工伤（公司）
     expenses:insurance:maternity             300.00 CNY  ; 生育（公司）
-    assets:bank:cmb                       26,239.50 CNY  ; 到手
+    assets:bank:cmb                       23,550.00 CNY  ; 到手
 
 ; 房贷：每月 8,200.00，其中 2,130.00 是本金（冲减负债），剩下是利息。
 ~ monthly from 2025-08-20 day:20  ; id:loan-home label:房贷 kind:loan

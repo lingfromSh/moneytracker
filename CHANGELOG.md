@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A dashboard panel added by a newer version no longer stays invisible for anyone who already saved a
+  layout: missing panels (e.g. 固定收支) are appended below the existing arrangement instead of being
+  dropped, so a saved layout keeps working across upgrades.
+
 - Natural-language capture no longer invents accounts or the wrong wallet: the prompt now lists every
   account in the open ledger (grouped by kind, including accounts only named by `rules.ledger`) with
   worked examples written in those exact names, the payment method in the note overrides the model's
@@ -20,8 +24,8 @@ All notable changes to this project are documented here. The format follows
   happens every month — 工资 with its 五险二金 split (应发 and the employer side both booked), the
   mortgage payment split into interest and principal, rent income, subscriptions. The 日程 view lists
   the next 6/12/24 months with 记入 / 跳过 per occurrence, the dashboard gains a 固定收支 card, and
-  工资模板 generates a complete salary block from one gross figure (个人 8%+2%+0.5%+12%+4%,
-  公司 16%+8%+0.5%+0.5%+1%+12%+8%). Occurrences are only written when asked; the 自动化 switch makes the
+  工资模板 generates a complete salary block from one gross figure (个人 8%+2%+0.5%+7%+4%,
+  公司 16%+8%+0.5%+0.5%+1%+7%+8%; 公积金按上海口径各付 7%). Occurrences are only written when asked; the 自动化 switch makes the
   monthly maintenance run book what is due. New engine module `crates/ledger-engine/src/schedule.rs` and
   commands `schedule_overview`, `schedule_commit`, `schedule_commit_due`, `schedule_skip`,
   `schedule_save`, `schedule_salary_preview`.

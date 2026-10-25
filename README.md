@@ -5,7 +5,7 @@
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust tests](https://img.shields.io/badge/rust_tests-192_passing-brightgreen.svg)](#testing)
-[![Front-end tests](https://img.shields.io/badge/vitest-71_passing-brightgreen.svg)](#testing)
+[![Front-end tests](https://img.shields.io/badge/vitest-72_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
@@ -251,15 +251,15 @@ plain hledger periodic syntax:
 ```ledger
 ~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
     income:salary                        -30,000.00 CNY
-    income:benefit                       -16,422.00 CNY  ; employer contributions
-    assets:cn:fund                         7,200.00 CNY  ; housing fund: 3,600 you + 3,600 employer
+    income:benefit                       -12,300.00 CNY  ; employer contributions
+    assets:cn:fund                         4,200.00 CNY  ; housing fund: 2,100 you + 2,100 employer
     assets:cn:pension                      7,200.00 CNY  ; pension: 2,400 you + 4,800 employer
     assets:cn:annuity                      3,600.00 CNY  ; annuity: 1,200 you + 2,400 employer
     expenses:insurance:medical             3,000.00 CNY  ; 714 you + 2,400 employer
     expenses:insurance:unemployment          300.00 CNY
     expenses:insurance:injury                150.00 CNY
     expenses:insurance:maternity             300.00 CNY
-    assets:bank:cmb                       26,239.50 CNY  ; take-home (the cash leg)
+    assets:bank:cmb                       23,550.00 CNY  ; take-home (the cash leg)
 ```
 
 - The header comment carries the metadata: `id:`, `label:`, `kind:` (salary / loan / income / expense),
@@ -268,13 +268,14 @@ plain hledger periodic syntax:
   left out for the engine to balance.
 - 五险二金 is split by *withdrawability*: the housing fund, the personal pension account and the
   annuity stay `assets:cn:*` (still your money), while medical, unemployment, injury and maternity are
-  `expenses:insurance:*` (pooled away). The employer side is booked too, so income is 52,122 — not
-  30,000.
+  `expenses:insurance:*` (pooled away). The employer side is booked too, so income is 42,300 — not
+  30,000. The housing fund is 7% + 7% (Shanghai); change the two `bps` values in
+  `crates/ledger-engine/src/schedule.rs` for another city.
 - Declaring a template books nothing. 记入 writes one ordinary transaction into the day file tagged
   `sched:<id>`; 设置 → 自动化 → 自动记入固定收支 makes the monthly maintenance pass fill in whatever is
   due that month.
 - 日程 → 工资模板 does the arithmetic for you: give it the gross figure and the account that receives
-  the net pay, and it generates the whole block (个人 8%/2%/0.5%/12%/4%, 公司 16%/8%/0.5%/0.5%/1%/12%/8%),
+  the net pay, and it generates the whole block (个人 8%/2%/0.5%/7%/4%, 公司 16%/8%/0.5%/0.5%/1%/7%/8%),
   previewed before it is written.
 
 `recurring.ledger` is **not included by `index.ledger`**, for the same reason as `rules.ledger` and
@@ -417,7 +418,7 @@ check (`brew install hledger`).
 cargo test --workspace                        # 192 Rust tests, 13 suites
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 71 Vitest tests
+pnpm test                                     # 72 Vitest tests
 pnpm build                                    # tsc --noEmit && vite build
 ```
 

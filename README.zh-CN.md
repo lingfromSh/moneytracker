@@ -5,7 +5,7 @@
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust tests](https://img.shields.io/badge/rust_tests-192_passing-brightgreen.svg)](#测试)
-[![Front-end tests](https://img.shields.io/badge/vitest-71_passing-brightgreen.svg)](#测试)
+[![Front-end tests](https://img.shields.io/badge/vitest-72_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#环境要求)
@@ -235,15 +235,15 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 ```ledger
 ~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
     income:salary                        -30,000.00 CNY
-    income:benefit                       -16,422.00 CNY  ; 公司缴纳侧
-    assets:cn:fund                         7,200.00 CNY  ; 公积金 个人 3,600 + 公司 3,600
+    income:benefit                       -12,300.00 CNY  ; 公司缴纳侧
+    assets:cn:fund                         4,200.00 CNY  ; 公积金 个人 2,100 + 公司 2,100
     assets:cn:pension                      7,200.00 CNY  ; 养老 个人 2,400 + 公司 4,800
     assets:cn:annuity                      3,600.00 CNY  ; 年金 个人 1,200 + 公司 2,400
     expenses:insurance:medical             3,000.00 CNY  ; 医疗 个人 714 + 公司 2,400
     expenses:insurance:unemployment          300.00 CNY
     expenses:insurance:injury                150.00 CNY
     expenses:insurance:maternity             300.00 CNY
-    assets:bank:cmb                       26,239.50 CNY  ; 到手（现金腿）
+    assets:bank:cmb                       23,550.00 CNY  ; 到手（现金腿）
 ```
 
 几条约定：
@@ -253,11 +253,12 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 - **最后一条 posting 是现金腿**，卡片上的「现金流」就取它；金额可以省略，由引擎补平。
 - 五险二金的归属按「能不能取出来」分：公积金、个人养老账户、企业年金是 `assets:cn:*`
   （钱还是你的），医疗、失业、工伤、生育是 `expenses:insurance:*`（统筹掉了）。公司缴纳的部分
-  也一起入账，所以收入是 52,122，而不是 30,000。
+  也一起入账，所以收入是 42,300，而不是 30,000。公积金按上海口径各付 7%，换城市就改
+  `crates/ledger-engine/src/schedule.rs` 里那两个 `bps`。
 - 只是写模板不会产生任何交易。「记入」才按普通交易写进日文件并打 `sched:<id>` 标签；打开
   设置 → 自动化 的「自动记入固定收支」后，每月维护任务会把当月的到期项补上。
 - 不想自己算比例就用 **日程 → 工资模板**：输入应发工资和到手账户，它会按
-  个人 8%/2%/0.5%/12%/4%、公司 16%/8%/0.5%/0.5%/1%/12%/8% 生成整段，预览后写入文件。
+  个人 8%/2%/0.5%/7%/4%、公司 16%/8%/0.5%/0.5%/1%/7%/8% 生成整段，预览后写入文件。
 
 `recurring.ledger` 和 `rules.ledger`、`goals.ledger` 一样 **不被 `index.ledger` 包含**：它是计划，
 不是已经发生的钱。否则 hledger、预算和现金流预测都会把同一个月算两遍。
@@ -391,7 +392,7 @@ pnpm bindings                    # 由 Rust 命令重新生成 src/lib/bindings.
 cargo test --workspace                        # 192 个 Rust 测试，13 个 suite
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 71 个 Vitest 测试
+pnpm test                                     # 72 个 Vitest 测试
 pnpm build                                    # tsc --noEmit && vite build
 ```
 
