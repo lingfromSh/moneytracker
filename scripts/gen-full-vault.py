@@ -106,6 +106,8 @@ BUDGETS = """\
 ; Envelope budgets. `~` blocks belong here, not in the day files.
 ; expenses:* envelopes cap spending; assets:*/liabilities:* envelopes are
 ; savings goals and count money moved towards them.
+; The last leg of each block is elided so hledger can balance the template and
+; `hledger --forecast` works; MoneyTracker only reads the positive legs.
 
 ~ monthly from 2025-07-01
     expenses:food                      4,500.00 CNY
@@ -116,11 +118,13 @@ BUDGETS = """\
     expenses:entertainment             1,000.00 CNY
     expenses:health                      600.00 CNY
     assets:savings:emergency           1,500.00 CNY
+    assets:bank:cmb
 
 ~ yearly from 2025-07-01
     expenses:travel                   30,000.00 CNY
     expenses:insurance                12,000.00 CNY
     expenses:vehicle:maintenance       6,000.00 CNY
+    assets:bank:cmb
 """
 
 RULES = """; MoneyTracker rules — read by the app, never included by index.ledger.
@@ -145,16 +149,16 @@ RULES = """; MoneyTracker rules — read by the app, never included by index.led
     assets:bank:cmb
 """
 
-RECURRING = """; MoneyTracker 固定收支 — 由日程页读取，**不**被 index.ledger 包含。
+RECURRING = """; MoneyTracker 固定收支 — 由日程页读取，也被 index.ledger 包含。
 ;
-; 这些是计划和模板，不是已经发生的交易：文件被 include 的话，hledger 与账本
-; 的预算/现金流会把同一个月算两遍。所以它和 rules.ledger、goals.ledger 一样，
-; 独立存在。
+; 这些是计划和模板，不是已经发生的交易：hledger 默认忽略 `~` 块（要 `--forecast`
+; 才展开），所以 include 进来是安全的；App 自己的预算/现金流/负债进度会显式跳过
+; 这个文件，不会把工资当成一个预算信封。
 ;
 ; 语法：一个 hledger 的 ~ 周期块就是一条模板。
-;   ~ monthly from <起始月> day:<1-31>  ; id:<唯一 id> label:<名称> kind:<类型>
+;   ~ monthly from <起始日期>  ; id:<唯一 id> label:<名称> kind:<类型>
 ; 头部注释里的 id/label/kind/settle/enabled 都是空格分隔的 key:value；
-; day 超过当月天数时会自动收到月末（2 月按 28/29 号算）。
+; 「每月几号」由 from 后面的日期决定（hledger 同样这么读），短月自动收到月末。
 ; 最后一条 posting 是现金腿 —— 它决定卡片上的「现金流」，也可以省略金额，
 ; 由引擎按「恰好一条缺失」的规则补平。
 ; kind 只影响界面上的标签：salary 工资 / loan 还款 / income 收入 / expense 支出。
@@ -162,7 +166,7 @@ RECURRING = """; MoneyTracker 固定收支 — 由日程页读取，**不**被 i
 ; 工资：应发 30,000.00 + 公司缴 12,300.00，个人代扣 6,450.00，到手 23,550.00。
 ; 公积金按上海口径各付 7%（其他城市改这两个数字即可）。
 ; 个人与公司两侧同账户合并成一行，注释里写清楚拆分。
-~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
+~ monthly from 2025-08-05  ; id:salary-main label:工资 kind:salary
     income:salary                        -30,000.00 CNY
     income:benefit                       -12,300.00 CNY  ; 公司缴纳侧合计
     assets:cn:fund                         4,200.00 CNY  ; 公积金 个人 2,100 + 公司 2,100
@@ -175,18 +179,18 @@ RECURRING = """; MoneyTracker 固定收支 — 由日程页读取，**不**被 i
     assets:bank:cmb                       23,550.00 CNY  ; 到手
 
 ; 房贷：每月 8,200.00，其中 2,130.00 是本金（冲减负债），剩下是利息。
-~ monthly from 2025-08-20 day:20  ; id:loan-home label:房贷 kind:loan
+~ monthly from 2025-08-20  ; id:loan-home label:房贷 kind:loan
     expenses:home:mortgage_interest        6,070.00 CNY
     liabilities:mortgage:home              2,130.00 CNY
     assets:bank:icbc                      -8,200.00 CNY
 
 ; 房租收入：每月 3,600.00。
-~ monthly from 2025-08-01 day:1  ; id:rent-flat label:房租收入 kind:income
+~ monthly from 2025-08-01  ; id:rent-flat label:房租收入 kind:income
     income:rent                           -3,600.00 CNY
     assets:bank:icbc                       3,600.00 CNY
 
 ; 订阅：现金腿省略金额，引擎会补 -30.00。
-~ monthly from 2025-08-15 day:15  ; id:sub-cloud label:云存储 kind:expense
+~ monthly from 2025-08-15  ; id:sub-cloud label:云存储 kind:expense
     expenses:entertainment                    30.00 CNY
     assets:wallet:alipay
 """
@@ -529,8 +533,9 @@ index = [
     "; Everything a transaction needs is reachable from here: index → year → month.",
     "; rules.ledger is deliberately NOT included: the app expands rules when it",
     "; writes an entry, so including it would make hledger apply them a second time.",
-    "; recurring.ledger and goals.ledger are not included either: they describe",
-    "; plans (`~` templates, savings goals), not money that moved.",
+    "; goals.ledger is not included either: it describes plans and debt parameters.",
+    "; recurring.ledger IS included — hledger ignores `~` blocks unless you ask for",
+    "; --forecast, and the app's own budget/forecast reports skip the file.",
     "",
     "commodity 1,000.00 CNY",
     "commodity 1,000.00 USD",
@@ -538,6 +543,7 @@ index = [
     "include accounts.ledger",
     "include prices.ledger",
     "include budgets.ledger",
+    "include recurring.ledger",
     "",
 ]
 for year in years:

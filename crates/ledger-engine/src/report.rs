@@ -412,6 +412,12 @@ pub fn dashboard(vault: &Vault, months: usize) -> DashboardDto {
 pub fn budgets(vault: &Vault) -> Vec<BudgetDto> {
     let mut out = Vec::new();
     for file in &vault.files {
+        // The declared schedule is included by index.ledger (so `hledger --forecast`
+        // works), but its legs are plans, not envelopes: counting them here would
+        // make 工资 look like a budget and double the forecast.
+        if crate::schedule::is_schedule_file(&file.rel) {
+            continue;
+        }
         for item in &file.journal.items {
             let Item::Periodic(pt) = item else { continue };
             for p in &pt.postings {

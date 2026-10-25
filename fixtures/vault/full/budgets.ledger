@@ -1,6 +1,8 @@
 ; Envelope budgets. `~` blocks belong here, not in the day files.
 ; expenses:* envelopes cap spending; assets:*/liabilities:* envelopes are
 ; savings goals and count money moved towards them.
+; The last leg of each block is elided so hledger can balance the template and
+; `hledger --forecast` works; MoneyTracker only reads the positive legs.
 
 ~ monthly from 2025-07-01
     expenses:food                      4,500.00 CNY
@@ -11,8 +13,10 @@
     expenses:entertainment             1,000.00 CNY
     expenses:health                      600.00 CNY
     assets:savings:emergency           1,500.00 CNY
+    assets:bank:cmb
 
 ~ yearly from 2025-07-01
     expenses:travel                   30,000.00 CNY
     expenses:insurance                12,000.00 CNY
     expenses:vehicle:maintenance       6,000.00 CNY
+    assets:bank:cmb

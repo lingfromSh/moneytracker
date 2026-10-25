@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-192_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-194_passing-brightgreen.svg)](#测试)
 [![Front-end tests](https://img.shields.io/badge/vitest-72_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
@@ -233,7 +233,7 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 房贷、房租、订阅。这些写进 `recurring.ledger`，语法就是 hledger 的周期块：
 
 ```ledger
-~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
+~ monthly from 2025-08-05  ; id:salary-main label:工资 kind:salary
     income:salary                        -30,000.00 CNY
     income:benefit                       -12,300.00 CNY  ; 公司缴纳侧
     assets:cn:fund                         4,200.00 CNY  ; 公积金 个人 2,100 + 公司 2,100
@@ -248,8 +248,9 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 
 几条约定：
 
-- 头部注释里的 `id:` / `label:` / `kind:`（工资 / 还款 / 收入 / 支出）/ `enabled:` 就是元数据；
-  `day:31` 遇到小月会自动收到月末。
+- 头部注释里的 `id:` / `label:` / `kind:`（工资 / 还款 / 收入 / 支出）/ `enabled:` 就是元数据。
+  「每月几号」由 `from` 后面的日期决定（`from 2026-01-31` 遇到小月自动收到月末），hledger 也是
+  这么读的，所以文件在 App 外面同样有效。
 - **最后一条 posting 是现金腿**，卡片上的「现金流」就取它；金额可以省略，由引擎补平。
 - 五险二金的归属按「能不能取出来」分：公积金、个人养老账户、企业年金是 `assets:cn:*`
   （钱还是你的），医疗、失业、工伤、生育是 `expenses:insurance:*`（统筹掉了）。公司缴纳的部分
@@ -315,7 +316,7 @@ debt 房贷 ; account:liabilities:mortgage rate:3.15% payment:8200.00 CNY
   budgets.ledger               # `~ monthly` 预算信封
   goals.ledger                 # 规划：假设、财富自由目标、资产池、配置、负债（不被 index 引入）
   rules.ledger                 # MoneyTracker 规则 —— 故意不被 index.ledger include
-  recurring.ledger             # 固定收支模板：工资、房贷、房租（同样不 include）
+  recurring.ledger             # 固定收支模板：工资、房贷、房租
   recur.ledger                 # `; skip:<id>@<月份>` 跳过记录（不 include）
   2026/
     2026.ledger                # include 各月索引
@@ -389,8 +390,8 @@ pnpm bindings                    # 由 Rust 命令重新生成 src/lib/bindings.
 ## 测试
 
 ```bash
-cargo test --workspace                        # 192 个 Rust 测试，13 个 suite
-cargo clippy --workspace --all-targets -D warnings
+cargo test --workspace                        # 194 个 Rust 测试，13 个 suite
+cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 pnpm test                                     # 72 个 Vitest 测试
 pnpm build                                    # tsc --noEmit && vite build

@@ -658,6 +658,11 @@ fn cash_accounts(vault: &Vault, pool: &[String]) -> Vec<String> {
 fn periodic_payment(vault: &Vault, account: &str) -> Option<Decimal> {
     let mut best: Option<Decimal> = None;
     for file in vault.files() {
+        // Declared templates carry the gross payment (principal only on the debt
+        // leg), so they would skew a payoff estimate; read hand-written budgets.
+        if crate::schedule::is_schedule_file(&file.rel) {
+            continue;
+        }
         for item in &file.journal.items {
             let Item::Periodic(p) = item else { continue };
             let factor = match p.period.split_whitespace().next().unwrap_or("monthly") {

@@ -11,7 +11,7 @@ plain hledger syntax; the app only refuses what it cannot represent exactly.
   accounts.ledger         account declarations, `; type:` tags
   prices.ledger           `P` directives
   budgets.ledger          `~ monthly` recurring blocks
-  recurring.ledger        declared schedules: salary, loan, subscriptions (never included)
+  recurring.ledger        declared schedules: salary, loan, subscriptions (included)
   rules.ledger            MoneyTracker rules (never included by index.ledger)
   goals.ledger            plan / FIRE assumptions (never included)
   recur.ledger            `; skip:<id>@<limit>` recurring decisions (never included)
@@ -30,17 +30,23 @@ The include chain is created lazily: a transaction written on 2026-10-04 creates
 A transaction is only visible to the reader when that whole chain exists — a hand-written day file
 that nothing includes is ignored (this is also how `hledger` behaves).
 
-## Rules are not included
+## What `index.ledger` includes
+
+`accounts.ledger`, `prices.ledger`, `budgets.ledger`, `recurring.ledger` and the year files. Two files
+stay out on purpose, and one of them is only out for the app's own reading — see below.
+
+### Rules are not included
 
 `rules.ledger` is read by the application directly and is deliberately absent from
 `index.ledger`. Capture expands a rule into real postings and writes those, together with a
 provenance comment. If the rules file were included, `hledger --auto` would apply the same rule a
 second time and the balance would differ between the app and the CLI.
 
-`recurring.ledger` is left out for the same reason from the other direction: those blocks are
-*templates*, not transactions. Including them would make `hledger`, the budget report and the cash
-flow forecast treat the planned salary as money that already moved, and the 预算 view would read
-every template leg as an envelope.
+`recurring.ledger` **is** included, because those blocks are `~` periodic transactions: hledger
+ignores them unless you ask for `--forecast`, so `hledger -f index.ledger reg --forecast` shows the
+planned salary next to the real one. What would break is MoneyTracker's own reading of them — the
+budget envelope scan, the cash flow forecast and the payoff estimate all skip `recurring.ledger`
+explicitly, so a declared salary never turns into an envelope and never counts a month twice.
 
 ## Transaction shape
 
@@ -160,12 +166,12 @@ is engine-owned metadata, so the editor hides it and every rewrite preserves it.
 
 ## Declared schedules
 
-`recurring.ledger` (not included by `index.ledger`) states the money that is *supposed* to happen every
+`recurring.ledger` (included by `index.ledger`, so `--forecast` sees it) states the money that is *supposed* to happen every
 month, so the 日程 view can show it as a calendar instead of leaving it to the pattern detector. It is
 plain periodic syntax:
 
 ```
-~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
+~ monthly from 2025-08-05  ; id:salary-main label:工资 kind:salary
     income:salary                        -30,000.00 CNY
     income:benefit                       -12,300.00 CNY  ; 公司缴纳侧合计
     assets:cn:fund                         4,200.00 CNY
@@ -181,9 +187,11 @@ plain periodic syntax:
 - The header comment holds whitespace-separated `key:value` metadata: `id:` (defaults to the label plus
 a hash of it), `label:`, `kind:` (`salary` / `loan` / `income` / `expense`, display only),
 `enabled:false` to keep a template but stop suggesting it, and `settle:<account>` as an override.
-- `monthly from <date> day:<1-31>` is the supported period; a day past the end of a month clamps to the
-last day (`day:31` → 2 月 28/29). `weekly from <date>`, `quarterly from`, `yearly from` and a bare
-`monthly` on the 1st also work.
+- `monthly from <date>` is the supported period, and the day-of-month comes from that date — the same
+rule hledger applies, so the file stays valid outside the app. A day past the end of a month clamps to
+the last day (`from 2026-01-31` → 2 月 28/29). `weekly from <date>`, `quarterly from`, `yearly from`
+and a bare `monthly` (the 1st) also work. The app-only `day:<1-31>` token is still parsed for older
+files but hledger rejects it, so generated text no longer uses it.
 - **The last posting is the cash leg.** It decides the 现金流 figure on the card, and it may omit its
 amount — the engine fills it so the block balances, exactly like a hand-written transaction.
 - Nothing is booked by merely declaring a template. 记入 writes one occurrence through the normal

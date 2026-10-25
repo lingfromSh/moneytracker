@@ -1241,8 +1241,8 @@ mod tests {
         ]);
         let vault = Vault::load(dir.path(), &opts).unwrap();
         assert_eq!(vault.txns.len(), 1);
-        // index, accounts, prices, budgets, year, month, day
-        assert_eq!(vault.files.len(), 7);
+        // index, accounts, prices, budgets, recurring, year, month, day
+        assert_eq!(vault.files.len(), 8);
         let t = &vault.txns[0];
         assert_eq!(t.id, "01JA3KQ7");
         assert_eq!(t.txn.payee, "星巴克");

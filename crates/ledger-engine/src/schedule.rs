@@ -34,7 +34,19 @@ use crate::vault::VaultOptions;
 use crate::{EngineError, Result};
 use ledger_core::Amount;
 
+/// `recurring.ledger` is included by `index.ledger`, so hledger sees the
+/// templates (`--forecast`); the budget and forecast reports skip it explicitly.
 pub const SCHEDULE_FILE: &str = "recurring.ledger";
+
+/// True for the declared-schedule file of a vault.
+///
+/// The schedule is part of the ledger (`index.ledger` includes it, so
+/// `hledger --forecast` works), but its `~` legs are plans, not envelopes: the
+/// budget and forecast reports have to ignore the file or a declared salary
+/// would look like a budget.
+pub fn is_schedule_file(rel: &str) -> bool {
+    rel == SCHEDULE_FILE
+}
 /// Comment tag written on booked occurrences: `; sched:salary@2026-11`.
 pub const TAG_KEY: &str = "sched";
 /// `recur::skip_list` keys are namespaced so detection and schedules never clash.
@@ -348,6 +360,19 @@ pub fn parse(src: &str) -> ScheduleSet {
                 )
             })
             .unwrap_or(true);
+        if day.is_some() {
+            // hledger has no `day:` token, and this file is included by index.ledger,
+            // so an app-only token would make `hledger --forecast` fail to parse it.
+            let mut diagnostic = Diagnostic::warning(
+                "core.schedule.day_token",
+                "`day:` 只有 App 认，hledger 不认；把日号写进 from 日期，例如 `monthly from 2026-11-15`"
+                    .to_string(),
+                SCHEDULE_FILE,
+                pt.span,
+            );
+            diagnostic.line = line_of(src, pt.span);
+            diagnostics.push(diagnostic);
+        }
         let day = day
             .or_else(|| start.map(|d| d.day()))
             .unwrap_or(1)
@@ -646,11 +671,25 @@ pub fn render_salary(
         return Err(EngineError::Refused("应发工资必须大于 0".to_string()));
     }
     let day = request.day.clamp(1, 31);
-    let start = match request.start.as_deref() {
+    let anchor = match request.start.as_deref() {
         Some(text) => parse_iso_date(text)
+            .or_else(|| {
+                // `2026-10` is also accepted: the day comes from `day`.
+                let month =
+                    chrono::NaiveDate::parse_from_str(&format!("{text}-01"), "%Y-%m-%d").ok()?;
+                Some(clamped(month.year(), month.month(), day))
+            })
             .ok_or_else(|| EngineError::Refused(format!("`{text}` 不是有效日期")))?,
-        None => month_start(chrono::Local::now().date_naive()),
+        None => clamped(
+            chrono::Local::now().date_naive().year(),
+            chrono::Local::now().date_naive().month(),
+            day,
+        ),
     };
+    // hledger reads `monthly from <date>` as "every month on that day", clamping
+    // short months — the same rule this module uses — so the day goes into the
+    // anchor date instead of an app-only `day:` token.
+    let start = clamped(anchor.year(), anchor.month(), day);
     let label = if request.label.trim().is_empty() {
         "工资".to_string()
     } else {
@@ -701,10 +740,10 @@ pub fn render_salary(
         out.push_str("; 公司: 养老16% 医疗8% 失业0.5% 工伤0.5% 生育1% 公积金7% 年金8%\n");
     }
     out.push_str("; 比例写死在生成器里,直接改下面的数字即可;改完记得保存。\n");
+    out.push_str("; 每月几号由 from 后面的日期决定 —— hledger 也是这么解读的。\n");
     out.push_str(&format!(
-        "~ monthly from {} day:{}  ; id:{} label:{} kind:salary\n",
+        "~ monthly from {}  ; id:{} label:{} kind:salary\n",
         start.format("%Y-%m-%d"),
-        day,
         id,
         label,
     ));
@@ -748,22 +787,25 @@ pub fn render_starter(commodity: &str) -> String {
         "; MoneyTracker · 定期收支模板 (recurring.ledger)
 ;
 ; 这里声明「每月固定发生的事」: 工资、房贷、房租、订阅。语法就是 hledger 的
-; `~ period` 块, 所以数字可以手改。本文件是 App 的元数据, 不被 index.ledger
-; include, 因此不会让 hledger 重复计算, 也不会被当成预算信封。
+; `~ period` 块, 所以数字可以手改, `hledger -f index.ledger reg --forecast`
+; 也能看到它们。App 的预算和现金流预测不把这里当信封, 所以不会算两遍。
 ;
 ; 表头注释:
 ;   id:<唯一 id>  label:<显示名>  kind:salary|loan|income|expense|other
 ;   enabled:false 可以暂时停用
 ; 期间写法:  monthly | weekly | quarterly | yearly, 可加 from 2026-11-01
-;            day:5 (每月几号), until 2027-12-31
+;            until 2027-12-31; `day:5` 这种写法 App 也认, 但 hledger 不认, 别用
 ; 最后一条 posting 可以省略金额 (它是「实际付出去/收到的那张卡」),
 ; App 会用其余各条把它补平 —— 这一条在界面上显示为「到手 / 每月还款」。
 ;
 ; 例: 每月 20 号还房贷 8,200 (利息 6,070 + 本金 2,130)
-; ~ monthly from 2026-01-20 day:20  ; id:loan-home label:房贷 kind:loan
+; ~ monthly from 2026-01-20  ; id:loan-home label:房贷 kind:loan
 ;     liabilities:mortgage:home          2,130.00 {commodity}
 ;     expenses:home:mortgage_interest    6,070.00 {commodity}
 ;     assets:bank:icbc
+;
+; 每月几号由 from 后面的日期决定 (hledger 也是这样读的), 所以 `monthly from
+; 2026-01-20` 就是每月 20 号; 短月自动落在月末。
 "
     )
 }
@@ -1184,6 +1226,31 @@ mod tests {
                 NaiveDate::from_ymd_opt(2026, 4, 30).unwrap(),
             ]
         );
+        // `day:` is app-only, so parsing it has to say so (the file is in index.ledger).
+        assert_eq!(set.diagnostics.len(), 1);
+        assert_eq!(set.diagnostics[0].code, "core.schedule.day_token");
+        assert_eq!(set.diagnostics[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn the_from_date_carries_the_day_of_month() {
+        let set = parse(
+            "~ monthly from 2026-01-31  ; id:x label:x\n    expenses:food  1 CNY\n    assets:cash\n",
+        );
+        assert!(set.diagnostics.is_empty(), "{:?}", set.diagnostics);
+        let template = &set.templates[0];
+        assert_eq!(template.day, 31);
+        assert_eq!(
+            template.dates(
+                NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+                month_end(NaiveDate::from_ymd_opt(2026, 3, 1).unwrap())
+            ),
+            vec![
+                NaiveDate::from_ymd_opt(2026, 1, 31).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 2, 28).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 3, 31).unwrap(),
+            ]
+        );
     }
 
     #[test]
@@ -1245,6 +1312,10 @@ mod tests {
         assert_eq!(totals.settle, Decimal::from(28024) + Decimal::new(50, 2));
         assert!(text.contains("assets:cn:fund"), "{text}");
         assert!(text.contains("expenses:cn:medical"), "{text}");
+        // hledger ignores an app-specific `day:` token, and the file is included
+        // by index.ledger now, so the day has to live in the anchor date.
+        assert!(!text.contains("day:"), "{text}");
+        assert!(text.contains("~ monthly from 2026-11-05"), "{text}");
     }
 
     #[test]
@@ -1264,17 +1335,37 @@ mod tests {
     }
 
     #[test]
-    fn the_vault_template_does_not_include_the_schedule() {
+    fn the_vault_index_includes_the_schedule() {
         let dir = tempfile::tempdir().unwrap();
         crate::vault::create_vault(dir.path(), &VaultCreateOptions::default()).unwrap();
         let index = std::fs::read_to_string(dir.path().join("index.ledger")).unwrap();
         assert!(
-            !index
+            index
                 .lines()
                 .any(|line| line.trim() == format!("include {SCHEDULE_FILE}")),
-            "index.ledger must not include {SCHEDULE_FILE}:\n{index}"
+            "index.ledger must include {SCHEDULE_FILE}:\n{index}"
         );
         assert!(dir.path().join(SCHEDULE_FILE).exists());
+    }
+
+    #[test]
+    fn the_schedule_is_not_a_budget_envelope() {
+        let (dir, mut vault) = vault();
+        // budgets.ledger ships with a real envelope; the schedule must not add one.
+        let before = crate::report::budgets(&vault).len();
+        crate::schedule::save(
+            dir.path(),
+            "~ monthly\n    expenses:food  500.00 CNY\n    assets:cash\n",
+            &VaultOptions::default(),
+        )
+        .expect("save");
+        vault = Vault::load(dir.path(), &VaultOptions::default()).unwrap();
+        let budgets = crate::report::budgets(&vault);
+        assert_eq!(budgets.len(), before);
+        assert!(
+            !budgets.iter().any(|b| b.raw.contains("expenses:food")),
+            "schedule legs must not become envelopes: {budgets:?}"
+        );
     }
 
     #[test]

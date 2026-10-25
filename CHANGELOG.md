@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `recurring.ledger` is now included by `index.ledger`, so `hledger -f index.ledger reg --forecast`
+  shows the declared salary, rent and loans next to the transactions that already happened. To keep the
+  two readings apart, the budget envelope scan, the cash-flow forecast and the payoff estimate skip the
+  file by name (`schedule::is_schedule_file`), and `budgets.ledger` in the showcase vault gained elided
+  legs so its templates balance for `--forecast` too.
+- Schedules express the billing day through the `from` date (`~ monthly from 2026-11-15`) instead of an
+  app-only `day:15`, because hledger rejects that token once the file is part of the ledger. `day:` is
+  still parsed for older files, with a `core.schedule.day_token` warning that points at the fix.
+
 ### Fixed
 
 - A dashboard panel added by a newer version no longer stays invisible for anyone who already saved a

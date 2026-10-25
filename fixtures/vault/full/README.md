@@ -36,7 +36,7 @@ income=590,470.00 CNY      expenses=468,772.00 CNY        (16 months)
 | 储蓄目标 | `assets:savings:emergency` 信封（`kind=A`） | 每月 1,500 存入应急金，按「已存 / 还差」显示 |
 | 汇率 | `prices.ledger` | 东京旅行 `3,200.00 USD @@ 22,976.00 CNY`，按交易日汇率折算 |
 | 规则 | `rules.ledger` | 星巴克 70/30 拆分、盒马/加油/租金四条规则（只影响新录入） |
-| 固定收支 | `recurring.ledger` | 工资（应发 30,000 + 公司缴 16,422，含五险二金拆分）、房贷 8,200、房租收入 3,600、云存储订阅 |
+| 固定收支 | `recurring.ledger` | 工资（应发 30,000 + 公司缴 12,300 = 收入 42,300，到手 23,550.00，含五险二金拆分）、房贷 8,200、房租收入 3,600、云存储订阅 |
 | 多分录 | `2025-08-01 购房首付`、`2026-06-18 购车`、`2026-03-01 装修` | 一笔交易里资产、负债、支出三条腿同时变化 |
 
 ## 怎么用
@@ -57,9 +57,10 @@ hledger -f fixtures/vault/full/index.ledger reg expenses:food --monthly
 
 ## 约定
 
-- `index.ledger` 只包含 `accounts / prices / budgets` 与年份文件；
+- `index.ledger` 包含 `accounts / prices / budgets / recurring` 与年份文件；
   `rules.ledger` **故意不被包含**，否则 hledger 会把自动分录再算一次；
-  `recurring.ledger` 同样不包含：它是计划（`~` 模板），不是已经发生的钱。
+  `recurring.ledger` 则是被包含的：`~` 块是周期交易，hledger 不加 `--forecast` 不会展开，
+  所以 `hledger -f index.ledger reg --forecast` 能看到还没发生的工资。
 - 月份文件里直接放交易（没有拆成日文件）；MoneyTracker 新记账时会自动建日文件并接到
   年 → 月链路上，两种形态可以共存。
 - 金额能省略就省略（`assets:bank:icbc` 不写金额），由程序补平，这样也顺便演示了

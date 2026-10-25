@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-192_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-194_passing-brightgreen.svg)](#testing)
 [![Front-end tests](https://img.shields.io/badge/vitest-72_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
@@ -249,7 +249,7 @@ happens every month": salary, mortgage, rent, subscriptions. Write those into `r
 plain hledger periodic syntax:
 
 ```ledger
-~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
+~ monthly from 2025-08-05  ; id:salary-main label:工资 kind:salary
     income:salary                        -30,000.00 CNY
     income:benefit                       -12,300.00 CNY  ; employer contributions
     assets:cn:fund                         4,200.00 CNY  ; housing fund: 2,100 you + 2,100 employer
@@ -263,7 +263,8 @@ plain hledger periodic syntax:
 ```
 
 - The header comment carries the metadata: `id:`, `label:`, `kind:` (salary / loan / income / expense),
-  `enabled:` — and `day:31` clamps to the end of short months.
+  `enabled:`. The day of the month comes from the `from` date (`from 2026-01-31` clamps to the end of
+  short months), which is exactly how hledger reads it.
 - **The last posting is the cash leg**: it is what the card shows as 现金流, and its amount may be
   left out for the engine to balance.
 - 五险二金 is split by *withdrawability*: the housing fund, the personal pension account and the
@@ -278,9 +279,10 @@ plain hledger periodic syntax:
   the net pay, and it generates the whole block (个人 8%/2%/0.5%/7%/4%, 公司 16%/8%/0.5%/0.5%/1%/7%/8%),
   previewed before it is written.
 
-`recurring.ledger` is **not included by `index.ledger`**, for the same reason as `rules.ledger` and
-`goals.ledger`: it describes a plan, not money that moved. Including it would make hledger, the budget
-report and the cash-flow forecast count the same month twice.
+`recurring.ledger` **is included by `index.ledger`**: hledger ignores `~` blocks unless you ask for
+`--forecast`, so `hledger -f index.ledger reg --forecast` shows the salary that is still to come.
+MoneyTracker's own budget envelope scan, cash-flow forecast and payoff estimate skip the file by name,
+so a declared schedule is never counted as a month that already happened.
 
 ## Insights & questions
 
@@ -341,7 +343,7 @@ statement on the clipboard for your journal.
   budgets.ledger               # `~ monthly` budget envelopes
   goals.ledger                 # plan: assumptions, FIRE goal, pool, allocation, debts (not included)
   rules.ledger                 # MoneyTracker rules — intentionally NOT included by index.ledger
-  recurring.ledger             # declared schedules: salary, mortgage, rent (not included either)
+  recurring.ledger             # declared schedules: salary, mortgage, rent
   recur.ledger                 # `; skip:<id>@<month>` decisions (not included)
   2026/
     2026.ledger                # includes the month indexes
@@ -359,7 +361,7 @@ Anything outside that subset — amount expressions, lot prices `{}`, `C` / `N` 
 timeclock, `csv:` rules — fails loudly with `file:line:col` and a stable diagnostic code. The app
 never silently drops a line it does not understand. Details: [`docs/vault-format.md`](docs/vault-format.md).
 
-**Why `rules.ledger` and `recurring.ledger` are not included.** Rules are expanded when a transaction is written and the
+**Why `rules.ledger` and `goals.ledger` are not included.** Rules are expanded when a transaction is written and the
 result is stored as ordinary postings, with `; rule:<id> query:<original input>` recording the
 provenance. Including the rule file would make `hledger --auto` apply them a second time and
 produce different numbers.
@@ -415,7 +417,7 @@ check (`brew install hledger`).
 ## Testing
 
 ```bash
-cargo test --workspace                        # 192 Rust tests, 13 suites
+cargo test --workspace                        # 194 Rust tests, 13 suites
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
 pnpm test                                     # 72 Vitest tests

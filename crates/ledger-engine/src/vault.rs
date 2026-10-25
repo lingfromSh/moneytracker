@@ -80,23 +80,28 @@ pub fn render_index(opts: &VaultOptions, year: i32) -> String {
     format!(
         "; MoneyTracker vault — everything hledger needs lives here.
 ;
-; rules.ledger, goals.ledger and recurring.ledger are intentionally NOT
-; included: MoneyTracker expands rules at write time and treats recurring
-; templates as app metadata, so an external
-; `hledger -f index.ledger ...` sees the same final transactions — no double
-; counting and no template mistaken for a budget envelope.
+; rules.ledger and goals.ledger are intentionally NOT included: MoneyTracker
+; expands rules at write time and treats goals as commentary plus debt
+; parameters, so an external `hledger -f index.ledger ...` sees the same final
+; transactions without double counting.
+;
+; recurring.ledger IS included: hledger ignores `~` blocks unless you ask for
+; --forecast. MoneyTracker's own budget, forecast and payoff reports skip this
+; file, so a declared schedule never becomes an envelope.
 
 commodity 1,000.00 {base}
 
 include {accounts}
 include {prices}
 include {budgets}
+include {recurring}
 include {year}/{year}.ledger
 ",
         base = opts.base_commodity,
         accounts = ACCOUNTS_FILE,
         prices = PRICES_FILE,
         budgets = BUDGETS_FILE,
+        recurring = crate::schedule::SCHEDULE_FILE,
         year = year,
     )
 }

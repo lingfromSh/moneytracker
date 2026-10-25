@@ -208,13 +208,19 @@ collects budget rows above 90 %.
 ## Declared schedules
 
 `crates/ledger-engine/src/schedule.rs` is the mirror image of `recur.rs`: instead of guessing patterns
-from history it reads `recurring.ledger`, a file of ordinary `~ monthly ... day:N` blocks plus postings
-that the user maintains (or that 工资模板 generates). Header metadata lives in the block comment as
-whitespace-separated `key:value`; the id defaults to the label plus a hash of it, so two 工资 templates
+from history it reads `recurring.ledger`, a file of ordinary `~ monthly from <date>` blocks plus
+postings that the user maintains (or that 工资模板 generates). Header metadata lives in the block comment
+as whitespace-separated `key:value`; the id defaults to the label plus a hash of it, so two 工资 templates
 cannot collide.
 
-Dates are computed on a month grid anchored at `start`: the day is clamped to the month length
-(`day:31` → 2 月 28/29), and a window that begins before `start` still resets onto the grid rather than
+The file is plain hledger periodic syntax, so `index.ledger` includes it and `--forecast` sees it.
+What must not see it is the app's own reading: `report::budgets`, `forecast_points` and
+`plan::periodic_payment` skip the file by name (`schedule::is_schedule_file`), so a declared schedule is
+never read as an envelope, never adds a month twice to the forecast and never skews a payoff estimate.
+
+Dates are computed on a month grid anchored at `start`, whose day-of-month *is* the billing day
+(hledger reads `monthly from 2025-01-31` the same way); the day is clamped to the month length
+(`from 2026-01-31` → 2 月 28/29), and a window that begins before `start` still resets onto the grid rather than
 sliding by 30 days. `legs()` fills the single elided posting the same way `amounts::balance` does, and
 tags the **last** posting `role: "settle"` — that leg *is* the cash flow the dashboard card prints.
 
