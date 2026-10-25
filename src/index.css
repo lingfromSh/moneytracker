@@ -45,6 +45,60 @@ body {
 }
 
 /*
+ * 手机上的三件事：手势条/刘海的安全区、16px 以上的字号（否则 iOS 会在聚焦输入框时
+ * 自动放大页面），以及 44px 左右的可点区域。都只在粗指针设备上生效，桌面不受影响。
+ */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.375rem);
+}
+
+.safe-x {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    /* 手机上的页面本身不该有回弹，滚动交给具体的滚动容器。 */
+    overscroll-behavior-y: none;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button,
+  select,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  /* 输入框统一 16px，避免 iOS Safari 聚焦时把整个页面放大。 */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/*
  * The capture palette is a frameless, transparent window. Every layer behind the
  * card has to be transparent, or the rounded card ends up sitting on an opaque
  * white rectangle — which is exactly what it looked like.

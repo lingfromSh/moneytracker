@@ -2,7 +2,17 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: 手机（含刘海/手势条）上才能拿到 env(safe-area-inset-*)；
+         interactive-widget=resizes-content: 安卓软键盘弹出时压缩视口而不是盖住输入框。 -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="theme-color" content="#fbfcfd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#191b21" media="(prefers-color-scheme: dark)" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>MoneyTracker</title>
   </head>
   <body>

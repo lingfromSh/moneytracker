@@ -609,7 +609,7 @@ function SalaryModal({
   return (
     <Modal open={open} onClose={onClose} title="生成工资模板" width="max-w-3xl">
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="名称">
             <Input value={form.label} onChange={(event) => update("label", event.target.value)} />
           </Field>

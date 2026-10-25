@@ -41,8 +41,10 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@1.91
-        with:
-          targets: ${{ matrix.target }}
+
+      # toolchain action 的 targets 输入在按版本号引用时不生效，显式补一次。
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:

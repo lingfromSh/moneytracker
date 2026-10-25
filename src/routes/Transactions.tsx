@@ -2,6 +2,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TxnDto_Serialize } from "../lib/bindings";
 import { api, queryKeys } from "../lib/ipc";
+import { startCapture } from "../lib/capture";
 import { cn, dayLabel, money, shortAccount, weekday } from "../lib/format";
 import {
   Badge,
@@ -19,7 +20,8 @@ import { addView, parseViews, removeView, serializeViews } from "../lib/views";
 
 const PAGE = 200;
 const ROW_HEIGHT = 56;
-const VIEWPORT = 800;
+/** 虚拟滚动的兜底视口高度；真实高度由容器实测（手机和桌面差很多）。 */
+const FALLBACK_VIEWPORT = 800;
 const OVERSCAN = 6;
 
 const ORDERS = [
@@ -40,6 +42,15 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
   const [selection, setSelection] = React.useState<Selection>(new Set());
   const [bulkOpen, setBulkOpen] = React.useState(false);
   const [scrollTop, setScrollTop] = React.useState(0);
+  const [viewport, setViewport] = React.useState(FALLBACK_VIEWPORT);
+  const listRef = React.useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const measure = () => setViewport(node.clientHeight || FALLBACK_VIEWPORT);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   const [viewName, setViewName] = React.useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -77,9 +88,9 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
   // Small windowing implementation: enough for 100k rows without a dependency.
   const visible = React.useMemo(() => {
     const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
-    const count = Math.ceil(VIEWPORT / ROW_HEIGHT) + OVERSCAN * 2;
+    const count = Math.ceil(viewport / ROW_HEIGHT) + OVERSCAN * 2;
     return { start, rows: items.slice(start, start + count) };
-  }, [items, scrollTop]);
+  }, [items, scrollTop, viewport]);
 
   const toggle = (id: string) => {
     setSelection((current) => {
@@ -102,8 +113,9 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-[var(--color-line)] px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-line)] px-4 py-3">
         <Input
+          className="min-w-0 flex-1 basis-full sm:basis-0"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -127,7 +139,12 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
         <Button variant="ghost" onClick={refresh} title="重新读取账本">
           刷新
         </Button>
-        <Button variant="primary" onClick={() => void api.showCapture()}>
+        {/* 手机顶部已经有一个「记一笔」，这里只留桌面。 */}
+        <Button
+          variant="primary"
+          className="hidden sm:inline-flex"
+          onClick={() => startCapture()}
+        >
           记一笔
         </Button>
       </div>
@@ -222,7 +239,8 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
       ) : null}
 
       <div
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
+        ref={listRef}
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
       >
         {page.isLoading ? (
@@ -232,7 +250,7 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
             title="没有匹配的交易"
             hint={query ? `查询 ${query} 没有结果` : `按 ${shortcutLabel} 记第一笔`}
             action={
-              <Button variant="primary" className="mt-2" onClick={() => void api.showCapture()}>
+              <Button variant="primary" className="mt-2" onClick={() => startCapture()}>
                 快速记账
               </Button>
             }

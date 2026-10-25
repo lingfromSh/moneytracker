@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, queryKeys } from "../lib/ipc";
+import { startCapture } from "../lib/capture";
 import { cn, money, percent, shortAccount } from "../lib/format";
 import { Button, Card, EmptyState } from "../components/ui";
 
@@ -121,7 +122,7 @@ export function Categories() {
             title="还没有带标签的交易"
             hint="快录时用 +餐饮 这样的标签即可"
             action={
-              <Button variant="primary" className="mt-2" onClick={() => void api.showCapture()}>
+              <Button variant="primary" className="mt-2" onClick={() => startCapture()}>
                 记一笔
               </Button>
             }

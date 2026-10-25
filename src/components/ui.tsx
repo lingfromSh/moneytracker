@@ -22,6 +22,7 @@ export function Button({
       {...props}
       className={cn(
         "inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition",
+        "min-h-10 sm:min-h-0",
         "disabled:cursor-not-allowed disabled:opacity-50",
         BUTTON_STYLES[variant],
         className,
@@ -36,6 +37,7 @@ export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInp
       {...props}
       className={cn(
         "w-full rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-1.5 text-sm",
+        "min-h-10 sm:min-h-0",
         "placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:outline-none",
         className,
       )}
@@ -52,6 +54,7 @@ export function Textarea({
       {...props}
       className={cn(
         "w-full rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 text-sm",
+        "min-h-20 sm:min-h-0",
         "focus:border-[var(--color-accent)] focus:outline-none",
         className,
       )}
@@ -69,6 +72,7 @@ export function Select({
       {...props}
       className={cn(
         "rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-2 py-1.5 text-sm",
+        "min-h-10 sm:min-h-0",
         "focus:border-[var(--color-accent)] focus:outline-none",
         className,
       )}
@@ -239,16 +243,30 @@ export function Modal({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 p-10 backdrop-blur-sm">
-      <Card className={cn("w-full", width)}>
-        <div className="flex items-center justify-between border-b border-[var(--color-line)] px-4 py-2">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-start sm:p-10">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={cn(
+          "flex max-h-[92dvh] w-full flex-col overflow-hidden border border-[var(--color-line)] bg-[var(--color-surface)]",
+          "rounded-t-2xl border-b-0 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.35)]",
+          "sm:max-h-[85vh] sm:rounded-[var(--radius-card)] sm:border-b sm:shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
+          width,
+        )}
+      >
+        {/* 手机上给一点“抓手”的暗示：这个面板是从底部拿上来的。 */}
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--color-line)] sm:hidden" />
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--color-line)] px-4 py-2">
           <div className="text-sm font-semibold">{title}</div>
           <Button variant="ghost" onClick={onClose} aria-label="关闭">
             ✕
           </Button>
         </div>
-        <div className="p-4">{children}</div>
-      </Card>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[max(env(safe-area-inset-bottom),1rem)] sm:pb-4">
+          {children}
+        </div>
+      </div>
     </div>
   );
 }

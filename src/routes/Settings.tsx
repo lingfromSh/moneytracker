@@ -172,7 +172,7 @@ export function SettingsView() {
 
         <Card>
           <CardHeader title="记账口径" hint="基准币种决定所有报表的合计口径" />
-          <div className="grid grid-cols-2 gap-3 p-4">
+          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
             <Field label="基准币种">
               <Input
                 value={draft.base_commodity}

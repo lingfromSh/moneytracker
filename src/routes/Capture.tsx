@@ -4,6 +4,7 @@ import type { CaptureParseDto, LlmDraftDto } from "../lib/bindings";
 import { api, queryKeys } from "../lib/ipc";
 import { cn } from "../lib/format";
 import { hideCaptureWindow, focusMain } from "../lib/window";
+import { Button } from "../components/ui";
 
 const DEBOUNCE_MS = 60;
 /// The model needs a round trip, so typing waits a little longer for it.
@@ -387,6 +388,33 @@ export function CaptureWindow({ onDone }: { onDone?: () => void } = {}) {
           ) : null}
         </div>
       </div>
+
+      {/*
+        手机上只有一个窗口，没有 ⌘Enter 也没有 Esc：快录页必须自带两个大按钮，
+        否则进来之后除了提交就没有别的出路。
+      */}
+      {onDone ? (
+        <div className="mt-2 flex shrink-0 gap-2">
+          <Button
+            variant="subtle"
+            className="flex-1"
+            onClick={() => {
+              reset();
+              onDone();
+            }}
+          >
+            取消
+          </Button>
+          <Button
+            variant="primary"
+            className="flex-1"
+            disabled={!pendingLine.trim() || busy}
+            onClick={() => void commit(false)}
+          >
+            {busy ? "保存中…" : "记一笔"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

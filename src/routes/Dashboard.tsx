@@ -6,6 +6,7 @@ import { isMobile } from "../lib/platform";
 import type { Layout } from "react-grid-layout";
 import type { DashboardDto_Serialize, PlanOverviewDto_Serialize } from "../lib/bindings";
 import { api, queryKeys } from "../lib/ipc";
+import { startCapture } from "../lib/capture";
 import { useElementWidth } from "../lib/use-element-width";
 import { CARD_KEYS, KPI_KEYS } from "../lib/views";
 import { cn, money, monthLabel, pct, percent } from "../lib/format";
@@ -437,7 +438,7 @@ function Header({
           <Button variant="ghost" onClick={() => setCustomize(true)} title="选择卡片与指标">
             自定义
           </Button>
-          <Button variant="subtle" onClick={() => void api.showCapture()}>
+          <Button variant="subtle" onClick={() => startCapture()}>
             记一笔
           </Button>
         </div>

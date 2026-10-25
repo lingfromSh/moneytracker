@@ -18,6 +18,7 @@ import { SettingsView } from "./routes/Settings";
 import { Welcome } from "./routes/Welcome";
 import { useShortcutLabel } from "./lib/shortcut";
 import { isMobile } from "./lib/platform";
+import { startCapture } from "./lib/capture";
 
 type Route =
   | "capture"
@@ -31,6 +32,9 @@ type Route =
   | "schedule"
   | "reports"
   | "settings";
+
+/** 手机底栏只放四个高频页面；其余收进「更多」。 */
+const MOBILE_TABS: Route[] = ["dashboard", "transactions", "accounts", "reports"];
 
 const NAV: { route: Route; label: string; hint: string }[] = [
   { route: "dashboard", label: "看板", hint: "⌘1" },
@@ -89,6 +93,7 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
   const queryClient = useQueryClient();
   const shortcutLabel = useShortcutLabel();
   const [paletteOpen, setPaletteOpen] = React.useState(false);
+  const [moreOpen, setMoreOpen] = React.useState(false);
   const [paletteQuery, setPaletteQuery] = React.useState("");
   const [diagCount, setDiagCount] = React.useState(0);
 
@@ -127,7 +132,7 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
       }
       if (e.key.toLowerCase() === "n") {
         e.preventDefault();
-        void api.showCapture();
+        startCapture();
         return;
       }
       if (e.key.toLowerCase() === "f") {
@@ -155,15 +160,12 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
 
   const hasVault = Boolean(info.data);
   const mobile = isMobile;
-  const capture = () => {
-    if (mobile) go("capture");
-    else void api.showCapture();
-  };
+  const capture = () => startCapture();
 
   return (
     <div className={cn("flex h-full w-full", mobile && "flex-col")}>
       {mobile ? (
-        <header className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] bg-[var(--color-surface-2)]/60 px-3 py-2">
+        <header className="safe-top flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] bg-[var(--color-surface-2)]/60 px-3 py-2">
           <span className="grid h-6 w-6 place-items-center rounded-md bg-[var(--color-accent)] text-[11px] font-bold text-white">
             MT
           </span>
@@ -236,7 +238,7 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
       <main
         className={cn(
           "min-w-0 flex-1",
-          mobile ? "overflow-y-auto" : "overflow-hidden",
+          mobile ? "overflow-y-auto overscroll-contain" : "overflow-hidden",
         )}
       >
         {!hasVault && route !== "settings" ? (
@@ -260,23 +262,71 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
       </main>
 
       {mobile ? (
-        <nav className="flex shrink-0 gap-1 overflow-x-auto border-t border-[var(--color-line)] bg-[var(--color-surface-2)]/60 px-2 py-1.5">
+        <nav className="safe-bottom safe-x flex shrink-0 items-stretch justify-between gap-1 border-t border-[var(--color-line)] bg-[var(--color-surface-2)]/80 px-2 pt-1 backdrop-blur">
+          {MOBILE_TABS.map((tab) => {
+            const item = NAV.find((n) => n.route === tab);
+            const active = route === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => go(tab)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex flex-1 flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[11px] transition",
+                  active
+                    ? "bg-[var(--color-surface)] font-medium text-[var(--color-accent)] shadow-sm"
+                    : "text-[var(--color-muted)]",
+                )}
+              >
+                {item?.label ?? tab}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setMoreOpen(true)}
+            aria-current={
+              MOBILE_TABS.includes(route) ? undefined : "page"
+            }
+            className={cn(
+              "flex flex-1 flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[11px] transition",
+              MOBILE_TABS.includes(route)
+                ? "text-[var(--color-muted)]"
+                : "bg-[var(--color-surface)] font-medium text-[var(--color-accent)] shadow-sm",
+            )}
+          >
+            更多
+          </button>
+        </nav>
+      ) : null}
+
+      <Modal
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        title="全部页面"
+      >
+        <div className="grid grid-cols-2 gap-2">
           {NAV.map((item) => (
             <button
               key={item.route}
-              onClick={() => go(item.route)}
+              onClick={() => {
+                setMoreOpen(false);
+                go(item.route);
+              }}
               className={cn(
-                "shrink-0 rounded-lg px-3 py-1.5 text-xs transition",
+                "flex min-h-12 items-center justify-between rounded-xl border border-[var(--color-line)] px-3 text-sm transition",
                 route === item.route
-                  ? "bg-[var(--color-surface)] font-medium shadow-sm"
-                  : "text-[var(--color-muted)]",
+                  ? "border-[var(--color-accent)] bg-[var(--color-surface-2)] font-medium"
+                  : "bg-[var(--color-surface)]",
               )}
             >
-              {item.label}
+              <span>{item.label}</span>
+              <span className="text-[11px] text-[var(--color-muted)]">
+                {item.hint}
+              </span>
             </button>
           ))}
-        </nav>
-      ) : null}
+        </div>
+      </Modal>
 
       <Modal
         open={paletteOpen}
