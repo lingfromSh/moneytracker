@@ -34,6 +34,7 @@ rich dashboard — with **zero proprietary storage**. Delete the app and you sti
 - [Install](#install)
 - [Usage](#usage)
 - [Capture syntax](#capture-syntax)
+- [Natural language (optional)](#natural-language-optional)
 - [Where your data lives](#where-your-data-lives)
 - [Safety guarantees](#safety-guarantees)
 - [Development](#development)
@@ -130,6 +131,38 @@ Sign convention: no sign or `-` is an **expense** (money leaves a funding accoun
 amount is **income**. One `@account` leaves the other side to the account type (`A`/`L` → funding,
 `R`/`X` → category) or to a matching rule; two `@` accounts read as `category funding`. An entry no
 rule and no category covers lands in `expenses:unclassified` with an `:inbox:` tag.
+
+## Natural language (optional)
+
+The palette has two modes: **Hledger syntax** (default) and **自然语言**. Press <kbd>Tab</kbd> to
+switch; the mode is remembered between sessions.
+
+```
+昨天和朋友吃火锅花了 168，微信付的
+        ↓ Tab
+将写入   火锅 168 @微信 +餐饮
+```
+
+**The model never writes ledger text.** It receives the sentence plus a compact account list and
+returns a small JSON draft (date, payee, amount, commodity, category, funding, tags, confidence).
+MoneyTracker turns that draft into one ordinary capture line, so the parser, rule expansion,
+double-entry check, snapshot and audit all still apply — an LLM entry is exactly as safe as a typed
+one, and you always see the line before it is written.
+
+Configure it in **设置 → AI 记一笔**:
+
+| Setting | Notes |
+| --- | --- |
+| Provider | OpenAI, Anthropic Claude, DeepSeek, Ollama / local models, or a custom endpoint |
+| Base URL | Leave blank for the preset; point it at a gateway or proxy when you need one |
+| Model | Free text — any model the endpoint accepts |
+| Protocol | `OpenAI chat/completions` or `Anthropic messages`; only asked for custom endpoints |
+| API key | Written to `llm.json` (mode `0600`) in the app config dir, never to the ledger or `settings.json` |
+
+Off by default. With no key and no model configured the mode stays disabled and the palette says
+what is missing. "测试连接" performs one tiny request so you can verify credentials before relying
+on it. What leaves your machine is the sentence you typed plus your account names — nothing else,
+and only when you press <kbd>Tab</kbd> into natural-language mode.
 
 ## Where your data lives
 

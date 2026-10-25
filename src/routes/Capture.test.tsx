@@ -10,6 +10,8 @@ const ruleMock = vi.fn();
 const snapshotMock = vi.fn();
 const hideMock = vi.fn();
 const focusMainMock = vi.fn();
+const llmStatusMock = vi.fn();
+const llmDraftMock = vi.fn();
 
 vi.mock("../lib/ipc", () => ({
   api: {
@@ -17,8 +19,10 @@ vi.mock("../lib/ipc", () => ({
     captureCommit: (text: string) => commitMock(text),
     ruleUpsert: (text: string) => ruleMock(text),
     snapshot: () => snapshotMock(),
+    llmStatus: () => llmStatusMock(),
+    llmDraft: (text: string) => llmDraftMock(text),
   },
-  queryKeys: { snapshot: ["snapshot"] },
+  queryKeys: { snapshot: ["snapshot"], llmStatus: ["llm-status"] },
 }));
 
 vi.mock("../lib/window", () => ({
@@ -84,6 +88,8 @@ function renderCapture() {
 describe("CaptureWindow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    llmStatusMock.mockResolvedValue({ enabled: false, ready: false, reason: "还没有填写 API Key" });
     snapshotMock.mockResolvedValue({ accounts: [] } as unknown as SnapshotDto_Serialize);
     commitMock.mockResolvedValue({ file: "2026/2026-10-25.ledger" });
   });
@@ -169,5 +175,98 @@ describe("CaptureWindow", () => {
     await userEvent.keyboard("{Enter}");
 
     await waitFor(() => expect(focusMainMock).toHaveBeenCalledWith("acct:餐饮"));
+  });
+});
+
+describe("CaptureWindow natural-language mode", () => {
+  const draft = (line: string) => ({
+    line,
+    payee: "咖啡",
+    date: "2026-10-25",
+    category: "expenses:food:coffee",
+    funding: "assets:wallet:alipay",
+    confidence: 0.9,
+    notes: "识别为餐饮支出",
+    preview: preview(),
+    elapsed_ms: 320,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    snapshotMock.mockResolvedValue({ accounts: [] } as unknown as SnapshotDto_Serialize);
+    commitMock.mockResolvedValue({ file: "2026/2026-10-25.ledger" });
+    llmStatusMock.mockResolvedValue({
+      enabled: true,
+      ready: true,
+      reason: null,
+      has_key: true,
+      key_required: true,
+      provider: "openai",
+      protocol: "openai",
+      model: "gpt-4o-mini",
+      base_url: "https://api.openai.com/v1",
+    });
+  });
+
+  it("switches with Tab and commits the drafted line, not the prose", async () => {
+    llmDraftMock.mockResolvedValue(
+      draft("咖啡 45 @expenses:food:coffee @assets:wallet:alipay"),
+    );
+    renderCapture();
+
+    const input = screen.getByLabelText("快录输入");
+    await userEvent.type(input, "{Tab}");
+    expect(screen.getByLabelText("输入模式")).toHaveTextContent("自然语言");
+    expect(input).toHaveAttribute("placeholder", "昨天和同事在星巴克花了 45，支付宝付的");
+
+    await userEvent.type(input, "星巴克 45");
+    await waitFor(() => expect(llmDraftMock).toHaveBeenCalledWith("星巴克 45"), {
+      timeout: 4000,
+    });
+    expect(await screen.findByText("将写入", {}, { timeout: 4000 })).toBeInTheDocument();
+    expect(parseMock).not.toHaveBeenCalled();
+
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(commitMock).toHaveBeenCalledWith(
+        "咖啡 45 @expenses:food:coffee @assets:wallet:alipay",
+      ),
+    );
+    expect(hideMock).not.toHaveBeenCalled();
+  });
+
+  it("explains the missing configuration instead of silently doing nothing", async () => {
+    llmStatusMock.mockResolvedValue({
+      enabled: false,
+      ready: false,
+      reason: "还没有填写 API Key",
+      has_key: false,
+      key_required: true,
+      provider: "openai",
+      protocol: "openai",
+      model: "gpt-4o-mini",
+      base_url: "https://api.openai.com/v1",
+    });
+    renderCapture();
+
+    await userEvent.type(screen.getByLabelText("快录输入"), "{Tab}");
+    expect(await screen.findByText("自然语言模式还没启用。", {}, { timeout: 4000 })).toBeInTheDocument();
+    expect(llmDraftMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps account completion on Option+Tab", async () => {
+    snapshotMock.mockResolvedValue({
+      accounts: [{ full: "assets:cash" }, { full: "assets:wallet:alipay" }],
+    } as unknown as SnapshotDto_Serialize);
+    parseMock.mockResolvedValue(preview());
+    renderCapture();
+
+    const input = screen.getByLabelText("快录输入");
+    await userEvent.type(input, "咖啡 4.5 @alipay");
+    await userEvent.keyboard("{Alt>}{Tab}{/Alt}");
+
+    expect(screen.getByLabelText("输入模式")).toHaveTextContent("Hledger");
+    await waitFor(() => expect(input).toHaveValue("咖啡 4.5 @assets:wallet:alipay "));
   });
 });

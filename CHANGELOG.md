@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Optional natural-language capture (`src-tauri/src/llm.rs`): 设置 → AI 记一笔 configures a provider
+  (OpenAI, Anthropic, DeepSeek, Ollama/local, or a custom endpoint), base URL, model, protocol and an
+  API key stored separately in `llm.json` (mode `0600`). Pressing <kbd>Tab</kbd> in the capture
+  palette switches between Hledger syntax and 自然语言; the model only returns a JSON draft (date,
+  payee, amount, category, funding, tags, confidence) which becomes one ordinary capture line, so the
+  parser, rules, balance check, snapshot and audit still apply.
+  Commands: `llm_status`, `llm_set_key`, `llm_test`, `llm_draft`.
+- Regression tests for the LLM plumbing: request/response shaping for both protocols, prompt
+  construction, API-key storage, plus `LlmSettings` and natural-language `Capture` component tests.
+
 - The shortcut recorder records from a window-level listener (WebKit does not focus buttons on
   click), previews the modifiers as they are held, rejects `⇧`-only and macOS menu-owned chords
   inline, and cancels on Esc, a click elsewhere or a window blur.

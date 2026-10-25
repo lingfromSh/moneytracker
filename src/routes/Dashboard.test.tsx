@@ -153,6 +153,11 @@ describe("Dashboard", () => {
       fx_enabled: false,
       max_backups: 200,
       dashboard_layout: null,
+  llm_enabled: false,
+  llm_provider: "openai",
+  llm_protocol: "",
+  llm_base_url: "",
+  llm_model: "",
     } satisfies Settings_Serialize);
   });
 

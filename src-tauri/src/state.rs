@@ -59,6 +59,16 @@ pub struct Settings {
     pub max_backups: usize,
     /// Persisted dashboard grid layout (JSON blob owned by the frontend).
     pub dashboard_layout: Option<String>,
+    /// Optional natural-language capture through a user-supplied LLM.
+    pub llm_enabled: bool,
+    /// `openai` | `anthropic` | `deepseek` | `ollama` | `custom`
+    pub llm_provider: String,
+    /// `openai` | `anthropic`; blank means “whatever the provider preset says”.
+    pub llm_protocol: String,
+    /// Blank means the provider preset's default endpoint.
+    pub llm_base_url: String,
+    /// Blank means the provider preset's default model.
+    pub llm_model: String,
 }
 
 impl Default for Settings {
@@ -75,6 +85,11 @@ impl Default for Settings {
             fx_enabled: false,
             max_backups: 200,
             dashboard_layout: None,
+            llm_enabled: false,
+            llm_provider: "openai".to_string(),
+            llm_protocol: String::new(),
+            llm_base_url: String::new(),
+            llm_model: String::new(),
         }
     }
 }
@@ -177,6 +192,63 @@ impl AppState {
 
     pub fn audit_path(&self) -> PathBuf {
         self.config_dir.join("write-audit.jsonl")
+    }
+
+    /// The API key lives outside `settings.json`, in its own user-only file.
+    fn llm_secret_path(&self) -> PathBuf {
+        self.config_dir.join("llm.json")
+    }
+
+    pub fn llm_key(&self) -> Option<String> {
+        let src = std::fs::read_to_string(self.llm_secret_path()).ok()?;
+        let value: serde_json::Value = serde_json::from_str(&src).ok()?;
+        let key = value.get("api_key")?.as_str()?.trim().to_string();
+        (!key.is_empty()).then_some(key)
+    }
+
+    /// Stores or clears the key. The file is created `0600` so other local
+    /// users cannot read it; it never contains anything but the credential.
+    pub fn set_llm_key(&self, key: &str) -> CmdResult<()> {
+        let path = self.llm_secret_path();
+        let key = key.trim();
+        if key.is_empty() {
+            match std::fs::remove_file(&path) {
+                Ok(()) => return Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                Err(e) => {
+                    return Err(CmdError::new(
+                        "app.io",
+                        format!("无法删除 {}：{e}", path.display()),
+                    ))
+                }
+            }
+        }
+        std::fs::create_dir_all(&self.config_dir).map_err(|e| {
+            CmdError::new(
+                "app.io",
+                format!("无法创建 {}：{e}", self.config_dir.display()),
+            )
+        })?;
+        let body = serde_json::json!({ "api_key": key }).to_string();
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        use std::io::Write;
+        let mut file = options
+            .open(&path)
+            .map_err(|e| CmdError::new("app.io", format!("无法写入 {}：{e}", path.display())))?;
+        file.write_all(body.as_bytes())
+            .map_err(|e| CmdError::new("app.io", format!("无法写入 {}：{e}", path.display())))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+        }
+        Ok(())
     }
 }
 

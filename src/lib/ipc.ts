@@ -97,6 +97,12 @@ export const api = {
   shortcutStatus: () => call(commands.shortcutStatus()),
   shortcutRecording: (active: boolean) => call(commands.shortcutRecording(active)),
 
+  // natural-language capture (optional LLM)
+  llmStatus: () => call(commands.llmStatus()),
+  llmSetKey: (key: string) => call(commands.llmSetKey(key)),
+  llmTest: () => call(commands.llmTest()),
+  llmDraft: (text: string) => call(commands.llmDraft(text)),
+
   // capture window
   showCapture: () => call(commands.captureShow()),
   hideCapture: () => call(commands.captureHide()),
@@ -120,5 +126,6 @@ export const queryKeys = {
   fxMissing: ["fx-missing"] as const,
   audit: ["audit"] as const,
   shortcutStatus: ["shortcut-status"] as const,
+  llmStatus: ["llm-status"] as const,
   ruleTest: (id: string) => ["rule-test", id] as const,
 };

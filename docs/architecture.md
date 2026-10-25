@@ -92,6 +92,49 @@ hides them (`load::txn_dto` filters `tags` and strips the comment through `strip
 has to echo the identity tag back, and an edit cannot silently turn a transaction into a
 pseudo-id one.
 
+## Natural-language capture (optional)
+
+`src-tauri/src/llm.rs` is an *adapter*, not a second writer. The capture palette has two modes and
+<kbd>Tab</kbd> switches between them:
+
+1. **Hledger mode** — `capture_parse(text)` → `capture_commit(text)`.
+2. **自然语言 mode** — `llm_draft(text)` → the draft's `line` is parsed and previewed, and Enter
+   commits *that line*, never the prose.
+
+The split exists so the model can only produce a draft, never ledger text:
+
+```
+sentence ──► llm_draft ──► DraftLine {date, payee, amount, commodity, category, funding, tags}
+                              │
+                              ▼  (deterministic, in Rust)
+                          "火锅 168 @微信 +餐饮" ──► capture_parse ──► capture_commit
+```
+
+`synthesize_line()` composes the capture grammar (date directive only when it is not
+today, `@category`, `@funding`, `+tags`, quoted payee when it contains spaces). Accounts the model
+returns are resolved against the vault exactly like typed ones (`Vault::resolve_account`), so an
+unknown account is still an `:inbox:` fallback rather than a new account invented by a model.
+
+Both request formats are supported by one `Protocol` enum and one `complete()` entry point:
+
+| Protocol | Request | Response field |
+| --- | --- | --- |
+| `openai` | `POST {base}/chat/completions` with `response_format: json_object` | `choices[0].message.content` |
+| `anthropic` | `POST {base}/messages` with `anthropic-version: 2023-06-01`, `system` + one user turn | `content[0].text` |
+
+Everything except the network call is a pure function — `system_prompt`, `user_prompt`,
+`request_body`, `text_of`, `extract_json`, `draft_from_json`, `synthesize_line` — which is what the
+unit tests exercise: no key, no network, no flakiness. Failures map to stable codes:
+`llm.disabled`, `llm.not_configured` (with the reason, e.g. missing key or model),
+`llm.request_failed` (transport or HTTP status, carrying the provider's own message),
+`llm.bad_response` (unparseable JSON or a draft without an amount) and `llm.join`. A failure never
+writes anything; the palette keeps the prose and shows the error.
+
+Creditentials: the key lives in its own file, `<config dir>/llm.json`, created `0600`, and is read
+into an `LlmConfig` only when a request is built (`state.llm_key()`). It is deliberately not part of
+`Settings`, so it never travels through `settings_set`, the settings document, the IPC error paths
+or the write audit.
+
 ## IPC surface
 
 Commands are declared once with `#[tauri::command]` + `#[specta::specta]`, collected by
@@ -102,6 +145,9 @@ build works without launching the GUI.
 Return convention: `Result<T, CmdError>` becomes
 `{status:"ok",data:T} | {status:"error",error:{code,message}}`; `src/lib/ipc.ts` unwraps it into a
 throwing `ApiError`. Events: `ledger:changed`, `capture:saved`, `parse:diagnostics`.
+
+The LLM layer adds `llm_status`, `llm_set_key`, `llm_test` and `llm_draft`; `shortcut_status` and
+`shortcut_recording` cover the global hotkey. None of them can write to the ledger.
 
 `specta-typescript` 0.0.13 cannot export 64-bit integers, so exported numeric fields carry
 `#[specta(type = f64)]` and command parameters use `u32`.

@@ -5,6 +5,7 @@ import type { Settings_Serialize } from "../lib/bindings";
 import { api, queryKeys } from "../lib/ipc";
 import { cn } from "../lib/format";
 import { ShortcutInput } from "../components/shortcut-input";
+import { LlmSettings } from "../components/llm-settings";
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Select, Switch } from "../components/ui";
 
 const THEMES = [
@@ -250,6 +251,14 @@ export function SettingsView() {
             </div>
             <FxSync enabled={draft.fx_enabled} onMessage={setMessage} onError={setError} />
           </div>
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="AI 记一笔"
+            hint="可选：用一句自然语言记账，模型只挑字段，写入仍由本地引擎校验"
+          />
+          <LlmSettings draft={draft} update={update} onMessage={setMessage} onError={setError} />
         </Card>
 
         <Card>

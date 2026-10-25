@@ -51,6 +51,16 @@ export const commands = {
 	 *  opens the capture window and takes focus away mid-recording.
 	 */
 	shortcutRecording: (active: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("shortcut_recording", { active })),
+	llmStatus: () => typedError<LlmStatusDto_Serialize, CmdError>(__TAURI_INVOKE("llm_status")),
+	llmSetKey: (key: string) => typedError<LlmStatusDto_Serialize, CmdError>(__TAURI_INVOKE("llm_set_key", { key })),
+	/**  Round-trips one tiny prompt so 设置 can prove the endpoint and key work. */
+	llmTest: () => typedError<LlmTestDto, CmdError>(__TAURI_INVOKE("llm_test")),
+	/**
+	 *  Drafts one entry from free-form text. The model only picks fields; the line
+	 *  is built here and parsed by the normal capture pipeline, so rules, balance
+	 *  checks and the write path are identical to a typed entry.
+	 */
+	llmDraft: (text: string) => typedError<LlmDraftDto_Serialize, CmdError>(__TAURI_INVOKE("llm_draft", { text })),
 	sampleVaultPath: () => typedError<string, CmdError>(__TAURI_INVOKE("sample_vault_path")),
 	createSampleVault: () => typedError<OpenVaultResultDto_Serialize, CmdError>(__TAURI_INVOKE("create_sample_vault")),
 	appVersion: () => typedError<string, CmdError>(__TAURI_INVOKE("app_version")),
@@ -310,6 +320,78 @@ export type LedgerChanged = {
 	reason: string,
 };
 
+export type LlmDraftDto = LlmDraftDto_Serialize | LlmDraftDto_Deserialize;
+
+export type LlmDraftDto_Deserialize = {
+	/**  The capture line the model's draft was turned into — exactly what Enter commits. */
+	line: string,
+	payee: string,
+	date?: string | null,
+	category?: string | null,
+	funding?: string | null,
+	confidence?: number | null,
+	notes?: string | null,
+	preview: CaptureParseDto_Deserialize,
+	elapsed_ms: number | null,
+};
+
+export type LlmDraftDto_Serialize = {
+	/**  The capture line the model's draft was turned into — exactly what Enter commits. */
+	line: string,
+	payee: string,
+	date: string | null,
+	category: string | null,
+	funding: string | null,
+	confidence: number | null,
+	notes: string | null,
+	preview: CaptureParseDto_Serialize,
+	elapsed_ms: number | null,
+};
+
+/**
+ *  What 设置 needs to know about the natural-language client. The API key
+ *  itself never leaves the backend — only whether one is stored.
+ */
+export type LlmStatusDto = LlmStatusDto_Serialize | LlmStatusDto_Deserialize;
+
+/**
+ *  What 设置 needs to know about the natural-language client. The API key
+ *  itself never leaves the backend — only whether one is stored.
+ */
+export type LlmStatusDto_Deserialize = {
+	enabled: boolean,
+	provider: string,
+	protocol: string,
+	model: string,
+	base_url: string,
+	has_key: boolean,
+	key_required: boolean,
+	ready: boolean,
+	reason?: string | null,
+};
+
+/**
+ *  What 设置 needs to know about the natural-language client. The API key
+ *  itself never leaves the backend — only whether one is stored.
+ */
+export type LlmStatusDto_Serialize = {
+	enabled: boolean,
+	provider: string,
+	protocol: string,
+	model: string,
+	base_url: string,
+	has_key: boolean,
+	key_required: boolean,
+	ready: boolean,
+	reason: string | null,
+};
+
+export type LlmTestDto = {
+	model: string,
+	message: string,
+	elapsed_ms: number | null,
+};
+
 export type MonthPointDto = {
 	month: string,
 	income: number | null,
@@ -547,6 +629,16 @@ export type Settings_Deserialize = {
 	max_backups: number | null,
 	/**  Persisted dashboard grid layout (JSON blob owned by the frontend). */
 	dashboard_layout?: string | null,
+	/**  Optional natural-language capture through a user-supplied LLM. */
+	llm_enabled: boolean,
+	/**  `openai` | `anthropic` | `deepseek` | `ollama` | `custom` */
+	llm_provider: string,
+	/**  `openai` | `anthropic`; blank means “whatever the provider preset says”. */
+	llm_protocol: string,
+	/**  Blank means the provider preset's default endpoint. */
+	llm_base_url: string,
+	/**  Blank means the provider preset's default model. */
+	llm_model: string,
 };
 
 export type Settings_Serialize = {
@@ -564,6 +656,16 @@ export type Settings_Serialize = {
 	max_backups: number | null,
 	/**  Persisted dashboard grid layout (JSON blob owned by the frontend). */
 	dashboard_layout: string | null,
+	/**  Optional natural-language capture through a user-supplied LLM. */
+	llm_enabled: boolean,
+	/**  `openai` | `anthropic` | `deepseek` | `ollama` | `custom` */
+	llm_provider: string,
+	/**  `openai` | `anthropic`; blank means “whatever the provider preset says”. */
+	llm_protocol: string,
+	/**  Blank means the provider preset's default endpoint. */
+	llm_base_url: string,
+	/**  Blank means the provider preset's default model. */
+	llm_model: string,
 };
 
 /**  Whether the configured global capture shortcut is actually live. */

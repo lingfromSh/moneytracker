@@ -27,3 +27,18 @@ vulnerability reporting on this repository instead. Include:
 
 You can expect an acknowledgement within a few days. Fixes ship with a test that reproduces the
 report, and the advisory credits you unless you prefer otherwise.
+
+## Optional LLM assistance
+
+Natural-language capture is off by default and only runs when you switch the palette to 自然语言
+(<kbd>Tab</kbd>) with a provider configured in 设置 → AI 记一笔.
+
+- What is sent: the sentence you typed, your account names, your base commodity and today's date.
+  Nothing else from the ledger, no balances, no file paths.
+- Where the credential lives: `<app config dir>/llm.json`, created with mode `0600`, containing only
+  `{"api_key": "…"}`. It is never written into the ledger, `settings.json`, the write audit or logs.
+- What the model can change: nothing. It returns a JSON draft; the app turns that into one capture
+  line which still goes through the parser, the rule engine, the double-entry check and the same
+  snapshot/audit write path as a hand-typed entry. The draft is shown before anything is written.
+- Failure handling: a rejected request, a timeout or an unusable draft leaves the ledger untouched
+  and surfaces the error in the palette; you can always switch back and type the line yourself.

@@ -841,3 +841,184 @@ pub fn app_version(app: AppHandle) -> CmdResult<String> {
 pub fn broadcast_diagnostics(app: &AppHandle, count: usize) {
     let _ = ParseDiagnostics { count }.emit(app);
 }
+
+// ---------------------------------------------------------------- llm
+
+/// What 设置 needs to know about the natural-language client. The API key
+/// itself never leaves the backend — only whether one is stored.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct LlmStatusDto {
+    pub enabled: bool,
+    pub provider: String,
+    pub protocol: String,
+    pub model: String,
+    pub base_url: String,
+    pub has_key: bool,
+    pub key_required: bool,
+    pub ready: bool,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct LlmTestDto {
+    pub model: String,
+    pub message: String,
+    #[specta(type = f64)]
+    pub elapsed_ms: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct LlmDraftDto {
+    /// The capture line the model's draft was turned into — exactly what Enter commits.
+    pub line: String,
+    pub payee: String,
+    pub date: Option<String>,
+    pub category: Option<String>,
+    pub funding: Option<String>,
+    pub confidence: Option<f64>,
+    pub notes: Option<String>,
+    pub preview: CaptureParseDto,
+    #[specta(type = f64)]
+    pub elapsed_ms: f64,
+}
+
+fn llm_config(state: &AppState) -> crate::llm::LlmConfig {
+    let settings = state.settings();
+    crate::llm::LlmConfig::resolve(
+        &settings.llm_provider,
+        &settings.llm_protocol,
+        &settings.llm_base_url,
+        &settings.llm_model,
+        &state.llm_key().unwrap_or_default(),
+    )
+}
+
+fn llm_status_of(state: &AppState) -> LlmStatusDto {
+    let settings = state.settings();
+    let config = llm_config(state);
+    let reason = config.block_reason();
+    let ready = settings.llm_enabled && config.is_ready();
+    LlmStatusDto {
+        enabled: settings.llm_enabled,
+        provider: config.provider.clone(),
+        protocol: config.protocol.as_str().to_string(),
+        model: config.model.clone(),
+        base_url: config.base_url.clone(),
+        has_key: !config.api_key.is_empty(),
+        key_required: config.needs_key(),
+        ready,
+        reason,
+    }
+}
+
+/// Accounts the model is told about, most used first.
+fn account_context(vault: &Vault) -> Vec<String> {
+    fn walk(nodes: &[AccountNodeDto], out: &mut Vec<(usize, String)>) {
+        for node in nodes {
+            out.push((node.txn_count, node.full.clone()));
+            walk(&node.children, out);
+        }
+    }
+    let mut all = Vec::new();
+    walk(&vault.account_tree(), &mut all);
+    all.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    all.into_iter().map(|(_, name)| name).collect()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn llm_status(state: State<'_, AppState>) -> CmdResult<LlmStatusDto> {
+    Ok(llm_status_of(&state))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn llm_set_key(state: State<'_, AppState>, key: String) -> CmdResult<LlmStatusDto> {
+    state.set_llm_key(&key)?;
+    Ok(llm_status_of(&state))
+}
+
+/// Round-trips one tiny prompt so 设置 can prove the endpoint and key work.
+#[tauri::command]
+#[specta::specta]
+pub async fn llm_test(state: State<'_, AppState>) -> CmdResult<LlmTestDto> {
+    let config = llm_config(&state);
+    if let Some(reason) = config.block_reason() {
+        return Err(CmdError::new("llm.not_configured", reason));
+    }
+    let (system, user) = crate::llm::test_prompt();
+    let model = config.model.clone();
+    let (reply, elapsed) =
+        tauri::async_runtime::spawn_blocking(move || crate::llm::complete(&config, system, user))
+            .await
+            .map_err(|e| CmdError::new("llm.join", e.to_string()))?
+            .map_err(|e| CmdError::new("llm.request_failed", e))?;
+    Ok(LlmTestDto {
+        model,
+        message: first_line(&reply),
+        elapsed_ms: elapsed as f64,
+    })
+}
+
+/// Drafts one entry from free-form text. The model only picks fields; the line
+/// is built here and parsed by the normal capture pipeline, so rules, balance
+/// checks and the write path are identical to a typed entry.
+#[tauri::command]
+#[specta::specta]
+pub async fn llm_draft(state: State<'_, AppState>, text: String) -> CmdResult<LlmDraftDto> {
+    let settings = state.settings();
+    if !settings.llm_enabled {
+        return Err(CmdError::new(
+            "llm.disabled",
+            "自然语言记一笔没有启用，先到设置里打开",
+        ));
+    }
+    if text.trim().is_empty() {
+        return Err(CmdError::refused("没有可解析的内容"));
+    }
+    let config = llm_config(&state);
+    if let Some(reason) = config.block_reason() {
+        return Err(CmdError::new("llm.not_configured", reason));
+    }
+    let today = chrono::Local::now().date_naive();
+    let today = today.to_string();
+    let accounts = match state.vault() {
+        Ok(vault) => account_context(&vault),
+        Err(_) => Vec::new(),
+    };
+    let system = crate::llm::system_prompt(&today, &settings.base_commodity, &accounts);
+    let user = crate::llm::user_prompt(&text);
+    let (reply, elapsed) =
+        tauri::async_runtime::spawn_blocking(move || crate::llm::complete(&config, &system, &user))
+            .await
+            .map_err(|e| CmdError::new("llm.join", e.to_string()))?
+            .map_err(|e| CmdError::new("llm.request_failed", e))?;
+    let value =
+        crate::llm::extract_json(&reply).map_err(|e| CmdError::new("llm.bad_response", e))?;
+    let draft =
+        crate::llm::draft_from_json(&value).map_err(|e| CmdError::new("llm.bad_response", e))?;
+    let line = crate::llm::synthesize_line(&draft, &settings.base_commodity, &today);
+    let vault = state.vault()?;
+    let analysis = capture::analyze(&vault, &line);
+    Ok(LlmDraftDto {
+        line,
+        payee: draft.payee,
+        date: draft.date,
+        category: draft.category,
+        funding: draft.funding,
+        confidence: draft.confidence,
+        notes: draft.notes,
+        preview: analysis.to_dto(),
+        elapsed_ms: elapsed as f64,
+    })
+}
+
+fn first_line(text: &str) -> String {
+    let line = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    let line = line.trim();
+    if line.chars().count() > 80 {
+        format!("{}…", line.chars().take(80).collect::<String>())
+    } else {
+        line.to_string()
+    }
+}

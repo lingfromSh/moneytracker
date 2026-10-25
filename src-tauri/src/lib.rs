@@ -5,6 +5,7 @@
 
 mod commands;
 mod editing;
+mod llm;
 mod shortcut;
 mod state;
 mod watcher;
@@ -56,6 +57,10 @@ pub fn build_specta() -> Builder<tauri::Wry> {
             commands::settings_set,
             commands::shortcut_status,
             commands::shortcut_recording,
+            commands::llm_status,
+            commands::llm_set_key,
+            commands::llm_test,
+            commands::llm_draft,
             commands::sample_vault_path,
             commands::create_sample_vault,
             commands::app_version,

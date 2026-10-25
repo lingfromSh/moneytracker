@@ -28,6 +28,7 @@ blake3.workspace = true
 rust_decimal.workspace = true
 notify = "6"
 dirs = "5"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 ledger-core = { path = "../crates/ledger-core" }
 ledger-query = { path = "../crates/ledger-query" }
 ledger-engine = { path = "../crates/ledger-engine" }
