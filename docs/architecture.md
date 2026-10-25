@@ -125,7 +125,18 @@ sentence ──► llm_draft ──► DraftLine {date, payee, amount, commodity
                           "火锅 168 @微信 +餐饮" ──► capture_parse ──► capture_commit
 ```
 
-`synthesize_line()` composes the capture grammar (date directive only when it is not
+Between the draft and the line sits a grounding pass, because models invent accounts and guess the
+wrong wallet:
+
+| Step | Function | Behaviour |
+| --- | --- | --- |
+| Prompt catalogue | `AccountCatalog::from_names` + `render` | The prompt lists the vault's own accounts grouped by kind. Bare tree roots (`assets`, `expenses`, …) are filtered out because posting to them only loses information. |
+| Worked examples | `system_prompt` | Few-shot JSON examples are built from *this* ledger's spellings (`payment_hint("微信")`, the first income/asset account, a liability only when it looks like a card), so an example can never name an account that does not exist. |
+| Payment method | `payment_hint` | 「用微信付的」 overrides the model's `funding` with the WeChat account, or with the wallet parent when no sub-account exists. |
+| Account repair | `AccountCatalog::resolve` | exact → unique suffix (`bank:cmb` → `assets:bank:cmb`) → closest existing ancestor (`assets:wallet:alipay` → `assets:wallet`) → payment-keyword match. Unresolvable names are left alone so `Vault::resolve_account` can fall back to the rule or `:inbox:` path. |
+| Value cleanup | `clean_commodity`, `tidy_amount` | `"NONE"`/`"null"`/`"无"` are not currencies and become `null`; symbols map to codes (`$` → `USD`, `RMB` → `CNY`); `45.0` becomes `45`. |
+
+`synthesize_line()` then composes the capture grammar (date directive only when it is not
 today, `@category`, `@funding`, `+tags`, quoted payee when it contains spaces). Accounts the model
 returns are resolved against the vault exactly like typed ones (`Vault::resolve_account`), so an
 unknown account is still an `:inbox:` fallback rather than a new account invented by a model.
@@ -138,8 +149,10 @@ Both request formats are supported by one `Protocol` enum and one `complete()` e
 | `anthropic` | `POST {base}/messages` with `anthropic-version: 2023-06-01`, `system` + one user turn | `content[0].text` |
 
 Everything except the network call is a pure function — `system_prompt`, `user_prompt`,
-`request_body`, `text_of`, `extract_json`, `draft_from_json`, `synthesize_line` — which is what the
-unit tests exercise: no key, no network, no flakiness. Failures map to stable codes:
+`request_body`, `text_of`, `extract_json`, `draft_from_json`, `ground_draft`, `payment_hint`,
+`AccountCatalog::resolve`, `synthesize_line` — which is what the unit tests exercise: no key, no
+network, no flakiness. `ground_draft` plus the real-vault account list is the regression test for
+「星巴克 45 用微信付的」 landing in a made-up `assets:wallet:alipay`. Failures map to stable codes:
 `llm.disabled`, `llm.not_configured` (with the reason, e.g. missing key or model),
 `llm.request_failed` (transport or HTTP status, carrying the provider's own message),
 `llm.bad_response` (unparseable JSON or a draft without an amount) and `llm.join`. A failure never

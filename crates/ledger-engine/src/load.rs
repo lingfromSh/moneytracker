@@ -398,6 +398,12 @@ impl Vault {
         &self.files
     }
 
+    /// The rule file is parsed separately from the include graph, so this is the
+    /// only way to see the categories the ledger already intends to use.
+    pub fn rules(&self) -> &RuleSet {
+        &self.rules
+    }
+
     pub fn transactions(&self) -> &[TxnRecord] {
         &self.txns
     }

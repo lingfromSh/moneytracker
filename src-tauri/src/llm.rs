@@ -200,37 +200,436 @@ impl LlmConfig {
     }
 }
 
+/// The accounts the open ledger actually has, grouped so the prompt can describe
+/// them the way a bookkeeper would: assets, liabilities, income, expenses.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AccountCatalog {
+    pub assets: Vec<String>,
+    pub liabilities: Vec<String>,
+    pub income: Vec<String>,
+    pub expenses: Vec<String>,
+    pub equity: Vec<String>,
+    pub other: Vec<String>,
+}
+
+/// Names that appear in notes for payment methods, and the account segments they
+/// stand for (specific first, then a generic fallback such as "wallet").
+const PAYMENT_ALIASES: &[(&str, &[&str], &[&str])] = &[
+    ("微信", &["wechat", "weixin"], &["wallet", "钱包"]),
+    ("支付宝", &["alipay", "zhifubao"], &["wallet", "钱包"]),
+    ("花呗", &["huabei", "花呗"], &["credit", "wallet"]),
+    ("京东", &["jd", "jingdong"], &["wallet"]),
+    ("现金", &["cash"], &[]),
+    ("钱包", &["wallet", "钱包"], &["cash"]),
+    ("信用卡", &["creditcard", "credit"], &[]),
+    ("储蓄卡", &["saving", "debit"], &[]),
+    ("招行", &["cmb", "cmbchina"], &[]),
+    ("工行", &["icbc"], &[]),
+    ("建行", &["ccb"], &[]),
+    ("农行", &["abc"], &[]),
+    ("中行", &["boc"], &[]),
+    ("交行", &["bocom"], &[]),
+];
+
+/// Top-level names that only exist so the tree can nest under them.
+const BARE_ROOTS: [&str; 8] = [
+    "assets",
+    "asset",
+    "liabilities",
+    "liability",
+    "income",
+    "expenses",
+    "expense",
+    "equity",
+];
+
+/// Lowercase, colon-joined, no stray whitespace or leading `@`.
+fn canonical_account(name: &str) -> String {
+    name.trim()
+        .trim_start_matches('@')
+        .split(':')
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join(":")
+        .to_lowercase()
+}
+
+impl AccountCatalog {
+    pub fn from_names<I, S>(names: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut catalog = AccountCatalog::default();
+        for raw in names {
+            let name = canonical_account(raw.as_ref());
+            // `assets`/`expenses` alone are tree scaffolding, not postable accounts:
+            // offering them invites the model to dump everything on the root.
+            if name.is_empty() || BARE_ROOTS.contains(&name.as_str()) {
+                continue;
+            }
+            if catalog.all().any(|existing| existing == &name) {
+                continue;
+            }
+            let group = match name.split(':').next().unwrap_or_default() {
+                "assets" | "asset" => &mut catalog.assets,
+                "liabilities" | "liability" => &mut catalog.liabilities,
+                "income" | "revenues" | "revenue" => &mut catalog.income,
+                "expenses" | "expense" => &mut catalog.expenses,
+                "equity" => &mut catalog.equity,
+                _ => &mut catalog.other,
+            };
+            group.push(name);
+        }
+        catalog
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.all().next().is_none()
+    }
+
+    pub fn all(&self) -> impl Iterator<Item = &String> {
+        self.assets
+            .iter()
+            .chain(self.liabilities.iter())
+            .chain(self.income.iter())
+            .chain(self.expenses.iter())
+            .chain(self.equity.iter())
+            .chain(self.other.iter())
+    }
+
+    fn groups(&self) -> [(&'static str, &Vec<String>); 6] {
+        [
+            ("Assets", &self.assets),
+            ("Liabilities", &self.liabilities),
+            ("Income", &self.income),
+            ("Expenses", &self.expenses),
+            ("Equity", &self.equity),
+            ("Other", &self.other),
+        ]
+    }
+
+    /// The account segment tokens worth matching for `wanted` (its last segment).
+    fn tokens_of(wanted: &str) -> Vec<String> {
+        let last = wanted.rsplit(':').next().unwrap_or(wanted);
+        let mut tokens = vec![last.to_string()];
+        if let Some((_, specific, _)) = PAYMENT_ALIASES.iter().find(|(word, _, _)| *word == last) {
+            tokens.extend(specific.iter().map(|token| token.to_string()));
+        }
+        tokens
+    }
+
+    /// Accounts whose own segment contains one of `tokens` — only when unique.
+    fn find_with_tokens(&self, tokens: &[&str]) -> Option<String> {
+        let hits: Vec<String> = self
+            .all()
+            .filter(|account| {
+                account.split(':').any(|segment| {
+                    tokens
+                        .iter()
+                        .any(|token| !token.is_empty() && segment.contains(&token.to_lowercase()))
+                })
+            })
+            .cloned()
+            .collect();
+        match hits.len() {
+            0 => None,
+            1 => Some(hits[0].clone()),
+            // Prefer the shallowest match so `assets:wallet` wins over
+            // `assets:wallet:alipay` when the note only says "wallet".
+            _ => hits
+                .into_iter()
+                .min_by_key(|account| account.matches(':').count()),
+        }
+    }
+
+    /// Map a name the model made up onto an account that exists here: exact,
+    /// unique suffix, closest existing ancestor, then a keyword match.
+    pub fn resolve(&self, wanted: &str) -> Option<String> {
+        let wanted = canonical_account(wanted);
+        if wanted.is_empty() || self.is_empty() {
+            return None;
+        }
+        if let Some(hit) = self.all().find(|account| **account == wanted) {
+            return Some(hit.clone());
+        }
+        let suffix = format!(":{wanted}");
+        let matches: Vec<&String> = self
+            .all()
+            .filter(|account| account.ends_with(&suffix))
+            .collect();
+        if matches.len() == 1 {
+            return Some(matches[0].clone());
+        }
+        // `assets:wallet:alipay` → `assets:wallet` when the sub-account is not declared.
+        let mut parts: Vec<&str> = wanted.split(':').collect();
+        while parts.len() > 1 {
+            parts.pop();
+            let candidate = parts.join(":");
+            if let Some(hit) = self.all().find(|account| **account == candidate) {
+                return Some(hit.clone());
+            }
+        }
+        let tokens = Self::tokens_of(&wanted);
+        let borrowed: Vec<&str> = tokens.iter().map(String::as_str).collect();
+        self.find_with_tokens(&borrowed)
+    }
+
+    /// The prompt block: grouped, capped, and explicit about the spelling.
+    fn render(&self, per_group: usize) -> String {
+        let mut out = String::new();
+        for (label, group) in self.groups() {
+            if group.is_empty() {
+                continue;
+            }
+            out.push_str(label);
+            out.push_str(":\n");
+            for name in group.iter().take(per_group) {
+                out.push_str("  - ");
+                out.push_str(name);
+                out.push('\n');
+            }
+            if group.len() > per_group {
+                out.push_str(&format!(
+                    "  … and {} more {}\n",
+                    group.len() - per_group,
+                    label.to_lowercase()
+                ));
+            }
+        }
+        if out.is_empty() {
+            out.push_str(
+                "(this ledger declares no accounts yet — use conventional names such as\
+                 assets:cash, assets:bank, expenses:food, income:salary)\n",
+            );
+        }
+        out
+    }
+}
+
+/// The account a payment method named in the note most likely maps to.
+pub fn payment_hint(note: &str, catalog: &AccountCatalog) -> Option<String> {
+    if catalog.is_empty() {
+        return None;
+    }
+    let lowered = note.to_lowercase();
+    for (word, specific, generic) in PAYMENT_ALIASES {
+        if !lowered.contains(&word.to_lowercase()) {
+            continue;
+        }
+        if let Some(account) = catalog.find_with_tokens(specific) {
+            return Some(account);
+        }
+        if let Some(account) = catalog.find_with_tokens(generic) {
+            return Some(account);
+        }
+    }
+    None
+}
+
+/// Nudge the model's draft onto accounts that actually exist, and let the note
+/// override the payment method ("用微信付的" beats whatever the model guessed).
+///
+/// Anything that cannot be grounded is left alone: the engine then falls back to
+/// a rule or to `expenses:unclassified` instead of inventing a silent account.
+pub fn ground_draft(draft: &mut Draft, note: &str, catalog: &AccountCatalog) {
+    if catalog.is_empty() {
+        return;
+    }
+    if draft.direction == "expense" {
+        if let Some(hint) = payment_hint(note, catalog) {
+            draft.funding = Some(hint);
+        }
+    }
+    for field in [
+        &mut draft.category,
+        &mut draft.transfer_to,
+        &mut draft.funding,
+    ] {
+        if let Some(resolved) = field.as_deref().and_then(|name| catalog.resolve(name)) {
+            *field = Some(resolved);
+        }
+    }
+}
+
 /// The system prompt: the model returns one JSON object and nothing else.
-pub fn system_prompt(today: &str, base_commodity: &str, accounts: &[String]) -> String {
-    let mut list = String::new();
-    for account in accounts.iter().take(120) {
-        list.push_str("  - ");
-        list.push_str(account);
-        list.push('\n');
+pub fn system_prompt(today: &str, base_commodity: &str, catalog: &AccountCatalog) -> String {
+    let list = catalog.render(80);
+
+    fn example(
+        today: &str,
+        payee: &str,
+        amount: &str,
+        direction: &str,
+        category: Option<&str>,
+        funding: &str,
+        transfer_to: Option<&str>,
+    ) -> String {
+        // Written by hand so the keys keep the same order as the schema above.
+        let text = |value: &str| format!("\"{value}\"");
+        let maybe = |value: Option<&str>| match value {
+            Some(value) => text(value),
+            None => "null".to_string(),
+        };
+        format!(
+            concat!(
+                "{{\"date\":{},\"payee\":{},\"amount\":{},\"direction\":{},",
+                "\"category\":{},\"funding\":{},\"transfer_to\":{},",
+                "\"commodity\":null,\"tags\":[],\"confidence\":0.9,\"notes\":null}}"
+            ),
+            text(today),
+            text(payee),
+            text(amount),
+            text(direction),
+            maybe(category),
+            text(funding),
+            maybe(transfer_to),
+        )
     }
-    if list.is_empty() {
-        list.push_str("  (the ledger has no accounts yet, invent sensible ones)\n");
+
+    // Few-shot examples use this ledger's own spellings, so the model copies real
+    // accounts instead of inventing plausible ones. An example is only shown when
+    // the ledger has an account that actually fits it.
+    let pick = |options: &[String], fallback: &str| -> String {
+        options
+            .first()
+            .cloned()
+            .unwrap_or_else(|| fallback.to_string())
+    };
+    let ex_expense = pick(&catalog.expenses, "expenses:food");
+    let ex_income = pick(&catalog.income, "income:salary");
+    let ex_wallet =
+        payment_hint("微信", catalog).unwrap_or_else(|| pick(&catalog.assets, "assets:wallet"));
+    let ex_bank = catalog
+        .assets
+        .iter()
+        .find(|account| {
+            ["bank", "招商", "checking", "储蓄"]
+                .iter()
+                .any(|token| account.contains(token))
+        })
+        .cloned()
+        .unwrap_or_else(|| ex_wallet.clone());
+    let ex_cash = catalog
+        .assets
+        .iter()
+        .find(|account| account.contains("cash") || account.contains("现金"))
+        .cloned()
+        .unwrap_or_else(|| ex_wallet.clone());
+
+    let mut examples = vec![
+        (
+            "昨天和同事在星巴克花了45，用微信付的",
+            example(
+                today,
+                "星巴克",
+                "45",
+                "expense",
+                Some(&ex_expense),
+                &ex_wallet,
+                None,
+            ),
+        ),
+        (
+            "工资到账 12000",
+            example(
+                today,
+                "工资",
+                "12000",
+                "income",
+                Some(&ex_income),
+                &ex_bank,
+                None,
+            ),
+        ),
+    ];
+    if ex_bank != ex_cash {
+        examples.push((
+            "从银行卡取现 500",
+            example(
+                today,
+                "取现",
+                "500",
+                "transfer",
+                None,
+                &ex_bank,
+                Some(&ex_cash),
+            ),
+        ));
     }
+    let card = catalog.liabilities.iter().find(|account| {
+        ["credit", "card", "信用卡", "花呗"]
+            .iter()
+            .any(|token| account.contains(token))
+    });
+    if let Some(card) = card {
+        examples.push((
+            "用招行还信用卡 2400",
+            example(
+                today,
+                "还信用卡",
+                "2400",
+                "transfer",
+                None,
+                &ex_bank,
+                Some(card),
+            ),
+        ));
+        examples.push((
+            "便利店买水 12，刷的信用卡",
+            example(
+                today,
+                "便利店",
+                "12",
+                "expense",
+                Some(&ex_expense),
+                card,
+                None,
+            ),
+        ));
+    }
+    let examples = examples
+        .into_iter()
+        .map(|(note, draft)| format!("note: {note}\n{draft}"))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
     format!(
-        r##"You turn one short bookkeeping note (usually Chinese) into a single double-entry journal entry.
+        r##"You turn one short bookkeeping note (usually Chinese) into a single double-entry journal entry
+for a plain-text ledger.
 
 Today is {today}. The base currency is {base_commodity}.
 
+Accounts that already exist in this ledger — use these spellings exactly:
+{list}
 Reply with ONLY a JSON object, no prose, no code fence:
-{{"date":"YYYY-MM-DD","payee":"...","amount":"123.45","direction":"expense|income|transfer","category":"expenses:food:coffee","funding":"assets:wallet:alipay","transfer_to":null,"commodity":null,"tags":["..."],"confidence":0.0,"notes":"..."}}
+{{"date":"YYYY-MM-DD","payee":"...","amount":"123.45","direction":"expense|income|transfer","category":"expenses:food","funding":"assets:wallet","transfer_to":null,"commodity":null,"tags":["..."],"confidence":0.0,"notes":"..."}}
 
-Rules:
-- "expense": money leaves an asset to buy something; category MUST start with "expenses:".
+Field rules:
+- "expense": money leaves an account to buy something; category MUST start with "expenses:".
 - "income": money arrives; category MUST start with "income:".
-- "transfer": money moves between two assets; leave category null and put the destination asset in transfer_to.
-- "funding" is the account the money comes from (expense) or goes to (income), usually an "assets:" account.
-- Reuse the accounts below verbatim whenever one fits; only invent an account when nothing does:
-{list}- "amount" is a positive decimal string without currency symbols or thousands separators.
-- "commodity" is a 3-letter code only when the note names a foreign currency, otherwise null.
+- "transfer": money moves between two of the user's own accounts; leave category null and put the destination in transfer_to.
+- "funding" is where the money comes from (expense) or goes to (income).
+- "amount" is a positive decimal string, no currency symbol, no thousands separator.
+- "commodity" is a 3-letter code only when the note names a foreign currency, otherwise null — never "NONE".
 - "date" is the date the note mentions (relative words are relative to today), otherwise {today}.
 - "tags" are short labels without "#" or ":".
 - "confidence" is 0..1: how sure you are that the category is right.
-- Keep "notes" to one short sentence explaining an unusual choice, or null."##
+- "notes" is one short sentence explaining an unusual choice, or null.
+
+Account rules (the most common mistake is inventing accounts):
+1. Pick names from the list above. Do NOT add extra segments: if "assets:wallet" is listed and
+   "assets:wallet:wechat" is not, answer "assets:wallet" instead of inventing the sub-account.
+2. If the note names a payment method, the funding account must be the listed account for that
+   method (微信/wechat, 支付宝/alipay, 现金/cash, 信用卡/credit, 储蓄卡/debit). If only a parent
+   such as "assets:wallet" exists, that parent is the correct answer.
+3. If nothing in the list fits, use a conventional name (assets:cash, expenses:unclassified)
+   rather than a deep invented path.
+4. Category granularity follows the list: prefer the shorter listed account when both exist.
+
+Examples from this ledger:
+{examples}"##
     )
 }
 
@@ -378,6 +777,50 @@ fn string_field(value: &Value, key: &str) -> Option<String> {
     }
 }
 
+/// `"NONE"`, `"null"` or `"¥"` are not currencies — the model likes to fill
+/// this field with placeholders even when told to use null.
+fn clean_commodity(raw: &str) -> Option<String> {
+    let token = raw.trim().trim_matches(['"', '\'']).to_ascii_uppercase();
+    if token.is_empty() {
+        return None;
+    }
+    let code = match token.as_str() {
+        "NONE" | "NULL" | "NIL" | "NA" | "N/A" | "-" | "—" | "无" | "空" | "UNKNOWN" => {
+            return None
+        }
+        "RMB" | "CNY" | "¥" | "￥" | "元" => "CNY",
+        "$" | "US$" | "USD" => "USD",
+        "€" | "EUR" => "EUR",
+        "円" | "JPY" => "JPY",
+        "HK$" | "HKD" => "HKD",
+        "GBP£" | "GBP" => "GBP",
+        other => other,
+    };
+    if code.len() < 3 || code.len() > 5 || !code.chars().all(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    Some(code.to_string())
+}
+
+/// `"45.0"` → `"45"`; a meaningful fraction such as `"45.00"` is left alone
+/// (the ledger printer decides the final precision anyway).
+fn tidy_amount(raw: &str) -> String {
+    let trimmed = raw.trim_end_matches('0').trim_end_matches('.');
+    if raw.contains('.') && trimmed.parse::<u128>().is_err() {
+        return raw.to_string();
+    }
+    if trimmed.is_empty() {
+        return raw.to_string();
+    }
+    // Only drop the tail when the fraction is all zeros.
+    match raw.split_once('.') {
+        Some((_, fraction)) if !fraction.is_empty() && fraction.chars().all(|c| c == '0') => {
+            trimmed.to_string()
+        }
+        _ => raw.to_string(),
+    }
+}
+
 pub fn draft_from_json(value: &Value) -> Result<Draft, String> {
     let payee = string_field(value, "payee").ok_or("模型没有给出描述（payee）")?;
     let amount = string_field(value, "amount").ok_or("模型没有给出金额（amount）")?;
@@ -401,12 +844,12 @@ pub fn draft_from_json(value: &Value) -> Result<Draft, String> {
     Ok(Draft {
         date: string_field(value, "date"),
         payee,
-        amount: clean.trim_start_matches('+').to_string(),
+        amount: tidy_amount(clean.trim_start_matches('+')),
         direction,
         category: string_field(value, "category"),
         funding: string_field(value, "funding"),
         transfer_to: string_field(value, "transfer_to"),
-        commodity: string_field(value, "commodity").map(|c| c.to_ascii_uppercase()),
+        commodity: string_field(value, "commodity").and_then(|c| clean_commodity(&c)),
         tags,
         confidence: value.get("confidence").and_then(Value::as_f64),
         notes: string_field(value, "notes"),
@@ -649,7 +1092,7 @@ mod tests {
             "confidence": 0.9,
         }));
         assert_eq!(d.payee, "星巴克");
-        assert_eq!(d.amount, "45.00");
+        assert_eq!(d.amount, "45"); // pointless trailing zeros are dropped
         assert_eq!(d.commodity.as_deref(), Some("CNY"));
         assert_eq!(d.tags, vec!["coffee".to_string(), "morning".to_string()]);
         // A lone comma with two trailing digits is a decimal comma, not a group mark.
@@ -715,17 +1158,175 @@ mod tests {
     }
 
     #[test]
-    fn prompt_lists_accounts_and_today() {
-        let prompt = system_prompt(
-            "2026-10-25",
-            "CNY",
-            &["assets:cash".into(), "expenses:food".into()],
-        );
+    fn prompt_lists_accounts_by_kind_and_today() {
+        let catalog = AccountCatalog::from_names([
+            "assets:cash",
+            "assets:wallet",
+            "liabilities:creditcard",
+            "expenses:food",
+            "income:salary",
+        ]);
+        let prompt = system_prompt("2026-10-25", "CNY", &catalog);
         assert!(prompt.contains("Today is 2026-10-25"));
-        assert!(prompt.contains("assets:cash"));
-        assert!(prompt.contains("expenses:food"));
+        assert!(prompt.contains("Assets:\n  - assets:cash\n  - assets:wallet"));
+        assert!(prompt.contains("Liabilities:\n  - liabilities:creditcard"));
+        assert!(prompt.contains("Income:\n  - income:salary"));
+        assert!(prompt.contains("Expenses:\n  - expenses:food"));
         assert!(prompt.contains("\"direction\""));
-        let empty = system_prompt("2026-10-25", "CNY", &[]);
-        assert!(empty.contains("invent sensible ones"));
+        assert!(prompt.contains("Examples"));
+        assert!(prompt.contains("Do NOT add extra segments"));
+        let empty = system_prompt("2026-10-25", "CNY", &AccountCatalog::default());
+        assert!(empty.contains("conventional names"));
+    }
+
+    #[test]
+    fn prompt_uses_real_accounts_and_skips_examples_that_do_not_fit() {
+        let catalog = AccountCatalog::from_names([
+            "assets:现金",
+            "assets:现金:微信钱包",
+            "assets:现金:招商银行",
+            "liabilities:商业房贷",
+            "income:工资收入",
+            "expenses:日常",
+        ]);
+        let prompt = system_prompt("2026-10-25", "CNY", &catalog);
+        // Bare tree roots are never offered as postable accounts.
+        assert!(!prompt.contains("  - assets\n"));
+        assert!(prompt.contains("assets:现金:微信钱包"));
+        // The wallet example uses the account the note's payment method maps to.
+        assert!(prompt.contains("\"funding\":\"assets:现金:微信钱包\""));
+        assert!(prompt.contains("\"category\":\"expenses:日常\""));
+        // No credit card in this ledger, so no credit-card example either — the
+        // mortgage still shows up in the account list, just not as a card.
+        let examples = prompt.split("Examples from this ledger:").nth(1).unwrap();
+        assert!(!examples.contains("还信用卡"));
+        assert!(!examples.contains("商业房贷"));
+        assert!(!examples.contains("liabilities"));
+    }
+
+    #[test]
+    fn catalog_resolves_exact_suffix_and_ancestors() {
+        let catalog = AccountCatalog::from_names([
+            "assets:bank:cmb",
+            "assets:wallet:wechat",
+            "assets:wallet",
+            "expenses:food:coffee",
+            "expenses:food",
+        ]);
+        // exact
+        assert_eq!(
+            catalog.resolve("assets:bank:cmb").as_deref(),
+            Some("assets:bank:cmb")
+        );
+        // unique suffix
+        assert_eq!(
+            catalog.resolve("bank:cmb").as_deref(),
+            Some("assets:bank:cmb")
+        );
+        // invented sub-account collapses onto its existing parent
+        assert_eq!(
+            catalog.resolve("assets:wallet:alipay").as_deref(),
+            Some("assets:wallet")
+        );
+        assert_eq!(
+            catalog.resolve("Expenses:Food:Treats").as_deref(),
+            Some("expenses:food")
+        );
+        // keyword match through the payment table
+        assert_eq!(catalog.resolve("招行").as_deref(), Some("assets:bank:cmb"));
+        assert_eq!(catalog.resolve("expenses:travel").as_deref(), None);
+    }
+
+    #[test]
+    fn payment_hint_prefers_the_method_named_in_the_note() {
+        let both = AccountCatalog::from_names([
+            "assets:wallet:wechat",
+            "assets:wallet:alipay",
+            "assets:cash",
+        ]);
+        assert_eq!(
+            payment_hint("昨天在星巴克花了45，用微信付的", &both).as_deref(),
+            Some("assets:wallet:wechat")
+        );
+        assert_eq!(
+            payment_hint("打车 30 支付宝", &both).as_deref(),
+            Some("assets:wallet:alipay")
+        );
+        // Only a generic wallet exists: the parent is the right answer.
+        let generic = AccountCatalog::from_names(["assets:wallet", "assets:cash"]);
+        assert_eq!(
+            payment_hint("昨天星巴克 45 微信", &generic).as_deref(),
+            Some("assets:wallet")
+        );
+        assert_eq!(payment_hint("午饭 12", &generic), None);
+    }
+
+    #[test]
+    fn grounds_the_draft_that_caused_the_wrong_wallet_bug() {
+        let catalog = AccountCatalog::from_names([
+            "assets:cash",
+            "assets:wallet",
+            "expenses:food",
+            "expenses:food:coffee",
+        ]);
+        let mut grounded = draft(json!({
+            "payee": "微信付款", "amount": "45", "direction": "expense",
+            "category": "expenses:food:coffee", "funding": "assets:wallet:alipay",
+            "commodity": "NONE",
+        }));
+        ground_draft(
+            &mut grounded,
+            "昨天和同事在星巴克花了45，用微信付的",
+            &catalog,
+        );
+        assert_eq!(grounded.funding.as_deref(), Some("assets:wallet"));
+        assert_eq!(grounded.category.as_deref(), Some("expenses:food:coffee"));
+        assert_eq!(grounded.commodity, None);
+        assert_eq!(
+            synthesize_line(&grounded, "CNY", "2026-10-25"),
+            "微信付款 45 @expenses:food:coffee @assets:wallet"
+        );
+
+        // The shape of the vault from the bug report: no wallet sub-accounts and
+        // no coffee leaf, so everything collapses onto what is declared.
+        let real = AccountCatalog::from_names([
+            "assets:cash",
+            "assets:bank",
+            "assets:wallet",
+            "liabilities:creditcard",
+            "income:salary",
+            "expenses:food",
+            "expenses:unclassified",
+            "equity:opening",
+        ]);
+        let mut mirrored = draft(json!({
+            "payee": "微信付款", "amount": "45.0", "direction": "expense",
+            "category": "expenses:food:coffee", "funding": "assets:wallet:alipay",
+            "commodity": "NONE",
+        }));
+        ground_draft(&mut mirrored, "昨天和同事在星巴克花了45，用微信付的", &real);
+        assert_eq!(
+            synthesize_line(&mirrored, "CNY", "2026-10-25"),
+            "微信付款 45 @expenses:food @assets:wallet"
+        );
+    }
+
+    #[test]
+    fn placeholders_are_not_commodities() {
+        for junk in ["NONE", "null", "n/a", "无", "—", "", "元?"] {
+            assert_eq!(clean_commodity(junk), None, "{junk}");
+        }
+        assert_eq!(clean_commodity("usd").as_deref(), Some("USD"));
+        assert_eq!(clean_commodity("$").as_deref(), Some("USD"));
+        assert_eq!(clean_commodity("RMB").as_deref(), Some("CNY"));
+    }
+
+    #[test]
+    fn sloppy_amounts_are_tidied() {
+        assert_eq!(tidy_amount("45.0"), "45");
+        assert_eq!(tidy_amount("45.00"), "45");
+        assert_eq!(tidy_amount("45.50"), "45.50");
+        assert_eq!(tidy_amount("3200"), "3200");
+        assert_eq!(tidy_amount("nope"), "nope");
     }
 }

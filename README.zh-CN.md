@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-142_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-148_passing-brightgreen.svg)](#测试)
 [![Front-end tests](https://img.shields.io/badge/vitest-38_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
@@ -150,10 +150,18 @@ pnpm tauri dev                   # Vite :1420 + 带热更新的 Tauri 外壳
 将写入   火锅 168 @微信 +餐饮
 ```
 
-**模型永远不会直接写账本文本。** 它拿到你的句子和一份账户清单，只返回一小段 JSON（日期、
-摘要、金额、币种、分类、资金来源、标签、置信度）；MoneyTracker 再把这段 JSON 变成一行普通的
-快录语句，后面照旧走解析器、规则展开、复式校验、快照和审计——所以 LLM 记的账和手打的账一样安全，
-而且写入前你总能看到那一行。
+**模型永远不会直接写账本文本。** 它拿到你的句子、**当前账本自己的账户目录**（资产、负债、收入、
+支出、权益，包括 `rules.ledger` 里已经打算使用的账户），以及用这些真实账户写成的示例，只返回一小段
+JSON（日期、摘要、金额、币种、分类、资金来源、标签、置信度）；MoneyTracker 再把这段 JSON 变成一行
+普通的快录语句，后面照旧走解析器、规则展开、复式校验、快照和审计——所以 LLM 记的账和手打的账一样
+安全，而且写入前你总能看到那一行。
+
+草稿在变成快录行之前还会被「落地」，因为模型很爱编账户：
+
+- 不存在的账户会收敛到你真正拥有的账户——账本只有 `assets:wallet` 时，`assets:wallet:alipay`
+  会变成 `assets:wallet`；
+- **你句子里说的支付方式优先于模型的猜测**——「用微信付的」会选中微信钱包账户，没有子账户时用钱包父账户；
+- `NONE` 这类占位币种会被丢弃，`45.0` 会写成 `45`。
 
 在**设置 → AI 记一笔**里配置：
 
@@ -246,7 +254,7 @@ pnpm bindings                    # 由 Rust 命令重新生成 src/lib/bindings.
 ## 测试
 
 ```bash
-cargo test --workspace                        # 142 个 Rust 测试，13 个 suite
+cargo test --workspace                        # 148 个 Rust 测试，13 个 suite
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
 pnpm test                                     # 38 个 Vitest 测试

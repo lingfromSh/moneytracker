@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-142_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-148_passing-brightgreen.svg)](#testing)
 [![Front-end tests](https://img.shields.io/badge/vitest-38_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
@@ -156,11 +156,21 @@ switch; the mode is remembered between sessions.
 将写入   火锅 168 @微信 +餐饮
 ```
 
-**The model never writes ledger text.** It receives the sentence plus a compact account list and
-returns a small JSON draft (date, payee, amount, commodity, category, funding, tags, confidence).
-MoneyTracker turns that draft into one ordinary capture line, so the parser, rule expansion,
-double-entry check, snapshot and audit all still apply — an LLM entry is exactly as safe as a typed
-one, and you always see the line before it is written.
+**The model never writes ledger text.** It receives the sentence plus your ledger's own account
+catalogue — assets, liabilities, income, expenses and equity, including the accounts your
+`rules.ledger` intends to use — with worked examples built from those very names, and returns a small
+JSON draft (date, payee, amount, commodity, category, funding, tags, confidence). MoneyTracker then
+turns that draft into one ordinary capture line, so the parser, rule expansion, double-entry check,
+snapshot and audit all still apply — an LLM entry is exactly as safe as a typed one, and you always
+see the line before it is written.
+
+The draft is grounded before it becomes a line, because models like to invent accounts:
+
+- a name that does not exist collapses onto the closest account you do have — `assets:wallet:alipay`
+  becomes `assets:wallet` when that is all the ledger knows;
+- the payment method in your sentence wins over the model's guess — 「用微信付的」 picks your WeChat
+  wallet account (or the wallet parent when you keep no sub-accounts);
+- placeholder commodities such as `NONE` are dropped, and `45.0` is written as `45`.
 
 Configure it in **设置 → AI 记一笔**:
 
@@ -258,7 +268,7 @@ check (`brew install hledger`).
 ## Testing
 
 ```bash
-cargo test --workspace                        # 142 Rust tests, 13 suites
+cargo test --workspace                        # 148 Rust tests, 13 suites
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
 pnpm test                                     # 38 Vitest tests

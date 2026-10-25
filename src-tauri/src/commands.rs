@@ -922,7 +922,18 @@ fn account_context(vault: &Vault) -> Vec<String> {
     let mut all = Vec::new();
     walk(&vault.account_tree(), &mut all);
     all.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
-    all.into_iter().map(|(_, name)| name).collect()
+    let mut names: Vec<String> = all.into_iter().map(|(_, name)| name).collect();
+    // Rules name the categories this ledger intends to use, even before the
+    // first transaction touches them — the model should see them too.
+    for rule in &vault.rules().rules {
+        for posting in &rule.template {
+            names.push(posting.account.clone());
+        }
+        if let Some(from) = &rule.from_account {
+            names.push(from.clone());
+        }
+    }
+    names
 }
 
 #[tauri::command]
@@ -982,11 +993,11 @@ pub async fn llm_draft(state: State<'_, AppState>, text: String) -> CmdResult<Ll
     }
     let today = chrono::Local::now().date_naive();
     let today = today.to_string();
-    let accounts = match state.vault() {
-        Ok(vault) => account_context(&vault),
-        Err(_) => Vec::new(),
+    let catalog = match state.vault() {
+        Ok(vault) => crate::llm::AccountCatalog::from_names(account_context(&vault)),
+        Err(_) => crate::llm::AccountCatalog::default(),
     };
-    let system = crate::llm::system_prompt(&today, &settings.base_commodity, &accounts);
+    let system = crate::llm::system_prompt(&today, &settings.base_commodity, &catalog);
     let user = crate::llm::user_prompt(&text);
     let (reply, elapsed) =
         tauri::async_runtime::spawn_blocking(move || crate::llm::complete(&config, &system, &user))
@@ -995,8 +1006,11 @@ pub async fn llm_draft(state: State<'_, AppState>, text: String) -> CmdResult<Ll
             .map_err(|e| CmdError::new("llm.request_failed", e))?;
     let value =
         crate::llm::extract_json(&reply).map_err(|e| CmdError::new("llm.bad_response", e))?;
-    let draft =
+    let mut draft =
         crate::llm::draft_from_json(&value).map_err(|e| CmdError::new("llm.bad_response", e))?;
+    // The model may invent accounts or pick the wrong payment method: pin the
+    // draft to accounts that exist, and let the note decide the wallet.
+    crate::llm::ground_draft(&mut draft, &text, &catalog);
     let line = crate::llm::synthesize_line(&draft, &settings.base_commodity, &today);
     let vault = state.vault()?;
     let analysis = capture::analyze(&vault, &line);

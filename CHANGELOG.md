@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Natural-language capture no longer invents accounts or the wrong wallet: the prompt now lists every
+  account in the open ledger (grouped by kind, including accounts only named by `rules.ledger`) with
+  worked examples written in those exact names, the payment method in the note overrides the model's
+  guess (`用微信付的` → your WeChat account, or the wallet parent), unknown paths collapse onto the
+  closest account that exists, and placeholder commodities such as `NONE` are dropped.
+
 ### Added
 
 - `fixtures/vault/full` — a 16-month, 336-entry showcase household ledger (cash, two bank accounts,
