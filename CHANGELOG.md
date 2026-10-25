@@ -128,6 +128,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The 快速记账 palette is actually frameless again: its window is transparent, but nothing told the page behind the card
+  to stop painting, so the rounded card sat on a square white rectangle. The window label (not the URL hash) now decides
+  that the page is transparent, `backdrop-blur` was dropped (in a transparent window it samples an undefined backdrop and
+  paints an opaque square), and the palette no longer grows page-level scrollbars.
 - The 快速记账 palette no longer turns into a miniature dashboard. Committing an entry navigated the
   capture window to `#/dashboard`, which left a 640×208 copy of the app floating above the main
   window; the palette now hides itself on the desktop (only the mobile shell, where capture is a page,

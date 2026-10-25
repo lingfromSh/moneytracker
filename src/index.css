@@ -44,14 +44,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* The capture palette is a frameless, transparent window. */
-.capture-window {
-  background: transparent;
-}
-
+/*
+ * The capture palette is a frameless, transparent window. Every layer behind the
+ * card has to be transparent, or the rounded card ends up sitting on an opaque
+ * white rectangle — which is exactly what it looked like.
+ */
+.capture-window,
 .capture-window body,
 .capture-window #root {
-  background: transparent;
+  background: transparent !important;
+  /* No page scrollbars: the card owns its own scrolling, and a page-level bar
+   * would be drawn on top of the transparent margin. */
+  overflow: hidden !important;
 }
 
 ::selection {

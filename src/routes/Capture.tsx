@@ -296,7 +296,7 @@ export function CaptureWindow({ onDone }: { onDone?: () => void } = {}) {
     <div className="flex h-full flex-col p-3">
       <div
         className={cn(
-          "flex h-full min-h-0 flex-col rounded-[var(--radius-card)] border bg-[var(--color-surface)]/95 p-3 shadow-xl backdrop-blur",
+          "flex h-full min-h-0 flex-col rounded-2xl border bg-[var(--color-surface)] p-3 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.45)]",
           error ? "border-[var(--color-danger)]" : "border-[var(--color-line)]",
         )}
       >
