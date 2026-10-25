@@ -138,6 +138,25 @@ debt 房贷 ; account:liabilities:mortgage rate:3.15% payment:8200.00 CNY
 Unknown directives produce `plan.unknown_directive` diagnostics with line numbers and are shown in
 the 规划 view instead of failing the load.
 
+## Imported transactions
+
+A row written by the statement importer is an ordinary transaction block with two extra tags:
+
+```
+2026-10-03 * 星巴克  ; txn:01a1… import:2026-10-05T09-12-00 ref:4200001234567890 :coffee:
+    expenses:food:coffee                32.00 CNY
+    assets:bank:cmb                    -32.00 CNY
+```
+
+- `import:<batch>` is the batch id (a timestamp), so one import can be reviewed or reverted as a unit.
+- `ref:<id>` is the bank's own reference when the export carries one; it is what makes dedupe robust
+  when a statement is re-exported with different column order.
+- Dedupe itself uses the fingerprint `blake3(account|date|amount|commodity|payee)` over the parsed
+  transaction, not the tags, so hand-typed entries are protected too.
+
+Both tags are engine-owned metadata: they are hidden from the editor and preserved by every rewrite
+(see `docs/architecture.md`).
+
 ## Editing rules
 
 - A rewrite touches one byte span (the transaction block plus one blank line) and is preceded by a

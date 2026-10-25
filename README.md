@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-165_passing-brightgreen.svg)](#testing)
-[![Front-end tests](https://img.shields.io/badge/vitest-47_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-164_passing-brightgreen.svg)](#testing)
+[![Front-end tests](https://img.shields.io/badge/vitest-50_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
@@ -35,6 +35,7 @@ rich dashboard — with **zero proprietary storage**. Delete the app and you sti
 - [Usage](#usage)
 - [Capture syntax](#capture-syntax)
 - [Natural language (optional)](#natural-language-optional)
+- [Importing statements](#importing-statements)
 - [Planning & reports](#planning--reports)
 - [Where your data lives](#where-your-data-lives)
 - [Safety guarantees](#safety-guarantees)
@@ -67,6 +68,7 @@ the source of truth and treats the UI as a fast editor for it:
 | **Multi-currency** | rates come only from `P` directives; missing rates are flagged, greyed out and excluded from totals — never assumed 1:1 |
 | **Dashboard** | KPI + month-over-month, income/expense bars, net-worth curve, category donut, stacked area, calendar heatmap, budget vs actual, forecast, Sankey — draggable/resizable layout persisted per user |
 | **Transactions** | windowed list, inline editor, bulk tag/account rename, saved queries (`acct:`, `desc:`, `date:`, `tag:`, `amt:` with `and`/`or`/`not`) |
+| **Import** | Alipay / WeChat Pay / bank CSV statements: auto-detected columns, dedupe by fingerprint, preview before writing, keyword→category rules, then reconcile the account against what the bank says |
 | **Planning** | `goals.ledger` drives a FIRE projection (SWR 3.0/3.5/4.0 %), a reserve-months gauge, per-account goals with target dates, debt payoff dates (plus what an extra payment saves) and allocation drift against `class:` tags |
 | **Reports** | balance sheet, income statement for any month/quarter/year, and a net-worth bridge that reconciles closing net worth to opening plus income minus expense |
 | **Accounts & categories** | account tree with own/total balances and type inference; category view by account or by tag |
@@ -107,7 +109,7 @@ First launch shows **Welcome**: create a vault, open an existing folder, or crea
 | `⌘K` | command palette |
 | `⌘N` | capture window |
 | `⌘F` | transactions / search |
-| `⌘1` … `⌘8` | dashboard, transactions, accounts, categories, rules, plan, reports, settings |
+| `⌘1` … `⌘9` | dashboard, transactions, import, accounts, categories, rules, plan, reports, settings |
 | `Enter` / `⌘Enter` / `Esc` | capture: save and stay / save and hide / hide |
 
 The tray icon opens the capture panel next to the menu bar; `⌘,`-style settings cover theme,
@@ -189,6 +191,28 @@ Off by default. With no key and no model configured the mode stays disabled and 
 what is missing. "测试连接" performs one tiny request so you can verify credentials before relying
 on it. What leaves your machine is the sentence you typed plus your account names — nothing else,
 and only when you press <kbd>Tab</kbd> into natural-language mode.
+
+## Importing statements
+
+支付宝 / 微信支付 / bank exports are messy by design; **Import** (`⌘3`) turns them into ledger
+entries without you hand-typing anything, and never writes the same row twice.
+
+1. Pick a CSV. MoneyTracker sniffs the encoding (UTF-8/GBK), the delimiter, the header row and the
+   date/payee/amount columns, and recognises the common Alipay, WeChat Pay, CMB and ICBC layouts.
+2. Check the guess — the account (`assets:bank:cmb` …), the columns, and an optional date format
+   such as `%Y/%m/%d` when the file uses something unusual.
+3. Add category rules, one per line: `星巴克 => expenses:food:coffee :coffee`. The first matching
+   keyword (or `re:正则`) wins; unmatched rows land in `expenses:unclassified` with `:inbox:`.
+4. Preview: duplicates are detected by `blake3(account|date|amount|commodity|payee)` against every
+   existing transaction, so re-importing an overlapping statement is safe. Untick anything you do
+   not want.
+5. Import. Written rows carry `import:<batch>` plus `ref:<bank-id>`, so the batch stays auditable
+   and a later re-import of the same file finds nothing new.
+
+Reconciliation (`账户` → **对账**) is the other half: pick an account and a cut-off date, and the
+ledger shows what is cleared (`status *`) versus uncleared. Clear the transactions that appear on
+the statement; when the account carries a `= balance` assertion, the same panel tells you whether
+the ledger balance matches the bank.
 
 ## Planning & reports
 

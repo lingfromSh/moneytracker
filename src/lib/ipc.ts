@@ -8,6 +8,7 @@ import { commands, events } from "./bindings";
 import type {
   BulkPatch_Deserialize,
   CaptureParseDto_Serialize,
+  ImportProfileDto_Deserialize,
   PostingPatch_Deserialize,
   QueryRequest_Deserialize,
   SaveTxnPatch_Deserialize,
@@ -113,6 +114,13 @@ export const api = {
   statementBridge: (from: string, to: string) => call(commands.statementBridge(from, to)),
   debtProgress: () => call(commands.debtProgress()),
   allocation: () => call(commands.allocation()),
+  importProbe: (path: string) => call(commands.importProbe(path)),
+  importPreview: (profile: ImportProfileDto_Deserialize) =>
+    call(commands.importPreview(profile)),
+  importCommit: (profile: ImportProfileDto_Deserialize) => call(commands.importCommit(profile)),
+  reconcilePreview: (account: string, asOf: string | null = null) =>
+    call(commands.reconcilePreview(account, asOf)),
+  reconcileClear: (ids: string[]) => call(commands.reconcileClear(ids)),
   reportMarkdown: (month: string) => call(commands.reportMarkdown(month)),
 
   // capture window
@@ -136,6 +144,8 @@ export const queryKeys = {
   rules: ["rules"] as const,
   settings: ["settings"] as const,
   fxMissing: ["fx-missing"] as const,
+  importPreview: (path: string) => ["import-preview", path],
+  reconcile: (account: string, asOf: string | null) => ["reconcile", account, asOf],
   audit: ["audit"] as const,
   shortcutStatus: ["shortcut-status"] as const,
   llmStatus: ["llm-status"] as const,

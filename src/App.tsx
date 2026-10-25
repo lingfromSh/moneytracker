@@ -9,6 +9,7 @@ import { Transactions } from "./routes/Transactions";
 import { Accounts } from "./routes/Accounts";
 import { Categories } from "./routes/Categories";
 import { Rules } from "./routes/Rules";
+import { Import } from "./routes/Import";
 import { Plan } from "./routes/Plan";
 import { Reports } from "./routes/Reports";
 import { SettingsView } from "./routes/Settings";
@@ -19,6 +20,7 @@ type Route =
   | "capture"
   | "dashboard"
   | "transactions"
+  | "import"
   | "accounts"
   | "categories"
   | "rules"
@@ -29,12 +31,13 @@ type Route =
 const NAV: { route: Route; label: string; hint: string }[] = [
   { route: "dashboard", label: "看板", hint: "⌘1" },
   { route: "transactions", label: "流水", hint: "⌘2" },
-  { route: "accounts", label: "账户", hint: "⌘3" },
-  { route: "categories", label: "分类", hint: "⌘4" },
-  { route: "rules", label: "规则", hint: "⌘5" },
-  { route: "plan", label: "规划", hint: "⌘6" },
-  { route: "reports", label: "报表", hint: "⌘7" },
-  { route: "settings", label: "设置", hint: "⌘8" },
+  { route: "import", label: "导入", hint: "⌘3" },
+  { route: "accounts", label: "账户", hint: "⌘4" },
+  { route: "categories", label: "分类", hint: "⌘5" },
+  { route: "rules", label: "规则", hint: "⌘6" },
+  { route: "plan", label: "规划", hint: "⌘7" },
+  { route: "reports", label: "报表", hint: "⌘8" },
+  { route: "settings", label: "设置", hint: "⌘9" },
 ];
 
 function parseHash(): Route {
@@ -189,6 +192,7 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
           <>
             {route === "dashboard" && <Dashboard />}
             {route === "transactions" && <Transactions initialQuery={pendingSearch} />}
+            {route === "import" && <Import />}
             {route === "accounts" && <Accounts />}
             {route === "categories" && <Categories />}
             {route === "rules" && <Rules onCapture={() => void api.showCapture()} />}

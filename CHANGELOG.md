@@ -16,6 +16,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- 导入 (Import) view for 支付宝 / 微信支付 / bank CSV statements: encoding, delimiter and column
+  sniffing with presets, `blake3(account|date|amount|commodity|payee)` dedupe against every existing
+  transaction, a preview table with per-row selection, and keyword (or `re:`) → category rules. New
+  commands `import_probe`, `import_preview`, `import_commit`; imported rows carry `import:<batch>`
+  and `ref:<bank-id>`.
+- 对账 (Reconciliation) on the accounts view: cleared (`status *`) versus uncleared money per account
+  with a cut-off date, the balance assertion comparison, and `reconcile_preview` / `reconcile_clear`.
 - 规划 (Planning) view driven by a plain-text `goals.ledger`: FIRE projection at SWR 3.0 / 3.5 / 4.0 %,
   reserve-months gauge, per-account goals with target dates, debt payoff dates with extra-payment
   scenarios, and allocation drift against `class:` tags. The dashboard gains a compact planning strip

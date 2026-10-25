@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-165_passing-brightgreen.svg)](#测试)
-[![Front-end tests](https://img.shields.io/badge/vitest-47_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-164_passing-brightgreen.svg)](#测试)
+[![Front-end tests](https://img.shields.io/badge/vitest-50_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#环境要求)
@@ -34,6 +34,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 - [使用](#使用)
 - [快录语法](#快录语法)
 - [自然语言记一笔（可选）](#自然语言记一笔可选)
+- [导入对账单](#导入对账单)
 - [规划与报表](#规划与报表)
 - [数据放在哪](#数据放在哪)
 - [写入安全](#写入安全)
@@ -65,6 +66,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 | **多币种** | 汇率只来自 `P` 指令；缺汇率会被标记、置灰并排除在合计之外 —— 绝不按 1:1 假设 |
 | **看板** | KPI 与环比、收支柱状、净资产曲线、分类环图、堆叠面积、日历热力图、预算 vs 实际、预测、桑基图；布局可拖拽缩放并按用户持久化 |
 | **流水** | 窗口化列表、行内编辑、批量改标签/账户、保存的查询（`acct:`、`desc:`、`date:`、`tag:`、`amt:` 支持 `and`/`or`/`not`） |
+| **导入** | 支付宝 / 微信支付 / 银行 CSV：自动识别列、指纹去重、先预览再写入、关键词→分类规则，并可对账户做对账 |
 | **规划** | `goals.ledger` 驱动财富自由测算（SWR 3.0/3.5/4.0%）、储备月数、带目标日期的账户目标、负债还清日期（含“多还一点能省多少”）以及按 `class:` 标签的配置偏离 |
 | **报表** | 资产负债表、任意月/季/年的损益表，以及把期末净资产对齐到「期初 + 收入 − 支出」的净值变动表 |
 | **账户与分类** | 账户树显示自身/合计余额与类型推断；分类视图可按账户或按标签统计 |
@@ -104,7 +106,7 @@ pnpm tauri dev                   # Vite :1420 + 带热更新的 Tauri 外壳
 | `⌘K` | 命令面板 |
 | `⌘N` | 快录窗口 |
 | `⌘F` | 流水 / 搜索 |
-| `⌘1` … `⌘8` | 看板、流水、账户、分类、规则、规划、报表、设置 |
+| `⌘1` … `⌘9` | 看板、流水、导入、账户、分类、规则、规划、报表、设置 |
 | `Enter` / `⌘Enter` / `Esc` | 快录：保存并留下 / 保存并隐藏 / 隐藏 |
 
 托盘图标会在菜单栏旁弹出快录面板；设置里可以调整主题、快捷键、本位币、默认资金账户、
@@ -179,6 +181,24 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 默认关闭。没有 Key、没有模型时该模式保持禁用，快录窗口会说明缺什么。"测试连接"会发一次极小的
 请求，方便你在依赖它之前确认凭证可用。离开你机器的只有你输入的那句话和账户名，而且只在你按
 <kbd>Tab</kbd> 切到自然语言模式时才会发生。
+
+## 导入对账单
+
+支付宝、微信支付和银行导出的 CSV 往往很乱，**导入**（`⌘3`）把它们变成账本条目，不需要手输，
+也不会把同一行写两遍：
+
+1. 选择 CSV：自动识别编码（UTF-8/GBK）、分隔符、表头，以及日期 / 对方 / 金额列，并识别
+   支付宝、微信支付、招商、工商等常见布局。
+2. 确认识别结果：账户（`assets:bank:cmb` …）、各列映射，必要时填日期格式（如 `%Y/%m/%d`）。
+3. 写分类规则，一行一条：`星巴克 => expenses:food:coffee :coffee`。首个命中的关键词（或
+   `re:正则`）生效，没命中的进 `expenses:unclassified` 并打 `:inbox:`。
+4. 预览：重复行用 `blake3(账户|日期|金额|币种|摘要)` 与账本里已有交易比对，所以重复导入
+   同一段时间的账单是安全的。不需要的行可以取消勾选。
+5. 导入。写入的行带 `import:<批次>` 和 `ref:<银行流水号>`，批次可追溯，重复导入不会重复记账。
+
+**对账**（`账户` → **对账**）是另一半：选账户和截止日期，账本会区分已对清（`*`）和未对清；
+把对账单上出现的交易标记为已对清。账户里写了 `= 余额` 断言时，同一面板还会告诉你账本余额
+是否和银行一致。
 
 ## 规划与报表
 

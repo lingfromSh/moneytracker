@@ -43,6 +43,11 @@ export const commands = {
 	debtProgress: () => typedError<DebtDto_Serialize[], CmdError>(__TAURI_INVOKE("debt_progress")),
 	allocation: () => typedError<AllocationDto_Serialize, CmdError>(__TAURI_INVOKE("allocation")),
 	reportMarkdown: (month: string) => typedError<string, CmdError>(__TAURI_INVOKE("report_markdown", { month })),
+	reconcileClear: (ids: string[]) => typedError<number, CmdError>(__TAURI_INVOKE("reconcile_clear", { ids })),
+	reconcilePreview: (account: string, asOf: string | null) => typedError<ReconcilePreviewDto_Serialize, CmdError>(__TAURI_INVOKE("reconcile_preview", { account, asOf })),
+	importCommit: (profile: ImportProfileDto_Deserialize) => typedError<ImportCommitDto, CmdError>(__TAURI_INVOKE("import_commit", { profile })),
+	importPreview: (profile: ImportProfileDto_Deserialize) => typedError<ImportPreviewDto_Serialize, CmdError>(__TAURI_INVOKE("import_preview", { profile })),
+	importProbe: (path: string) => typedError<ImportProbeDto_Serialize, CmdError>(__TAURI_INVOKE("import_probe", { path })),
 	fxMissing: () => typedError<FxMissingDto[], CmdError>(__TAURI_INVOKE("fx_missing")),
 	/**
 	 *  Append externally fetched rates as `P` directives (the frontend performs the
@@ -510,6 +515,188 @@ export type HeatPointDto = {
 	display: string,
 };
 
+export type ImportCommitDto = {
+	batch_id: string,
+	written: number | null,
+	skipped: number | null,
+	files: string[],
+	diagnostics: DiagnosticDto[],
+};
+
+export type ImportGuessDto = ImportGuessDto_Serialize | ImportGuessDto_Deserialize;
+
+export type ImportGuessDto_Deserialize = {
+	date_col?: string | null,
+	payee_col?: string | null,
+	memo_col?: string | null,
+	amount_col?: string | null,
+	outflow_col?: string | null,
+	inflow_col?: string | null,
+	account?: string | null,
+	preset?: string | null,
+};
+
+export type ImportGuessDto_Serialize = {
+	date_col: string | null,
+	payee_col: string | null,
+	memo_col: string | null,
+	amount_col: string | null,
+	outflow_col: string | null,
+	inflow_col: string | null,
+	account: string | null,
+	preset: string | null,
+};
+
+export type ImportMappingDto = ImportMappingDto_Serialize | ImportMappingDto_Deserialize;
+
+export type ImportMappingDto_Deserialize = {
+	pattern: string,
+	category: string,
+	tags?: string[],
+};
+
+export type ImportMappingDto_Serialize = {
+	pattern: string,
+	category: string,
+	tags: string[],
+};
+
+export type ImportPreviewDto = ImportPreviewDto_Serialize | ImportPreviewDto_Deserialize;
+
+export type ImportPreviewDto_Deserialize = {
+	path: string,
+	name: string,
+	batch_id: string,
+	account: string,
+	commodity: string,
+	delimiter: string,
+	encoding: string,
+	headers: string[],
+	rows: ImportRowDto_Deserialize[],
+	duplicates: number | null,
+	total: AmountDto,
+	errors: DiagnosticDto[],
+	warnings: string[],
+};
+
+export type ImportPreviewDto_Serialize = {
+	path: string,
+	name: string,
+	batch_id: string,
+	account: string,
+	commodity: string,
+	delimiter: string,
+	encoding: string,
+	headers: string[],
+	rows: ImportRowDto_Serialize[],
+	duplicates: number | null,
+	total: AmountDto,
+	errors: DiagnosticDto[],
+	warnings: string[],
+};
+
+export type ImportProbeDto = ImportProbeDto_Serialize | ImportProbeDto_Deserialize;
+
+export type ImportProbeDto_Deserialize = {
+	path: string,
+	name: string,
+	encoding: string,
+	delimiter: string,
+	header_row: boolean,
+	headers: string[],
+	sample: string[][],
+	row_count: number | null,
+	guess: ImportGuessDto_Deserialize,
+	presets: string[],
+};
+
+export type ImportProbeDto_Serialize = {
+	path: string,
+	name: string,
+	encoding: string,
+	delimiter: string,
+	header_row: boolean,
+	headers: string[],
+	sample: string[][],
+	row_count: number | null,
+	guess: ImportGuessDto_Serialize,
+	presets: string[],
+};
+
+export type ImportProfileDto = ImportProfileDto_Serialize | ImportProfileDto_Deserialize;
+
+export type ImportProfileDto_Deserialize = {
+	path: string,
+	delimiter?: string | null,
+	encoding?: string | null,
+	header_row: boolean,
+	date_col?: string | null,
+	payee_col?: string | null,
+	memo_col?: string | null,
+	amount_col?: string | null,
+	outflow_col?: string | null,
+	inflow_col?: string | null,
+	account: string,
+	commodity?: string | null,
+	date_format?: string | null,
+	flip_sign: boolean,
+	skip_patterns?: string[],
+	mapping?: ImportMappingDto_Deserialize[],
+	/**  CSV line numbers to import; empty means "every non-duplicate row". */
+	include_lines?: number[],
+};
+
+export type ImportProfileDto_Serialize = {
+	path: string,
+	delimiter: string | null,
+	encoding: string | null,
+	header_row: boolean,
+	date_col: string | null,
+	payee_col: string | null,
+	memo_col: string | null,
+	amount_col: string | null,
+	outflow_col: string | null,
+	inflow_col: string | null,
+	account: string,
+	commodity: string | null,
+	date_format: string | null,
+	flip_sign: boolean,
+	skip_patterns: string[],
+	mapping: ImportMappingDto_Serialize[],
+	/**  CSV line numbers to import; empty means "every non-duplicate row". */
+	include_lines: number[],
+};
+
+export type ImportRowDto = ImportRowDto_Serialize | ImportRowDto_Deserialize;
+
+export type ImportRowDto_Deserialize = {
+	line: number | null,
+	date: string,
+	payee: string,
+	memo?: string | null,
+	amount: AmountDto,
+	fingerprint: string,
+	duplicate: boolean,
+	category?: string | null,
+	tags: string[],
+	warning?: string | null,
+	selected: boolean,
+};
+
+export type ImportRowDto_Serialize = {
+	line: number | null,
+	date: string,
+	payee: string,
+	memo: string | null,
+	amount: AmountDto,
+	fingerprint: string,
+	duplicate: boolean,
+	category: string | null,
+	tags: string[],
+	warning: string | null,
+	selected: boolean,
+};
+
 export type IncomeStatementDto = IncomeStatementDto_Serialize | IncomeStatementDto_Deserialize;
 
 export type IncomeStatementDto_Deserialize = {
@@ -762,6 +949,44 @@ export type QueryRequest_Serialize = {
 	order: string | null,
 	date_from: string | null,
 	date_to: string | null,
+};
+
+export type ReconcilePreviewDto = ReconcilePreviewDto_Serialize | ReconcilePreviewDto_Deserialize;
+
+export type ReconcilePreviewDto_Deserialize = {
+	account: string,
+	as_of?: string | null,
+	cleared: AmountDto,
+	uncleared: AmountDto,
+	balance: AmountDto,
+	assertion?: AmountDto | null,
+	difference?: AmountDto | null,
+	cleared_count: number | null,
+	uncleared_count: number | null,
+	rows: ReconcileRowDto[],
+	note?: string | null,
+};
+
+export type ReconcilePreviewDto_Serialize = {
+	account: string,
+	as_of: string | null,
+	cleared: AmountDto,
+	uncleared: AmountDto,
+	balance: AmountDto,
+	assertion: AmountDto | null,
+	difference: AmountDto | null,
+	cleared_count: number | null,
+	uncleared_count: number | null,
+	rows: ReconcileRowDto[],
+	note: string | null,
+};
+
+export type ReconcileRowDto = {
+	id: string,
+	date: string,
+	payee: string,
+	amount: AmountDto,
+	cleared: boolean,
 };
 
 export type ReserveDto = {

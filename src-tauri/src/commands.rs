@@ -686,6 +686,102 @@ pub fn capture_hide(app: AppHandle) -> CmdResult<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------- import
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn import_probe(path: String) -> CmdResult<ImportProbeDto> {
+    ledger_engine::import_probe(Path::new(&path)).map_err(CmdError::from)
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn import_preview(
+    state: State<'_, AppState>,
+    profile: ImportProfileDto,
+) -> CmdResult<ImportPreviewDto> {
+    let vault = state.vault()?;
+    ledger_engine::import_preview(&vault, &profile).map_err(CmdError::from)
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn import_commit(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    profile: ImportProfileDto,
+) -> CmdResult<ImportCommitDto> {
+    let vault = state.vault()?;
+    let opts = state.settings().vault_options();
+    let audit = state.audit_path();
+    let result = ledger_engine::import_commit(&vault, &profile, &opts)?;
+    for file in &result.files {
+        let _ = writer::append_audit(
+            &audit,
+            &AuditEntryDto {
+                ts: chrono::Local::now().to_rfc3339(),
+                op: "import".into(),
+                file: file.clone(),
+                span_start: 0,
+                span_end: 0,
+                before: String::new(),
+                after: format!("batch {} · {} rows", result.batch_id, result.written),
+            },
+        );
+    }
+    refresh(&state, &app, result.files.clone(), "import");
+    Ok(result)
+}
+
+// ---------------------------------------------------------------- reconcile
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn reconcile_preview(
+    state: State<'_, AppState>,
+    account: String,
+    as_of: Option<String>,
+) -> CmdResult<ReconcilePreviewDto> {
+    let vault = state.vault()?;
+    let limit = match as_of.as_deref() {
+        Some(raw) if !raw.trim().is_empty() => Some(parse_date_arg(raw)?),
+        _ => None,
+    };
+    Ok(ledger_engine::reconcile_preview(&vault, &account, limit))
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn reconcile_clear(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    ids: Vec<String>,
+) -> CmdResult<u32> {
+    let opts = state.settings().vault_options();
+    let audit = state.audit_path();
+    let root = state.vault()?.root().to_path_buf();
+    let mut done = 0u32;
+    for id in &ids {
+        // Re-read between edits: each write moves the spans of the transactions
+        // that follow it, so a cached vault would splice the wrong bytes.
+        let vault = Vault::load(&root, &opts)?;
+        let idx = vault
+            .transaction_index(id)
+            .ok_or_else(|| CmdError::new("app.not_found", format!("transaction {id} not found")))?;
+        if vault.transactions()[idx].txn.status == Some(ledger_core::Status::Cleared) {
+            continue;
+        }
+        let patch = SaveTxnPatch {
+            status: Some("*".into()),
+            ..Default::default()
+        };
+        editing::update_txn(&vault, id, &patch, &opts, &audit)?;
+        done += 1;
+    }
+    refresh(&state, &app, Vec::new(), "reconcile");
+    Ok(done)
+}
+
 // ---------------------------------------------------------------- settings
 
 #[tauri::command]

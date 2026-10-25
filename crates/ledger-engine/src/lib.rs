@@ -7,8 +7,10 @@
 pub mod amounts;
 pub mod capture;
 pub mod fx;
+pub mod import;
 pub mod load;
 pub mod plan;
+pub mod reconcile;
 pub mod report;
 pub mod rules;
 pub mod statements;
@@ -20,11 +22,16 @@ pub use capture::{
     analyze, expand, new_txn_id, parse_capture, CaptureAnalysis, ExpandedCapture, Kind,
     ParsedCapture,
 };
+pub use import::{
+    batch_id, commit as import_commit, existing_fingerprints, fingerprint,
+    preview as import_preview, probe as import_probe,
+};
 pub use load::{
     diagnostic_dto, is_system_tag, posting_dto, split_comment, strip_system_tokens, txn_dto,
     AccountInfo, TxnRecord, Vault,
 };
 pub use plan::{fire_projection, overview as plan_overview, PlanSet, GOALS_FILE};
+pub use reconcile::preview as reconcile_preview;
 pub use rules::{Direction, RuleDef, RuleSet};
 pub use statements::{balance_sheet, income_statement, net_worth_bridge};
 pub use vault::{create_vault, validate_vault, VaultOptions};

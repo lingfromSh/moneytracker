@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { AccountNodeDto } from "../lib/bindings";
 import { api, queryKeys } from "../lib/ipc";
 import { cn, kindLabel, money } from "../lib/format";
-import { Badge, Card, EmptyState, Input } from "../components/ui";
+import { Badge, Button, Card, EmptyState, Input } from "../components/ui";
+import { ReconcileModal } from "../components/reconcile";
 
 const KIND_TONE: Record<string, "accent" | "neutral" | "warn" | "danger"> = {
   A: "accent",
@@ -15,6 +16,7 @@ const KIND_TONE: Record<string, "accent" | "neutral" | "warn" | "danger"> = {
 export function Accounts() {
   const [filter, setFilter] = React.useState("");
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set(["assets", "expenses"]));
+  const [reconciling, setReconciling] = React.useState(false);
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.accounts,
     queryFn: () => api.accounts(),
@@ -44,6 +46,10 @@ export function Accounts() {
     };
   }, [tree]);
 
+  const cashAccounts = flatten(tree)
+    .filter((node) => node.kind === "A" || node.kind === "L")
+    .map((node) => node.full);
+
   if (error) return <EmptyState title="账户读取失败" hint={String((error as Error).message)} />;
   if (isLoading) return <EmptyState title="正在读取账户…" />;
 
@@ -54,7 +60,16 @@ export function Accounts() {
           <div className="text-lg font-semibold">账户</div>
           <div className="text-xs text-[var(--color-muted)]">点击账户下钻到相关流水</div>
         </div>
-        <div className="ml-auto w-64">
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="subtle"
+            onClick={() => setReconciling(true)}
+            disabled={tree.length === 0}
+          >
+            对账
+          </Button>
+        </div>
+        <div className="w-64">
           <Input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -115,6 +130,12 @@ export function Accounts() {
           </Card>
         )}
       </div>
+
+      <ReconcileModal
+        open={reconciling}
+        accounts={cashAccounts}
+        onClose={() => setReconciling(false)}
+      />
     </div>
   );
 }

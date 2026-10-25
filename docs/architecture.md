@@ -163,6 +163,28 @@ into an `LlmConfig` only when a request is built (`state.llm_key()`). It is deli
 `Settings`, so it never travels through `settings_set`, the settings document, the IPC error paths
 or the write audit.
 
+## Statement import
+
+Three steps, each a pure function over the file plus an `ImportProfileDto`:
+
+| Step | What it does |
+| --- | --- |
+| `import_probe(path)` | Decodes UTF-8 / GB18030, sniffs the delimiter from the header line, detects the header rows, and guesses the date / payee / memo / amount (or outflow + inflow) columns. Alipay, WeChat Pay, CMB and ICBC layouts are recognised by their header words; `presets` is returned so the UI can offer them. |
+| `import_preview(vault, profile)` | Parses every row into `(date, payee, memo, amount)`, applies `skip_patterns`, `flip_sign`, the keyword rules and the default account, then marks a row `duplicate` when `blake3(account|date|amount|commodity|payee)` already exists in the vault (also within the batch itself). Returns the rows plus `DiagnosticDto`s for rows that could not be parsed — nothing is written. |
+| `import_commit(vault, profile)` | Re-runs the preview, keeps `include_lines`, writes one canonical block per row through `writer::ensure_day_file` + `writer::write_rel` (one snapshot and one audit row per touched file), and returns the batch id, counts and files. |
+
+The writing half deliberately reuses the capture printer: an imported row is indistinguishable from a
+captured one except for the `import:` / `ref:` tags, so rules, balance assertions, the audit trail and
+`hledger` compatibility all apply unchanged.
+
+## Reconciliation
+
+`reconcile_preview(account, as_of)` walks every posting of the account (and its subaccounts) up to the
+cut-off date and splits the money into cleared (`txn.status == Cleared`, i.e. `*`) and uncleared,
+picking up the account's `= balance` assertion when one exists so the panel can show the difference.
+`reconcile_clear(ids)` flips the chosen transactions to `*` through the same span rewrite the editor
+uses, with one re-read per edit because every rewrite moves the byte spans of the transactions after it.
+
 ## Planning and statements
 
 Two read-only engine modules turn the same index into the planning and reporting views. Neither

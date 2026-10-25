@@ -632,3 +632,142 @@ pub struct PeriodDto {
     pub to: String,
     pub label: String,
 }
+
+// ---------------------------------------------------------------------------
+// statement import
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ImportGuessDto {
+    pub date_col: Option<String>,
+    pub payee_col: Option<String>,
+    pub memo_col: Option<String>,
+    pub amount_col: Option<String>,
+    pub outflow_col: Option<String>,
+    pub inflow_col: Option<String>,
+    pub account: Option<String>,
+    pub preset: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ImportProbeDto {
+    pub path: String,
+    pub name: String,
+    pub encoding: String,
+    pub delimiter: String,
+    pub header_row: bool,
+    pub headers: Vec<String>,
+    pub sample: Vec<Vec<String>>,
+    #[specta(type = f64)]
+    pub row_count: usize,
+    pub guess: ImportGuessDto,
+    pub presets: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Default)]
+pub struct ImportMappingDto {
+    pub pattern: String,
+    pub category: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Default)]
+pub struct ImportProfileDto {
+    pub path: String,
+    pub delimiter: Option<String>,
+    pub encoding: Option<String>,
+    pub header_row: bool,
+    pub date_col: Option<String>,
+    pub payee_col: Option<String>,
+    pub memo_col: Option<String>,
+    pub amount_col: Option<String>,
+    pub outflow_col: Option<String>,
+    pub inflow_col: Option<String>,
+    pub account: String,
+    pub commodity: Option<String>,
+    pub date_format: Option<String>,
+    pub flip_sign: bool,
+    #[serde(default)]
+    pub skip_patterns: Vec<String>,
+    #[serde(default)]
+    pub mapping: Vec<ImportMappingDto>,
+    /// CSV line numbers to import; empty means "every non-duplicate row".
+    #[serde(default)]
+    pub include_lines: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ImportRowDto {
+    #[specta(type = f64)]
+    pub line: usize,
+    pub date: String,
+    pub payee: String,
+    pub memo: Option<String>,
+    pub amount: AmountDto,
+    pub fingerprint: String,
+    pub duplicate: bool,
+    pub category: Option<String>,
+    pub tags: Vec<String>,
+    pub warning: Option<String>,
+    pub selected: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ImportPreviewDto {
+    pub path: String,
+    pub name: String,
+    pub batch_id: String,
+    pub account: String,
+    pub commodity: String,
+    pub delimiter: String,
+    pub encoding: String,
+    pub headers: Vec<String>,
+    pub rows: Vec<ImportRowDto>,
+    #[specta(type = f64)]
+    pub duplicates: usize,
+    pub total: AmountDto,
+    pub errors: Vec<DiagnosticDto>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ImportCommitDto {
+    pub batch_id: String,
+    #[specta(type = f64)]
+    pub written: usize,
+    #[specta(type = f64)]
+    pub skipped: usize,
+    pub files: Vec<String>,
+    pub diagnostics: Vec<DiagnosticDto>,
+}
+
+// ---------------------------------------------------------------------------
+// reconciliation
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ReconcileRowDto {
+    pub id: String,
+    pub date: String,
+    pub payee: String,
+    pub amount: AmountDto,
+    pub cleared: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ReconcilePreviewDto {
+    pub account: String,
+    pub as_of: Option<String>,
+    pub cleared: AmountDto,
+    pub uncleared: AmountDto,
+    pub balance: AmountDto,
+    pub assertion: Option<AmountDto>,
+    pub difference: Option<AmountDto>,
+    #[specta(type = f64)]
+    pub cleared_count: usize,
+    #[specta(type = f64)]
+    pub uncleared_count: usize,
+    pub rows: Vec<ReconcileRowDto>,
+    pub note: Option<String>,
+}
