@@ -56,15 +56,18 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
-
       - name: Install SDK packages
+        # ubuntu 镜像自带 Android SDK；setup-android@v3 的 --licenses 会以交互模式退出 1，所以自己来。
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager --install \
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          MANAGER="${SDK}/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$MANAGER" ] || MANAGER=$(ls -d "$SDK"/cmdline-tools/*/bin/sdkmanager | tail -1)
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          yes | "$MANAGER" --sdk_root="$SDK" --licenses > /dev/null || true
+          "$MANAGER" --sdk_root="$SDK" --install \
             "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
+            "platforms;android-37" \
+            "build-tools;37.0.0" \
             "ndk;${NDK_VERSION}"
 
       - name: Install dependencies
