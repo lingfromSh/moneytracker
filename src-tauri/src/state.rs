@@ -347,3 +347,70 @@ mod tests {
         });
     }
 }
+
+#[cfg(test)]
+mod llm_secret_tests {
+    use super::*;
+
+    fn state_in(dir: &std::path::Path) -> AppState {
+        AppState::new(dir.to_path_buf())
+    }
+
+    #[test]
+    fn stores_the_api_key_in_its_own_file_and_never_in_settings() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let state = state_in(dir.path());
+
+        state.set_llm_key("  sk-test-123  ").expect("save key");
+
+        let secret = dir.path().join("llm.json");
+        assert!(secret.exists(), "llm.json should exist");
+        let body = std::fs::read_to_string(&secret).expect("read");
+        assert!(body.contains("sk-test-123"));
+        assert!(
+            !body.contains("api_key\":\"\""),
+            "empty key must clear, not store"
+        );
+
+        // The settings document must not carry the credential.
+        let settings = dir.path().join("settings.json");
+        assert!(
+            !settings.exists()
+                || !std::fs::read_to_string(&settings)
+                    .unwrap()
+                    .contains("sk-test"),
+            "settings.json must not contain the key"
+        );
+
+        assert_eq!(state.llm_key().as_deref(), Some("sk-test-123"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_key_file_is_private() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let state = state_in(dir.path());
+        state.set_llm_key("sk-private").expect("save key");
+
+        let mode = std::fs::metadata(dir.path().join("llm.json"))
+            .expect("metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600, "expected 0600, got {mode:o}");
+    }
+
+    #[test]
+    fn clearing_the_key_removes_the_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let state = state_in(dir.path());
+        state.set_llm_key("sk-gone").expect("save key");
+        assert!(dir.path().join("llm.json").exists());
+
+        state.set_llm_key("   ").expect("clear key");
+        assert!(!dir.path().join("llm.json").exists());
+        assert!(state.llm_key().is_none());
+    }
+}
