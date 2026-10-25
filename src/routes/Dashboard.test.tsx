@@ -162,6 +162,42 @@ function renderDashboard() {
 }
 
 describe("Dashboard", () => {
+it("hides cards and keeps only the chosen KPIs", async () => {
+  settingsMock.mockResolvedValue(
+    {
+      vault_path: "/tmp/vault",
+      recent_vaults: [],
+      theme: "system",
+      shortcut: "CmdOrCtrl+Shift+Space",
+      base_commodity: "CNY",
+      base_precision: 2,
+      default_funding: "assets:cash",
+      default_unclassified: "expenses:unclassified",
+      fx_enabled: false,
+      max_backups: 200,
+      dashboard_layout: null,
+      llm_enabled: false,
+      llm_provider: "openai",
+      llm_protocol: "",
+      llm_base_url: "",
+      llm_model: "",
+      auto_recur: false,
+      git_auto_commit: false,
+      density: "compact",
+      week_start: 1,
+      hidden_cards: ["months", "sankey"],
+      kpi_cards: ["net_worth"],
+      saved_views: null,
+    } satisfies Settings_Serialize,
+  );
+  renderDashboard();
+  await screen.findByText("洞察");
+  expect(screen.queryByText("月度收支")).not.toBeInTheDocument();
+  expect(screen.queryByText("资金流向")).not.toBeInTheDocument();
+  expect(screen.getByText("净资产")).toBeInTheDocument();
+  expect(screen.queryByText("储蓄率")).not.toBeInTheDocument();
+});
+
   it("lists the rule-based insights", async () => {
     renderDashboard();
     expect(await screen.findByText("expenses:food 比上月多了 22%")).toBeInTheDocument();
@@ -190,6 +226,11 @@ describe("Dashboard", () => {
   llm_model: "",
   auto_recur: false,
   git_auto_commit: false,
+  density: "comfortable",
+  week_start: 1,
+  hidden_cards: [],
+  kpi_cards: [],
+  saved_views: null,
     } satisfies Settings_Serialize);
   });
 

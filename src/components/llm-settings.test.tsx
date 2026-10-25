@@ -52,6 +52,11 @@ function settings(overrides: Partial<Settings_Serialize> = {}): Settings_Seriali
     llm_model: "",
     auto_recur: false,
     git_auto_commit: false,
+    density: "comfortable",
+    week_start: 1,
+    hidden_cards: [],
+    kpi_cards: [],
+    saved_views: null,
     ...overrides,
   };
 }

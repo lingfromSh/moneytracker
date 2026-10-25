@@ -181,6 +181,14 @@ resolves accounts through the catalogue and `Vault::resolve_account`, discards u
 the plan, and makes a second call with `answer_prompt` to phrase the result — a failure there is not an
 error, the fact table still answers the question. Bad JSON surfaces as `llm.bad_plan`.
 
+## Personalisation
+
+All of it is `Settings` fields plus frontend state: `hidden_cards`/`kpi_cards` filter the dashboard
+(children are rendered from `visibleLayout`, so a hidden card never occupies a grid slot),
+`density` scales `gridConfig.rowHeight` (38 vs 46), `week_start` is passed to list grouping, and
+`saved_views` is a JSON array `[{name, query, order}]` that `src/lib/views.ts` parses defensively —
+malformed JSON degrades to "no views" rather than an error screen.
+
 ## Recurring detection
 
 `crates/ledger-engine/src/recur.rs` buckets every transaction of the lookback window by

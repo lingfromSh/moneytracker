@@ -141,6 +141,20 @@ describe("Transactions", () => {
     expect(screen.getByText("3 笔 · 显示 1–3")).toBeInTheDocument();
   });
 
+  it("applies a saved view from settings", async () => {
+    settingsMock.mockResolvedValue({
+      shortcut: "CmdOrCtrl+Shift+Space",
+      saved_views: JSON.stringify([{ name: "餐饮", query: "acct:expenses:food", order: "amount_desc" }]),
+    });
+    renderList();
+    await userEvent.click(await screen.findByRole("button", { name: "餐饮" }));
+    await waitFor(() =>
+      expect(queryMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ query: "acct:expenses:food", order: "amount_desc" }),
+      ),
+    );
+  });
+
   it("shows the configured capture shortcut in the empty state", async () => {
     settingsMock.mockResolvedValue({ shortcut: "CmdOrCtrl+Alt+K" });
     queryMock.mockResolvedValue({ items: [], total: 0, offset: 0, limit: 200 });

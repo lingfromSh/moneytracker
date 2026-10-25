@@ -5,7 +5,7 @@
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust tests](https://img.shields.io/badge/rust_tests-178_passing-brightgreen.svg)](#测试)
-[![Front-end tests](https://img.shields.io/badge/vitest-58_passing-brightgreen.svg)](#测试)
+[![Front-end tests](https://img.shields.io/badge/vitest-64_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#环境要求)
@@ -37,6 +37,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 - [导入对账单](#导入对账单)
 - [定期交易与自动化](#定期交易与自动化)
 - [洞察与提问](#洞察与提问)
+- [个性化](#个性化)
 - [规划与报表](#规划与报表)
 - [数据放在哪](#数据放在哪)
 - [写入安全](#写入安全)
@@ -233,6 +234,12 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 （口径、账户、标签、时间范围、分组、条数），随后每个字段都会对着当前账本校验（不存在的账户丢弃、
 非法日期忽略、条数收敛），数字由引擎算，最后才允许模型基于这些算好的数字写一段话。关掉开关，
 同样的问题仍然会得到事实表，只是没有那段话。
+
+## 个性化
+
+配置，不是代码。看板右上角「自定义」选择显示哪些卡片、顶部显示哪些指标；设置 → 外观 可以切换
+「舒适 / 紧凑」密度、选择每周起始日。在流水页拼好的查询（含排序）可以存成带名字的视图，点一下
+就套用，× 删除——它们和看板布局一起存在 `settings.json` 里，跟着这台机器，不跟着账本。
 
 ## 规划与报表
 

@@ -5,7 +5,7 @@
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust tests](https://img.shields.io/badge/rust_tests-178_passing-brightgreen.svg)](#testing)
-[![Front-end tests](https://img.shields.io/badge/vitest-58_passing-brightgreen.svg)](#testing)
+[![Front-end tests](https://img.shields.io/badge/vitest-64_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
@@ -38,6 +38,7 @@ rich dashboard — with **zero proprietary storage**. Delete the app and you sti
 - [Importing statements](#importing-statements)
 - [Recurring entries & automation](#recurring-entries--automation)
 - [Insights & questions](#insights--questions)
+- [Personalising](#personalising)
 - [Planning & reports](#planning--reports)
 - [Where your data lives](#where-your-data-lives)
 - [Safety guarantees](#safety-guarantees)
@@ -251,6 +252,13 @@ validated against the open ledger (unknown accounts are dropped, bad dates ignor
 the numbers are computed by the engine, and only then may the model phrase one paragraph from those
 computed figures. Turn the switch off and the same question still gets its fact table; the prose is
 the only thing that disappears.
+
+## Personalising
+
+Settings, not code. 看板 → 自定义 picks which cards are visible and which KPI chips appear on top;
+设置 → 外观 switches the dashboard between 舒适 and 紧凑 densities and chooses the week start. Views you
+build on 流水 (a query plus its sort order) can be saved as named chips and removed again with a ×;
+they live in `settings.json` alongside the layout, so they follow the machine, not the vault.
 
 ## Planning & reports
 

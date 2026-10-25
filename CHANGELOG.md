@@ -16,6 +16,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Personalisation: dashboard card and KPI pickers (看板 → 自定义), density (舒适/紧凑) and week-start
+  settings, and named transaction views saved from 流水. New settings `hidden_cards`, `kpi_cards`,
+  `density`, `week_start`, `saved_views`.
 - Insights panel on the dashboard: rule-based budget alerts, month-over-month category moves, unusual
   expenses, savings rate, net-worth highs and missing FX rates (`crates/ledger-engine/src/insights.rs`,
   `insights` command).

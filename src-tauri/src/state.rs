@@ -73,7 +73,28 @@ pub struct Settings {
     pub auto_recur: bool,
     /// Commit the vault to its own git repository after maintenance.
     pub git_auto_commit: bool,
+    /// `comfortable` | `compact` — dashboard row height and spacing.
+    pub density: String,
+    /// `1` (Monday) or `0` (Sunday); drives week grouping in lists.
+    #[specta(type = f64)]
+    pub week_start: u32,
+    /// Dashboard cards the user hid, by panel id.
+    pub hidden_cards: Vec<String>,
+    /// KPI chips to show, by key.
+    pub kpi_cards: Vec<String>,
+    /// Saved transaction views, a JSON array owned by the frontend:
+    /// `[{"name":"餐饮","query":"acct:expenses:food"}]`.
+    pub saved_views: Option<String>,
 }
+
+/// KPI chips visible until the user picks their own.
+pub const DEFAULT_KPI: [&str; 5] = [
+    "net_worth",
+    "month_income",
+    "month_expense",
+    "savings_rate",
+    "missing_fx",
+];
 
 impl Default for Settings {
     fn default() -> Self {
@@ -96,6 +117,11 @@ impl Default for Settings {
             llm_model: String::new(),
             auto_recur: false,
             git_auto_commit: false,
+            density: "comfortable".to_string(),
+            week_start: 1,
+            hidden_cards: Vec::new(),
+            kpi_cards: DEFAULT_KPI.iter().map(|key| (*key).to_string()).collect(),
+            saved_views: None,
         }
     }
 }

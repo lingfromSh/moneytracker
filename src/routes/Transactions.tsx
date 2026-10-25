@@ -15,6 +15,7 @@ import {
 } from "../components/ui";
 import { RecurringBanner } from "../components/recurring";
 import { useShortcutLabel } from "../lib/shortcut";
+import { addView, parseViews, removeView, serializeViews } from "../lib/views";
 
 const PAGE = 200;
 const ROW_HEIGHT = 56;
@@ -39,7 +40,21 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
   const [selection, setSelection] = React.useState<Selection>(new Set());
   const [bulkOpen, setBulkOpen] = React.useState(false);
   const [scrollTop, setScrollTop] = React.useState(0);
+  const [viewName, setViewName] = React.useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  const settings = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: () => api.settings(),
+    retry: 0,
+  });
+  const savedViews = parseViews(settings.data?.saved_views);
+
+  const persistViews = async (next: ReturnType<typeof parseViews>) => {
+    if (!settings.data) return;
+    await api.saveSettings({ ...settings.data, saved_views: serializeViews(next) });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+  };
 
   const request = React.useMemo(
     () => ({ query: query.trim() || null, offset, limit: PAGE, order }),
@@ -118,6 +133,81 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
       </div>
 
       <RecurringBanner />
+
+      {savedViews.length > 0 || query.trim().length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--color-line)] px-4 py-1.5 text-[11px]">
+          <span className="text-[var(--color-muted)]">视图</span>
+          {savedViews.map((view) => (
+            <span
+              key={view.name}
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-line)] pl-2 pr-1"
+            >
+              <button
+                className="py-0.5 hover:text-[var(--color-accent)]"
+                onClick={() => {
+                  setQuery(view.query);
+                  if (view.order) setOrder(view.order);
+                  setOffset(0);
+                }}
+              >
+                {view.name}
+              </button>
+              <button
+                aria-label={`删除视图 ${view.name}`}
+                className="px-1 text-[var(--color-muted)] hover:text-[var(--color-danger)]"
+                onClick={() => void persistViews(removeView(savedViews, view.name))}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {query.trim().length > 0 ? (
+            <button
+              className="rounded-full border border-dashed border-[var(--color-line)] px-2 py-0.5 text-[var(--color-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-ink)]"
+              onClick={() => setViewName(query.trim())}
+            >
+              ＋ 保存当前
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <Modal
+        open={viewName !== null}
+        onClose={() => setViewName(null)}
+        title="保存视图"
+        width="max-w-sm"
+      >
+        <form
+          className="space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const name = (viewName ?? "").trim();
+            if (name.length === 0) return;
+            void persistViews(addView(savedViews, { name, query, order })).then(() =>
+              setViewName(null),
+            );
+          }}
+        >
+          <Field label="名称" hint="同名视图会被覆盖">
+            <Input
+              value={viewName ?? ""}
+              onChange={(event) => setViewName(event.target.value)}
+              aria-label="视图名称"
+              autoFocus
+            />
+          </Field>
+          <div className="text-[11px] text-[var(--color-muted)]">查询：{query}</div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => setViewName(null)}>
+              取消
+            </Button>
+            <Button type="submit" variant="primary">
+              保存
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {selection.size > 0 ? (
         <div className="flex items-center gap-2 border-b border-[var(--color-line)] bg-[var(--color-surface-2)]/60 px-4 py-2 text-xs">

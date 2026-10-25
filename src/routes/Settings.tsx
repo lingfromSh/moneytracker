@@ -283,6 +283,34 @@ export function SettingsView() {
         </Card>
 
         <Card>
+          <CardHeader title="外观" hint="看板密度与每周起始日，都会立刻生效" />
+          <div className="grid gap-3 p-3 sm:grid-cols-2">
+            <Field label="看板密度" hint="紧凑会压缩卡片高度，一屏能看更多">
+              <Select
+                value={draft.density}
+                onChange={(event) => update("density", event.target.value)}
+                aria-label="看板密度"
+                className="w-full"
+              >
+                <option value="comfortable">舒适</option>
+                <option value="compact">紧凑</option>
+              </Select>
+            </Field>
+            <Field label="每周起始" hint="影响列表里的按周分组">
+              <Select
+                value={String(draft.week_start ?? 1)}
+                onChange={(event) => update("week_start", Number(event.target.value))}
+                aria-label="每周起始"
+                className="w-full"
+              >
+                <option value="1">周一</option>
+                <option value="0">周日</option>
+              </Select>
+            </Field>
+          </div>
+        </Card>
+
+        <Card>
           <CardHeader title="自动化" hint="定期交易、月度报告、git 快照与预算提醒" />
           <div className="p-3">
             <Automation

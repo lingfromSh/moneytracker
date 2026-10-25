@@ -6,8 +6,9 @@ import type { Layout } from "react-grid-layout";
 import type { DashboardDto_Serialize, PlanOverviewDto_Serialize } from "../lib/bindings";
 import { api, queryKeys } from "../lib/ipc";
 import { useElementWidth } from "../lib/use-element-width";
+import { CARD_KEYS, KPI_KEYS } from "../lib/views";
 import { cn, money, monthLabel, pct, percent } from "../lib/format";
-import { Badge, Button, Card, CardHeader, EmptyState } from "../components/ui";
+import { Badge, Button, Card, CardHeader, EmptyState, Modal } from "../components/ui";
 import {
   BudgetBars,
   CategoryDonut,
@@ -69,6 +70,22 @@ export function Dashboard() {
     retry: 0,
   });
   const settings = useQuery({ queryKey: queryKeys.settings, queryFn: () => api.settings() });
+  const hiddenCards = settings.data?.hidden_cards ?? [];
+  const kpiKeys =
+    settings.data && settings.data.kpi_cards.length > 0
+      ? settings.data.kpi_cards
+      : KPI_KEYS.map((entry) => entry.key as string);
+  const compact = settings.data?.density === "compact";
+  const persistPrefs = async (patch: {
+    hidden_cards?: string[];
+    kpi_cards?: string[];
+  }) => {
+    const current = settings.data;
+    if (!current) return;
+    await api.saveSettings({ ...current, ...patch });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+  };
+
   const plan = useQuery({ queryKey: queryKeys.plan, queryFn: () => api.planOverview(), retry: 0 });
   const insights = useQuery({
     queryKey: queryKeys.insights,
@@ -110,6 +127,13 @@ export function Dashboard() {
     }
   }, [settings.data?.dashboard_layout]);
 
+  // Hiding a card removes its grid slot; the child stays mounted so its query
+  // cache survives a toggle.
+  const visibleLayout = React.useMemo(
+    () => layout.filter((item) => !hiddenCards.includes(item.i)),
+    [layout, hiddenCards],
+  );
+
   const saveLayout = React.useMemo(() => {
     let timer: number | undefined;
     return (next: Layout) => {
@@ -138,6 +162,64 @@ export function Dashboard() {
     return <EmptyState title="正在读取账本…" />;
   }
 
+  const panels: Record<string, React.ReactNode> = {
+      months: (
+              <Panel title="月度收支" hint={`最近 ${months} 个月`}>
+                <MonthlyBars months={data.months} />
+              </Panel>
+      ),
+      categories: (
+              <Panel title="本月支出结构" hint={data.kpis.month ? monthLabel(data.kpis.month) : ""}>
+                <CategoryDonut categories={data.categories} />
+              </Panel>
+      ),
+      networth: (
+              <Panel title="净资产曲线" hint="含所有资产与负债">
+                <NetWorthArea
+                  points={data.net_worth_series}
+                  target={plan.data?.fire?.targets?.[0]?.target?.value ?? null}
+                  targetLabel={plan.data?.fire ? "自由目标" : undefined}
+                />
+              </Panel>
+      ),
+      budget: (
+              <Panel title="预算 vs 实际" hint="来自 budgets.ledger">
+                <BudgetBars rows={data.budget} />
+              </Panel>
+      ),
+      stacked: (
+              <Panel title="分类趋势" hint="按二级分类堆叠">
+                <StackedArea stacked={data.stacked} />
+              </Panel>
+      ),
+      forecast: (
+              <Panel title="现金流预测" hint="虚线段为预测，不写入账本">
+                <ForecastLine points={data.forecast} />
+              </Panel>
+      ),
+      sankey: (
+              <Panel title="资金流向" hint="收入 → 账户 → 支出分类">
+                <SankeyDiagram data={data.sankey} />
+              </Panel>
+      ),
+      insights: (
+              <Panel title="洞察" hint="按规则算出来的变化与提醒">
+                <InsightList items={insightList} />
+              </Panel>
+      ),
+      heatmap: (
+              <Panel title="支出日历" hint="颜色越深支出越多">
+                <div className="flex h-full flex-col justify-between">
+                  <Heatmap points={data.heatmap} />
+                  <div className="max-h-24 overflow-auto">
+                    <CategoryList categories={data.categories} />
+                  </div>
+                </div>
+              </Panel>
+      ),
+  };
+
+
   return (
     <div className="flex h-full min-w-0 flex-col">
       <Header
@@ -148,6 +230,9 @@ export function Dashboard() {
         reloading={reloading}
         justReloaded={reloadedAt !== null}
         reloadError={reloadError}
+        kpiKeys={kpiKeys}
+        hiddenCards={hiddenCards}
+        onPrefs={(patch) => void persistPrefs(patch)}
       />
       {plan.data?.has_goals ? <PlanStrip plan={plan.data} /> : null}
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4">
@@ -161,67 +246,18 @@ export function Dashboard() {
           <GridLayout
             key={width}
             width={Math.max(320, width)}
-            layout={layout}
-            gridConfig={GRID}
+            layout={visibleLayout}
+            gridConfig={{ ...GRID, rowHeight: compact ? 38 : 46 }}
             dragConfig={{ enabled: true, handle: ".drag-handle" }}
             resizeConfig={{ enabled: true }}
             autoSize
             onLayoutChange={saveLayout}
           >
-            <div key="months">
-              <Panel title="月度收支" hint={`最近 ${months} 个月`}>
-                <MonthlyBars months={data.months} />
-              </Panel>
-            </div>
-            <div key="categories">
-              <Panel title="本月支出结构" hint={data.kpis.month ? monthLabel(data.kpis.month) : ""}>
-                <CategoryDonut categories={data.categories} />
-              </Panel>
-            </div>
-            <div key="networth">
-              <Panel title="净资产曲线" hint="含所有资产与负债">
-                <NetWorthArea
-                  points={data.net_worth_series}
-                  target={plan.data?.fire?.targets?.[0]?.target?.value ?? null}
-                  targetLabel={plan.data?.fire ? "自由目标" : undefined}
-                />
-              </Panel>
-            </div>
-            <div key="budget">
-              <Panel title="预算 vs 实际" hint="来自 budgets.ledger">
-                <BudgetBars rows={data.budget} />
-              </Panel>
-            </div>
-            <div key="stacked">
-              <Panel title="分类趋势" hint="按二级分类堆叠">
-                <StackedArea stacked={data.stacked} />
-              </Panel>
-            </div>
-            <div key="forecast">
-              <Panel title="现金流预测" hint="虚线段为预测，不写入账本">
-                <ForecastLine points={data.forecast} />
-              </Panel>
-            </div>
-            <div key="sankey">
-              <Panel title="资金流向" hint="收入 → 账户 → 支出分类">
-                <SankeyDiagram data={data.sankey} />
-              </Panel>
-            </div>
-            <div key="insights">
-              <Panel title="洞察" hint="按规则算出来的变化与提醒">
-                <InsightList items={insightList} />
-              </Panel>
-            </div>
-            <div key="heatmap">
-              <Panel title="支出日历" hint="颜色越深支出越多">
-                <div className="flex h-full flex-col justify-between">
-                  <Heatmap points={data.heatmap} />
-                  <div className="max-h-24 overflow-auto">
-                    <CategoryList categories={data.categories} />
-                  </div>
-                </div>
-              </Panel>
-            </div>
+            {visibleLayout.map((item) => (
+              <div key={item.i} className="h-full">
+                {panels[item.i] ?? null}
+              </div>
+            ))}
           </GridLayout>
         </div>
       </div>
@@ -299,6 +335,9 @@ function Header({
   reloading,
   justReloaded,
   reloadError,
+  kpiKeys,
+  hiddenCards,
+  onPrefs,
 }: {
   data: DashboardDto_Serialize;
   months: number;
@@ -307,8 +346,13 @@ function Header({
   reloading: boolean;
   justReloaded: boolean;
   reloadError: string | null;
+  kpiKeys: string[];
+  hiddenCards: string[];
+  onPrefs: (patch: { hidden_cards?: string[]; kpi_cards?: string[] }) => void;
 }) {
   const kpi = data.kpis;
+  const [customize, setCustomize] = React.useState(false);
+  const shows = (id: string) => !hiddenCards.includes(id);
   return (
     <div className="space-y-3 px-4 pb-3 pt-4">
       <div className="flex items-center justify-between">
@@ -344,6 +388,12 @@ function Header({
           >
             {months === 12 ? "近 12 月" : "近 24 月"}
           </Button>
+          <Button variant="ghost" onClick={() => setCustomize(true)} title="选择卡片与指标">
+            自定义
+          </Button>
+          <Button variant="ghost" onClick={() => setCustomize(true)} title="选择卡片与指标">
+            自定义
+          </Button>
           <Button variant="subtle" onClick={() => void api.showCapture()}>
             记一笔
           </Button>
@@ -351,25 +401,86 @@ function Header({
       </div>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-        <Kpi label="净资产" value={money(kpi.net_worth.value, kpi.net_worth.display)} />
-        <Kpi
-          label="本月收入"
-          value={money(kpi.month_income.value, kpi.month_income.display)}
-          delta={kpi.income_change}
-        />
-        <Kpi
-          label="本月支出"
-          value={money(kpi.month_expense.value, kpi.month_expense.display)}
-          delta={kpi.expense_change}
-          invertDelta
-        />
-        <Kpi label="储蓄率" value={percent(kpi.savings_rate)} />
-        <Kpi
-          label="缺少汇率"
-          value={String(kpi.missing_fx_count ?? 0)}
-          tone={(kpi.missing_fx_count ?? 0) > 0 ? "warn" : "neutral"}
-        />
+        {kpiKeys.includes("net_worth") ? (
+          <Kpi label="净资产" value={money(kpi.net_worth.value, kpi.net_worth.display)} />
+        ) : null}
+        {kpiKeys.includes("month_income") ? (
+          <Kpi
+            label="本月收入"
+            value={money(kpi.month_income.value, kpi.month_income.display)}
+            delta={kpi.income_change}
+          />
+        ) : null}
+        {kpiKeys.includes("month_expense") ? (
+          <Kpi
+            label="本月支出"
+            value={money(kpi.month_expense.value, kpi.month_expense.display)}
+            delta={kpi.expense_change}
+            invertDelta
+          />
+        ) : null}
+        {kpiKeys.includes("savings_rate") ? (
+          <Kpi label="储蓄率" value={percent(kpi.savings_rate)} />
+        ) : null}
+        {kpiKeys.includes("missing_fx") ? (
+          <Kpi
+            label="缺少汇率"
+            value={String(kpi.missing_fx_count ?? 0)}
+            tone={(kpi.missing_fx_count ?? 0) > 0 ? "warn" : "neutral"}
+          />
+        ) : null}
       </div>
+
+      <Modal open={customize} onClose={() => setCustomize(false)} title="自定义看板" width="max-w-md">
+        <div className="space-y-3">
+          <div>
+            <div className="mb-1 text-xs font-medium">卡片</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {CARD_KEYS.map((card) => (
+                <label key={card.key} className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={shows(card.key)}
+                    onChange={(event) => {
+                      const next = event.target.checked
+                        ? hiddenCards.filter((id) => id !== card.key)
+                        : [...hiddenCards, card.key];
+                      onPrefs({ hidden_cards: next });
+                    }}
+                    aria-label={`显示${card.label}`}
+                  />
+                  {card.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-medium">顶部指标</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {KPI_KEYS.map((entry) => (
+                <label key={entry.key} className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={kpiKeys.includes(entry.key)}
+                    onChange={(event) => {
+                      const current = kpiKeys.filter((key) => key !== entry.key);
+                      const next = event.target.checked ? [...current, entry.key] : current;
+                      onPrefs({ kpi_cards: next });
+                    }}
+                    aria-label={`显示${entry.label}`}
+                  />
+                  {entry.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button variant="primary" onClick={() => setCustomize(false)}>
+              完成
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {data.fx_missing.length > 0 ? (
         <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-300">

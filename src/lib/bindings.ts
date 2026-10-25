@@ -1376,6 +1376,19 @@ export type Settings_Deserialize = {
 	auto_recur: boolean,
 	/**  Commit the vault to its own git repository after maintenance. */
 	git_auto_commit: boolean,
+	/**  `comfortable` | `compact` — dashboard row height and spacing. */
+	density: string,
+	/**  `1` (Monday) or `0` (Sunday); drives week grouping in lists. */
+	week_start: number | null,
+	/**  Dashboard cards the user hid, by panel id. */
+	hidden_cards: string[],
+	/**  KPI chips to show, by key. */
+	kpi_cards: string[],
+	/**
+	 *  Saved transaction views, a JSON array owned by the frontend:
+	 *  `[{"name":"餐饮","query":"acct:expenses:food"}]`.
+	 */
+	saved_views?: string | null,
 };
 
 export type Settings_Serialize = {
@@ -1407,6 +1420,19 @@ export type Settings_Serialize = {
 	auto_recur: boolean,
 	/**  Commit the vault to its own git repository after maintenance. */
 	git_auto_commit: boolean,
+	/**  `comfortable` | `compact` — dashboard row height and spacing. */
+	density: string,
+	/**  `1` (Monday) or `0` (Sunday); drives week grouping in lists. */
+	week_start: number | null,
+	/**  Dashboard cards the user hid, by panel id. */
+	hidden_cards: string[],
+	/**  KPI chips to show, by key. */
+	kpi_cards: string[],
+	/**
+	 *  Saved transaction views, a JSON array owned by the frontend:
+	 *  `[{"name":"餐饮","query":"acct:expenses:food"}]`.
+	 */
+	saved_views: string | null,
 };
 
 /**  Whether the configured global capture shortcut is actually live. */
