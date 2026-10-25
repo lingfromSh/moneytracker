@@ -18,10 +18,12 @@ vi.mock("../lib/ipc", () => ({
     txnBulkUpdate: (ids: string[], patch: unknown) => bulkMock(ids, patch),
     showCapture: vi.fn(),
     settings: () => settingsMock(),
+    recurList: () => Promise.resolve({ groups: [], due_count: 0 }),
   },
   queryKeys: {
     transactions: (req: unknown) => ["transactions", req],
     settings: ["settings"],
+    recur: (months: number) => ["recur", months],
   },
 }));
 

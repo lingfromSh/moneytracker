@@ -69,6 +69,10 @@ pub struct Settings {
     pub llm_base_url: String,
     /// Blank means the provider preset's default model.
     pub llm_model: String,
+    /// Confirm recurring transactions automatically on launch.
+    pub auto_recur: bool,
+    /// Commit the vault to its own git repository after maintenance.
+    pub git_auto_commit: bool,
 }
 
 impl Default for Settings {
@@ -90,6 +94,8 @@ impl Default for Settings {
             llm_protocol: String::new(),
             llm_base_url: String::new(),
             llm_model: String::new(),
+            auto_recur: false,
+            git_auto_commit: false,
         }
     }
 }

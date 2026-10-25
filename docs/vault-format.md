@@ -138,6 +138,18 @@ debt 房贷 ; account:liabilities:mortgage rate:3.15% payment:8200.00 CNY
 Unknown directives produce `plan.unknown_directive` diagnostics with line numbers and are shown in
 the 规划 view instead of failing the load.
 
+## Recurring decisions
+
+`recur.ledger` (not included by `index.ledger`) holds the "not this cycle" answers:
+
+```
+; MoneyTracker recurring-transaction decisions — read by the app, never included by index.ledger.
+; skip:c-1a2b3c4d@2026-10
+```
+
+Transactions written by the automation carry `recur:<id>@<YYYY-MM>` next to their `txn:` tag; the tag
+is engine-owned metadata, so the editor hides it and every rewrite preserves it.
+
 ## Imported transactions
 
 A row written by the statement importer is an ordinary transaction block with two extra tags:

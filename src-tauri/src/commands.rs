@@ -1305,3 +1305,89 @@ pub fn report_markdown(state: State<'_, AppState>, month: String) -> CmdResult<S
     let vault = state.vault()?;
     Ok(ledger_engine::plan::month_report(&vault, month.trim()))
 }
+
+// ------------------------------------------------------------ automation
+
+/// Recurring patterns found in the ledger, with the ones that are due next.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn recur_list(
+    state: State<'_, AppState>,
+    lookback_months: Option<u32>,
+) -> CmdResult<ledger_engine::types::RecurListDto> {
+    let vault = state.vault()?;
+    let today = chrono::Local::now().date_naive();
+    Ok(ledger_engine::recur_list(
+        &vault,
+        lookback_months.unwrap_or(12) as usize,
+        today,
+    ))
+}
+
+/// Write the next occurrence of the selected patterns.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn recur_commit(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    ids: Vec<String>,
+) -> CmdResult<ledger_engine::types::RecurCommitDto> {
+    let opts = state.settings().vault_options();
+    let audit = state.audit_path();
+    let vault = state.vault()?;
+    let result = ledger_engine::recur::commit(&vault, &ids, &opts)?;
+    for file in &result.files {
+        let _ = writer::append_audit(
+            &audit,
+            &AuditEntryDto {
+                ts: chrono::Local::now().to_rfc3339(),
+                op: "recur_commit".into(),
+                file: file.clone(),
+                span_start: 0,
+                span_end: 0,
+                before: String::new(),
+                after: format!("{} 笔定期交易", result.written),
+            },
+        );
+    }
+    refresh(&state, &app, result.files.clone(), "recur");
+    Ok(result)
+}
+
+/// Remember "not this month" for one pattern.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn recur_skip(state: State<'_, AppState>, id: String, month: Option<String>) -> CmdResult<()> {
+    let vault = state.vault()?;
+    let month = month.unwrap_or_else(|| {
+        let today = chrono::Local::now().date_naive();
+        format!(
+            "{:04}-{:02}",
+            chrono::Datelike::year(&today),
+            chrono::Datelike::month(&today)
+        )
+    });
+    ledger_engine::recur_skip(vault.root(), &id, &month)?;
+    Ok(())
+}
+
+/// Run the automation pass: recurring entries, monthly report, git snapshot, alerts.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn maintenance_run(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CmdResult<ledger_engine::types::MaintenanceDto> {
+    let settings = state.settings();
+    let vault = state.vault()?;
+    let outcome = crate::maintenance::run(&vault, settings.auto_recur, settings.git_auto_commit);
+    if outcome
+        .recur
+        .as_ref()
+        .map(|recur| recur.written > 0)
+        .unwrap_or(false)
+    {
+        refresh(&state, &app, Vec::new(), "maintenance");
+    }
+    Ok(outcome)
+}

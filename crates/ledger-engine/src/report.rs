@@ -452,7 +452,7 @@ fn monthly_budget_amount(amount: &ledger_core::Amount, period: &str) -> Decimal 
     }
 }
 
-fn budget_rows(vault: &Vault, month: &str) -> Vec<BudgetRowDto> {
+pub fn budget_rows(vault: &Vault, month: &str) -> Vec<BudgetRowDto> {
     let budgets = budgets(vault);
     let mut actual: BTreeMap<String, Decimal> = BTreeMap::new();
     for rec in &vault.txns {

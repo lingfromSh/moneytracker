@@ -771,3 +771,61 @@ pub struct ReconcilePreviewDto {
     pub rows: Vec<ReconcileRowDto>,
     pub note: Option<String>,
 }
+
+// ---------------------------------------------------------------------------
+// recurring transactions
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct RecurGroupDto {
+    pub id: String,
+    pub payee: String,
+    pub direction: String,
+    pub amount: AmountDto,
+    #[specta(type = f64)]
+    pub day: u32,
+    #[specta(type = f64)]
+    pub occurrences: usize,
+    pub months: Vec<String>,
+    pub last_date: String,
+    pub next_date: String,
+    #[specta(type = f64)]
+    pub gap_days: i64,
+    pub confidence: f64,
+    pub due: bool,
+    pub done_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct RecurListDto {
+    pub groups: Vec<RecurGroupDto>,
+    #[specta(type = f64)]
+    pub due_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct RecurCommitDto {
+    #[specta(type = f64)]
+    pub written: usize,
+    #[specta(type = f64)]
+    pub skipped: usize,
+    pub files: Vec<String>,
+    pub groups: Vec<RecurGroupDto>,
+    pub errors: Vec<String>,
+}
+
+// ---------------------------------------------------------------------------
+// automation
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct MaintenanceDto {
+    pub at: String,
+    pub month: String,
+    pub recur: Option<RecurCommitDto>,
+    /// Vault-relative path when a monthly report was written.
+    pub report: Option<String>,
+    /// Short git revision when the vault was committed.
+    pub git: Option<String>,
+    pub alerts: Vec<String>,
+}

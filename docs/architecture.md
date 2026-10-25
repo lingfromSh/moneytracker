@@ -163,6 +163,22 @@ into an `LlmConfig` only when a request is built (`state.llm_key()`). It is deli
 `Settings`, so it never travels through `settings_set`, the settings document, the IPC error paths
 or the write audit.
 
+## Recurring detection
+
+`crates/ledger-engine/src/recur.rs` buckets every transaction of the lookback window by
+`(normalised payee | base amount | sorted accounts)` and keeps a bucket only when it has at least three
+occurrences in three distinct months with a median gap between 20 and 45 days. The predicted next date
+is the median day-of-month in the month after the last occurrence; a group is **due** when that date is
+within ten days and neither a transaction nor a `; skip:<id>@<month>` line already covers the month.
+
+`commit` replays the *last* occurrence's postings through `capture::commit_to_day_file`, so an
+auto-confirmed entry is byte-for-byte the shape a capture would have produced, plus the
+`recur:<id>@<YYYY-MM>` tag. Detection state is cached per process; a cold command re-lists first.
+
+`src-tauri/src/maintenance.rs` is the automation pass: it optionally commits due recurrences, writes
+the monthly report once, runs `git add -A` / `git commit` when the vault has a `.git` directory, and
+collects budget rows above 90 %.
+
 ## Statement import
 
 Three steps, each a pure function over the file plus an `ImportProfileDto`:

@@ -50,6 +50,8 @@ function settings(overrides: Partial<Settings_Serialize> = {}): Settings_Seriali
     llm_protocol: "",
     llm_base_url: "",
     llm_model: "",
+    auto_recur: false,
+    git_auto_commit: false,
     ...overrides,
   };
 }

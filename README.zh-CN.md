@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-164_passing-brightgreen.svg)](#测试)
-[![Front-end tests](https://img.shields.io/badge/vitest-50_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-169_passing-brightgreen.svg)](#测试)
+[![Front-end tests](https://img.shields.io/badge/vitest-54_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#环境要求)
@@ -35,6 +35,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 - [快录语法](#快录语法)
 - [自然语言记一笔（可选）](#自然语言记一笔可选)
 - [导入对账单](#导入对账单)
+- [定期交易与自动化](#定期交易与自动化)
 - [规划与报表](#规划与报表)
 - [数据放在哪](#数据放在哪)
 - [写入安全](#写入安全)
@@ -67,6 +68,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 | **看板** | KPI 与环比、收支柱状、净资产曲线、分类环图、堆叠面积、日历热力图、预算 vs 实际、预测、桑基图；布局可拖拽缩放并按用户持久化 |
 | **流水** | 窗口化列表、行内编辑、批量改标签/账户、保存的查询（`acct:`、`desc:`、`date:`、`tag:`、`amt:` 支持 `and`/`or`/`not`） |
 | **导入** | 支付宝 / 微信支付 / 银行 CSV：自动识别列、指纹去重、先预览再写入、关键词→分类规则，并可对账户做对账 |
+| **自动化** | 自动发现按月重复的收支（同摘要、同金额、同分录，≥3 个月），一键记入下个月并打 `recur:<id>@<月份>` 标签；每月生成 `reports/` 报告、可选提交 git、预算超 90% 提醒 |
 | **规划** | `goals.ledger` 驱动财富自由测算（SWR 3.0/3.5/4.0%）、储备月数、带目标日期的账户目标、负债还清日期（含“多还一点能省多少”）以及按 `class:` 标签的配置偏离 |
 | **报表** | 资产负债表、任意月/季/年的损益表，以及把期末净资产对齐到「期初 + 收入 − 支出」的净值变动表 |
 | **账户与分类** | 账户树显示自身/合计余额与类型推断；分类视图可按账户或按标签统计 |
@@ -199,6 +201,27 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 **对账**（`账户` → **对账**）是另一半：选账户和截止日期，账本会区分已对清（`*`）和未对清；
 把对账单上出现的交易标记为已对清。账户里写了 `= 余额` 断言时，同一面板还会告诉你账本余额
 是否和银行一致。
+
+## 定期交易与自动化
+
+账本本身就知道哪些是重复的：同一摘要、同一金额、同一组分录，在至少三个不同月份出现，间隔
+20–45 天。这些模式会显示在流水页顶部，可以 **全部记入**（写入下个月的那一笔）或 **本月不算**
+（跳过这一期）。除非你在 设置 → 自动化 打开「自动记入定期交易」，否则不会自动写入。
+
+写入的每一笔都是普通交易，只多一个 `recur:<id>@<YYYY-MM>` 标签，批次可追溯，重复检测也不会
+把同一个月记两遍。
+
+设置 → 自动化 还负责维护任务（「立即维护」，开启后启动时也会跑一次）：
+
+| 步骤 | 作用 |
+| --- | --- |
+| 定期交易 | 确认所有到期的定期交易 |
+| 月度报告 | 每月写一次 `reports/YYYY-MM.md`（Markdown，数字与报表一致） |
+| git 快照 | 账本目录里有 `.git` 时暂存并提交 |
+| 预算提醒 | 在设置卡片里列出超过 90% 或已超支的预算 |
+
+跳过的期数记录为 `recur.ledger` 中的 `; skip:<id>@<YYYY-MM>` 行——和 `rules.ledger` 一样，
+`index.ledger` 不会 include 它。
 
 ## 规划与报表
 

@@ -6,6 +6,7 @@ import { api, queryKeys } from "../lib/ipc";
 import { cn } from "../lib/format";
 import { ShortcutInput } from "../components/shortcut-input";
 import { LlmSettings } from "../components/llm-settings";
+import { Automation } from "../components/automation";
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Select, Switch } from "../components/ui";
 
 const THEMES = [
@@ -279,6 +280,18 @@ export function SettingsView() {
             onMessage={setMessage}
             onError={setError}
           />
+        </Card>
+
+        <Card>
+          <CardHeader title="自动化" hint="定期交易、月度报告、git 快照与预算提醒" />
+          <div className="p-3">
+            <Automation
+              draft={draft}
+              update={update}
+              onMessage={setMessage}
+              onError={setError}
+            />
+          </div>
         </Card>
 
         <Card>

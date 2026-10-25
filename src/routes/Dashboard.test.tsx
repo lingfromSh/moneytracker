@@ -162,6 +162,8 @@ describe("Dashboard", () => {
   llm_protocol: "",
   llm_base_url: "",
   llm_model: "",
+  auto_recur: false,
+  git_auto_commit: false,
     } satisfies Settings_Serialize);
   });
 

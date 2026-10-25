@@ -123,6 +123,12 @@ export const api = {
   reconcileClear: (ids: string[]) => call(commands.reconcileClear(ids)),
   reportMarkdown: (month: string) => call(commands.reportMarkdown(month)),
 
+  // recurring transactions and automation
+  recurList: (lookbackMonths: number | null = 12) => call(commands.recurList(lookbackMonths)),
+  recurCommit: (ids: string[]) => call(commands.recurCommit(ids)),
+  recurSkip: (id: string, month: string | null = null) => call(commands.recurSkip(id, month)),
+  maintenanceRun: () => call(commands.maintenanceRun()),
+
   // capture window
   showCapture: () => call(commands.captureShow()),
   hideCapture: () => call(commands.captureHide()),
@@ -146,6 +152,7 @@ export const queryKeys = {
   fxMissing: ["fx-missing"] as const,
   importPreview: (path: string) => ["import-preview", path],
   reconcile: (account: string, asOf: string | null) => ["reconcile", account, asOf],
+  recur: (lookbackMonths: number) => ["recur", lookbackMonths] as const,
   audit: ["audit"] as const,
   shortcutStatus: ["shortcut-status"] as const,
   llmStatus: ["llm-status"] as const,

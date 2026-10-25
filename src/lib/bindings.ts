@@ -45,6 +45,14 @@ export const commands = {
 	reportMarkdown: (month: string) => typedError<string, CmdError>(__TAURI_INVOKE("report_markdown", { month })),
 	reconcileClear: (ids: string[]) => typedError<number, CmdError>(__TAURI_INVOKE("reconcile_clear", { ids })),
 	reconcilePreview: (account: string, asOf: string | null) => typedError<ReconcilePreviewDto_Serialize, CmdError>(__TAURI_INVOKE("reconcile_preview", { account, asOf })),
+	/**  Recurring patterns found in the ledger, with the ones that are due next. */
+	recurList: (lookbackMonths: number | null) => typedError<RecurListDto_Serialize, CmdError>(__TAURI_INVOKE("recur_list", { lookbackMonths })),
+	/**  Write the next occurrence of the selected patterns. */
+	recurCommit: (ids: string[]) => typedError<RecurCommitDto_Serialize, CmdError>(__TAURI_INVOKE("recur_commit", { ids })),
+	/**  Remember "not this month" for one pattern. */
+	recurSkip: (id: string, month: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("recur_skip", { id, month })),
+	/**  Run the automation pass: recurring entries, monthly report, git snapshot, alerts. */
+	maintenanceRun: () => typedError<MaintenanceDto_Serialize, CmdError>(__TAURI_INVOKE("maintenance_run")),
 	importCommit: (profile: ImportProfileDto_Deserialize) => typedError<ImportCommitDto, CmdError>(__TAURI_INVOKE("import_commit", { profile })),
 	importPreview: (profile: ImportProfileDto_Deserialize) => typedError<ImportPreviewDto_Serialize, CmdError>(__TAURI_INVOKE("import_preview", { profile })),
 	importProbe: (path: string) => typedError<ImportProbeDto_Serialize, CmdError>(__TAURI_INVOKE("import_probe", { path })),
@@ -803,6 +811,30 @@ export type LlmTestDto = {
 	elapsed_ms: number | null,
 };
 
+export type MaintenanceDto = MaintenanceDto_Serialize | MaintenanceDto_Deserialize;
+
+export type MaintenanceDto_Deserialize = {
+	at: string,
+	month: string,
+	recur?: RecurCommitDto_Deserialize | null,
+	/**  Vault-relative path when a monthly report was written. */
+	report?: string | null,
+	/**  Short git revision when the vault was committed. */
+	git?: string | null,
+	alerts: string[],
+};
+
+export type MaintenanceDto_Serialize = {
+	at: string,
+	month: string,
+	recur: RecurCommitDto_Serialize | null,
+	/**  Vault-relative path when a monthly report was written. */
+	report: string | null,
+	/**  Short git revision when the vault was committed. */
+	git: string | null,
+	alerts: string[],
+};
+
 export type MonthPointDto = {
 	month: string,
 	income: number | null,
@@ -989,6 +1021,70 @@ export type ReconcileRowDto = {
 	cleared: boolean,
 };
 
+export type RecurCommitDto = RecurCommitDto_Serialize | RecurCommitDto_Deserialize;
+
+export type RecurCommitDto_Deserialize = {
+	written: number | null,
+	skipped: number | null,
+	files: string[],
+	groups: RecurGroupDto_Deserialize[],
+	errors: string[],
+};
+
+export type RecurCommitDto_Serialize = {
+	written: number | null,
+	skipped: number | null,
+	files: string[],
+	groups: RecurGroupDto_Serialize[],
+	errors: string[],
+};
+
+export type RecurGroupDto = RecurGroupDto_Serialize | RecurGroupDto_Deserialize;
+
+export type RecurGroupDto_Deserialize = {
+	id: string,
+	payee: string,
+	direction: string,
+	amount: AmountDto,
+	day: number | null,
+	occurrences: number | null,
+	months: string[],
+	last_date: string,
+	next_date: string,
+	gap_days: number | null,
+	confidence: number | null,
+	due: boolean,
+	done_reason?: string | null,
+};
+
+export type RecurGroupDto_Serialize = {
+	id: string,
+	payee: string,
+	direction: string,
+	amount: AmountDto,
+	day: number | null,
+	occurrences: number | null,
+	months: string[],
+	last_date: string,
+	next_date: string,
+	gap_days: number | null,
+	confidence: number | null,
+	due: boolean,
+	done_reason: string | null,
+};
+
+export type RecurListDto = RecurListDto_Serialize | RecurListDto_Deserialize;
+
+export type RecurListDto_Deserialize = {
+	groups: RecurGroupDto_Deserialize[],
+	due_count: number | null,
+};
+
+export type RecurListDto_Serialize = {
+	groups: RecurGroupDto_Serialize[],
+	due_count: number | null,
+};
+
 export type ReserveDto = {
 	cash: AmountDto,
 	monthly_expense: AmountDto,
@@ -1159,6 +1255,10 @@ export type Settings_Deserialize = {
 	llm_base_url: string,
 	/**  Blank means the provider preset's default model. */
 	llm_model: string,
+	/**  Confirm recurring transactions automatically on launch. */
+	auto_recur: boolean,
+	/**  Commit the vault to its own git repository after maintenance. */
+	git_auto_commit: boolean,
 };
 
 export type Settings_Serialize = {
@@ -1186,6 +1286,10 @@ export type Settings_Serialize = {
 	llm_base_url: string,
 	/**  Blank means the provider preset's default model. */
 	llm_model: string,
+	/**  Confirm recurring transactions automatically on launch. */
+	auto_recur: boolean,
+	/**  Commit the vault to its own git repository after maintenance. */
+	git_auto_commit: boolean,
 };
 
 /**  Whether the configured global capture shortcut is actually live. */

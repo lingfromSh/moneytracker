@@ -16,6 +16,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Recurring transactions: patterns (same payee, amount and postings in ≥3 months, 20–45 day spacing)
+  are detected and offered as a banner on 流水 with 全部记入 / 本月不算. Written occurrences carry
+  `recur:<id>@<YYYY-MM>`; skips are `; skip:<id>@<YYYY-MM>` lines in `recur.ledger`. New commands
+  `recur_list`, `recur_commit`, `recur_skip`, engine module `crates/ledger-engine/src/recur.rs`.
+- 设置 → 自动化 and `maintenance_run`: optional auto-confirmation of due recurrences, a monthly
+  `reports/YYYY-MM.md`, a git snapshot when the vault is a repository, and budget alerts at 90 %.
+  New settings `auto_recur` and `git_auto_commit`.
 - 导入 (Import) view for 支付宝 / 微信支付 / bank CSV statements: encoding, delimiter and column
   sniffing with presets, `blake3(account|date|amount|commodity|payee)` dedupe against every existing
   transaction, a preview table with per-row selection, and keyword (or `re:`) → category rules. New

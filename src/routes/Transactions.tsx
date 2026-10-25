@@ -13,6 +13,7 @@ import {
   Select,
   Textarea,
 } from "../components/ui";
+import { RecurringBanner } from "../components/recurring";
 import { useShortcutLabel } from "../lib/shortcut";
 
 const PAGE = 200;
@@ -115,6 +116,8 @@ export function Transactions({ initialQuery = "" }: { initialQuery?: string }) {
           记一笔
         </Button>
       </div>
+
+      <RecurringBanner />
 
       {selection.size > 0 ? (
         <div className="flex items-center gap-2 border-b border-[var(--color-line)] bg-[var(--color-surface-2)]/60 px-4 py-2 text-xs">

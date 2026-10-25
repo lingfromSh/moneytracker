@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-164_passing-brightgreen.svg)](#testing)
-[![Front-end tests](https://img.shields.io/badge/vitest-50_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-169_passing-brightgreen.svg)](#testing)
+[![Front-end tests](https://img.shields.io/badge/vitest-54_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
@@ -36,6 +36,7 @@ rich dashboard — with **zero proprietary storage**. Delete the app and you sti
 - [Capture syntax](#capture-syntax)
 - [Natural language (optional)](#natural-language-optional)
 - [Importing statements](#importing-statements)
+- [Recurring entries & automation](#recurring-entries--automation)
 - [Planning & reports](#planning--reports)
 - [Where your data lives](#where-your-data-lives)
 - [Safety guarantees](#safety-guarantees)
@@ -69,6 +70,7 @@ the source of truth and treats the UI as a fast editor for it:
 | **Dashboard** | KPI + month-over-month, income/expense bars, net-worth curve, category donut, stacked area, calendar heatmap, budget vs actual, forecast, Sankey — draggable/resizable layout persisted per user |
 | **Transactions** | windowed list, inline editor, bulk tag/account rename, saved queries (`acct:`, `desc:`, `date:`, `tag:`, `amt:` with `and`/`or`/`not`) |
 | **Import** | Alipay / WeChat Pay / bank CSV statements: auto-detected columns, dedupe by fingerprint, preview before writing, keyword→category rules, then reconcile the account against what the bank says |
+| **Automation** | detects monthly patterns (payee + amount + postings, ≥3 months), offers a one-click "record next month", tags what it writes with `recur:<id>@<month>`, keeps a monthly report in `reports/`, can snapshot the vault into git, and warns when a budget passes 90 % |
 | **Planning** | `goals.ledger` drives a FIRE projection (SWR 3.0/3.5/4.0 %), a reserve-months gauge, per-account goals with target dates, debt payoff dates (plus what an extra payment saves) and allocation drift against `class:` tags |
 | **Reports** | balance sheet, income statement for any month/quarter/year, and a net-worth bridge that reconciles closing net worth to opening plus income minus expense |
 | **Accounts & categories** | account tree with own/total balances and type inference; category view by account or by tag |
@@ -213,6 +215,28 @@ Reconciliation (`账户` → **对账**) is the other half: pick an account and 
 ledger shows what is cleared (`status *`) versus uncleared. Clear the transactions that appear on
 the statement; when the account carries a `= balance` assertion, the same panel tells you whether
 the ledger balance matches the bank.
+
+## Recurring entries & automation
+
+The ledger already knows what repeats: a pattern needs the same payee, the same amount and the same
+set of postings in at least three different months with a 20–45 day spacing. Those patterns show up as
+a strip at the top of 流水 with **全部记入** (write next month's occurrence) and **本月不算** (skip this
+cycle). Nothing is written unless you confirm it — or unless 设置 → 自动化 turns on 自动记入定期交易.
+
+Each written occurrence is an ordinary transaction tagged `recur:<id>@<YYYY-MM>`, so the batch is
+auditable and re-running the detection never double-writes a month.
+
+设置 → 自动化 also drives the maintenance pass (**立即维护**, and once at launch when enabled):
+
+| Step | Effect |
+| --- | --- |
+| recurring | confirms every occurrence that is due |
+| monthly report | writes `reports/YYYY-MM.md` once per month (Markdown, same numbers as 报表) |
+| git snapshot | when the vault folder contains `.git`, stages and commits it |
+| budget alerts | lists envelopes above 90 % (or over budget) in the settings card |
+
+Skipped cycles are stored as `; skip:<id>@<YYYY-MM>` lines in `recur.ledger`, next to `rules.ledger`
+and, like it, never included by `index.ledger`.
 
 ## Planning & reports
 

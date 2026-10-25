@@ -6,6 +6,7 @@
 mod commands;
 mod editing;
 mod llm;
+mod maintenance;
 mod shortcut;
 mod state;
 mod watcher;
@@ -62,6 +63,10 @@ pub fn build_specta() -> Builder<tauri::Wry> {
             commands::report_markdown,
             commands::reconcile_clear,
             commands::reconcile_preview,
+            commands::recur_list,
+            commands::recur_commit,
+            commands::recur_skip,
+            commands::maintenance_run,
             commands::import_commit,
             commands::import_preview,
             commands::import_probe,
