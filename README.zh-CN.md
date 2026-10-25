@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-122_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-129_passing-brightgreen.svg)](#测试)
 [![Front-end tests](https://img.shields.io/badge/vitest-37_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
@@ -118,6 +118,9 @@ pnpm tauri dev                   # Vite :1420 + 带热更新的 Tauri 外壳
 | `工资 +12000 @招行 +收入` | `assets:招行 12000.00 CNY` / `income:工资 -12000.00 CNY` |
 | `转 500 > @招行 > @现金` | `assets:招行 -500` / `assets:现金 500` |
 | `酒店 100usd@@720cny @旅行` | `expenses:旅行 100 USD @@ 720 CNY` / `assets:<默认> -720 CNY` |
+| `火锅 168 @微信 100 @现金 68` | 一笔支出，来自两个账户 |
+| `超市 200 @餐饮 120 @日用 80 @现金` | 一笔支出拆到两个分类，资金端自动补齐 |
+| `聚餐 300 @餐饮 70% @娱乐 30% @招行` | 按总额百分比拆分（余数给最后一个） |
 | `"iPhone 15" 8999 @数码` | 描述保留引号，`8999` 是金额 |
 | `#昨天 咖啡 4.5` | 记为昨天（也支持 `#前天`、`#+3d`、`#2026-10-01`） |
 | `= desc:星巴克 -> 餐饮=70%, 咖啡豆=30% from 支付宝` | 新建或更新规则 |
@@ -128,6 +131,12 @@ pnpm tauri dev                   # Vite :1420 + 带热更新的 Tauri 外壳
 写一个 `@账户` 时另一侧按账户类型判定（`A`/`L` → 资金端，`R`/`X` → 分类端），或交给命中的规则；
 写两个 `@` 账户按 `分类 资金` 理解。既没命中规则也没有分类时，落到 `expenses:unclassified`
 并打上 `:inbox:` 标签。
+
+**多个分录。** 任何 `@账户` 后面都可以直接跟金额，这条分录就记这个数，而不是整笔金额：写
+`@微信 100 @现金 68` 就是一笔支出由两个钱包出钱；写 `@餐饮 120 @日用 80` 就是把同一笔支出拆到两个
+分类。每个分录属于哪一侧仍由账户类型决定，所以两侧可以同时拆。最多只能留一个账户不写金额，剩下的由
+程序补平；`@餐饮 70%` 这样的百分比按总额计算，除不尽的余数给最后一个百分比。各分录加起来和总额不
+一致时，会在写入之前就报错。
 
 ## 自然语言记一笔（可选）
 

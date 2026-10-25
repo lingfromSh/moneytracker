@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-122_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-129_passing-brightgreen.svg)](#testing)
 [![Front-end tests](https://img.shields.io/badge/vitest-37_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
@@ -121,6 +121,9 @@ shortcut, base commodity, default funding account, unclassified account, backups
 | `工资 +12000 @招行 +收入` | `assets:招行 12000.00 CNY` / `income:工资 -12000.00 CNY` |
 | `转 500 > @招行 > @现金` | `assets:招行 -500` / `assets:现金 500` |
 | `酒店 100usd@@720cny @旅行` | `expenses:旅行 100 USD @@ 720 CNY` / `assets:<default> -720 CNY` |
+| `火锅 168 @微信 100 @现金 68` | one expense funded from two accounts |
+| `超市 200 @餐饮 120 @日用 80 @现金` | one expense split across two categories, funding filled in |
+| `聚餐 300 @餐饮 70% @娱乐 30% @招行` | percentages of the line total (remainder to the last) |
 | `"iPhone 15" 8999 @数码` | quoted description, `8999` is the amount |
 | `#昨天 咖啡 4.5` | dated yesterday (`#前天`, `#+3d`, `#2026-10-01` also work) |
 | `= desc:星巴克 -> 餐饮=70%, 咖啡豆=30% from 支付宝` | create or update a rule |
@@ -131,6 +134,14 @@ Sign convention: no sign or `-` is an **expense** (money leaves a funding accoun
 amount is **income**. One `@account` leaves the other side to the account type (`A`/`L` → funding,
 `R`/`X` → category) or to a matching rule; two `@` accounts read as `category funding`. An entry no
 rule and no category covers lands in `expenses:unclassified` with an `:inbox:` tag.
+
+**Splits.** Any `@account` may be followed by an amount, in which case the posting gets exactly that
+amount instead of the whole line total: write `@微信 100 @现金 68` to fund one expense from two
+wallets, or `@餐饮 120 @日用 80` to split it across two categories. The side of each posting still
+comes from the account type, so both sides can be split at once. Exactly one account may be left
+without an amount — the engine fills it so the transaction balances — and a bare percent
+(`@餐饮 70%`) is read against the line total, with any rounding remainder going to the last percent.
+Amounts that do not add up to the total are reported before anything is written.
 
 ## Natural language (optional)
 

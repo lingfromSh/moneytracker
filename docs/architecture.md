@@ -70,6 +70,21 @@ text ──▶ capture::parse_capture ──▶ ParsedCapture
 
 `capture_parse` and `capture_commit` share that path, so the preview is exactly what gets written.
 
+### Multi-posting captures
+
+`parse_capture` records one `Allocation { account, amount, percent }` per `@account` mention, and
+`expand_split` takes over as soon as two accounts are present and at least one carries a value:
+
+- percentages are resolved against the line total (`split_percent`, remainder to the last percent in
+  a group that adds up to 100 %);
+- each posting's side comes from the account kind (`A`/`L` → funding, `R`/`X`/`E` → category), so
+  either side — or both — can be split;
+- at most one account may stay elided; `amounts::balance` fills it, so an entry never has to be
+  written twice just because two wallets paid;
+- a group whose explicit amounts do not add up to the line total is reported
+  (`分类合计 … 与总额 … 不一致`) before `balance()` runs, so the user sees the arithmetic error rather
+  than a generic imbalance.
+
 ## Write path
 
 `writer` is the only module that touches the disk for mutations:

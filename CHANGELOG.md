@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Multi-posting captures: any `@account` may carry its own amount (`火锅 168 @微信 100 @现金 68`) or a
+  percentage of the line total (`@餐饮 70%`), so one expense can come from several wallets or be
+  split across several categories in a single line. The side of each posting still follows the
+  account type, at most one account may stay elided (the engine fills it), and a split that does not
+  add up to the total is rejected before anything is written.
 - Optional natural-language capture (`src-tauri/src/llm.rs`): 设置 → AI 记一笔 configures a provider
   (OpenAI, Anthropic, DeepSeek, Ollama/local, or a custom endpoint), base URL, model, protocol and an
   API key stored separately in `llm.json` (mode `0600`). Pressing <kbd>Tab</kbd> in the capture

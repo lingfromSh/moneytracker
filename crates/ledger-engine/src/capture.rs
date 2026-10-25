@@ -41,6 +41,25 @@ impl Kind {
     }
 }
 
+/// One `@account [amount|percent]` mention on a capture line.
+///
+/// `火锅 168 @餐饮 120 @日用 48 @微信` books 120/48 to two categories and lets the
+/// engine fill the single missing funding posting; `火锅 168 @微信 100 @现金 68`
+/// funds one category from two accounts. A bare percent (`@餐饮 70%`) is read
+/// against the line total.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Allocation {
+    pub account: String,
+    pub amount: Option<Amount>,
+    pub percent: Option<Decimal>,
+}
+
+impl Allocation {
+    fn is_explicit(&self) -> bool {
+        self.amount.is_some() || self.percent.is_some()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ParsedCapture {
     pub kind: Kind,
@@ -53,6 +72,8 @@ pub struct ParsedCapture {
     pub price: Option<(PriceKind, Amount)>,
     pub sign: i8,
     pub accounts: Vec<String>,
+    /// Parallel to `accounts`, carrying the per-account amount/percent if typed.
+    pub allocations: Vec<Allocation>,
     pub transfer: bool,
     pub rule_line: Option<ParsedRuleLine>,
     pub search: Option<String>,
@@ -74,6 +95,7 @@ impl Default for ParsedCapture {
             price: None,
             sign: 0,
             accounts: Vec::new(),
+            allocations: Vec::new(),
             transfer: false,
             rule_line: None,
             search: None,
@@ -325,8 +347,14 @@ pub fn parse_capture(line: &str) -> ParsedCapture {
     let mut words: Vec<String> = Vec::new();
     let mut seen_date = false;
     let mut seen_amount = false;
+    // Set when the token after an `@account` was consumed as its amount.
+    let mut skip_token = false;
 
     for (i, token) in tokens.iter().enumerate() {
+        if skip_token {
+            skip_token = false;
+            continue;
+        }
         if let Some(rest) = token.strip_prefix('#') {
             match parse_date_directive(rest) {
                 Some(d) => {
@@ -361,7 +389,28 @@ pub fn parse_capture(line: &str) -> ParsedCapture {
             if rest.trim().is_empty() {
                 parsed.errors.push("@ needs an account name".into());
             } else {
-                parsed.accounts.push(normalize_account(rest));
+                let account = normalize_account(rest);
+                let mut amount = None;
+                let mut percent = None;
+                // `@微信 100` / `@餐饮 70%` — only after the line total, so a
+                // leading number is never mistaken for a posting split.
+                if seen_amount {
+                    if let Some(next) = tokens.get(i + 1) {
+                        if let Ok(pct) = ledger_core::parse_percent(next) {
+                            percent = Some(pct);
+                            skip_token = true;
+                        } else if let Some((value, _price, _sign)) = parse_amount_token(next) {
+                            amount = Some(value);
+                            skip_token = true;
+                        }
+                    }
+                }
+                parsed.allocations.push(Allocation {
+                    account: account.clone(),
+                    amount,
+                    percent,
+                });
+                parsed.accounts.push(account);
             }
             continue;
         }
@@ -405,7 +454,7 @@ pub fn parse_capture(line: &str) -> ParsedCapture {
             .warnings
             .push("no description yet — rules fall back to the description/defaults".into());
     }
-    if parsed.accounts.len() > 2 {
+    if parsed.accounts.len() > 2 && !parsed.allocations.iter().any(Allocation::is_explicit) {
         parsed
             .warnings
             .push("more than two @accounts given; extra ones are ignored".into());
@@ -445,6 +494,207 @@ fn posting(account: &str, amount: Option<Amount>, price: Option<Price>) -> Posti
         price,
         ..Posting::new(account.to_string(), None)
     }
+}
+
+/// Result of expanding an `@account amount` split.
+struct SplitExpansion {
+    postings: Vec<Posting>,
+    rule_id: Option<String>,
+    unclassified: bool,
+}
+
+/// Sum of the magnitudes of a posting group, or `None` when one is elided.
+fn explicit_sum(postings: &[Posting]) -> Option<Decimal> {
+    let mut sum = Decimal::ZERO;
+    for p in postings {
+        sum += p.amount.as_ref()?.quantity.abs();
+    }
+    Some(sum)
+}
+
+fn same_commodity(postings: &[Posting], commodity: &str) -> bool {
+    postings
+        .iter()
+        .all(|p| p.amount.as_ref().is_none_or(|a| a.commodity == commodity))
+}
+
+/// `火锅 168 @餐饮 120 @日用 48 @微信` and `火锅 168 @微信 100 @现金 68`.
+///
+/// Every `@account` may carry an amount (or a percent of the line total). The
+/// side of each posting comes from its account kind, so a split can fill the
+/// category side, the funding side, or both. Exactly one side may leave an
+/// account elided — `balance()` fills it — which keeps the "write only what you
+/// know" feel of the single-posting form.
+#[allow(clippy::too_many_arguments)]
+fn expand_split(
+    vault: &Vault,
+    parsed: &ParsedCapture,
+    accounts: &[String],
+    total: &Amount,
+    direction: Direction,
+    precision: u32,
+    rule_hit: Option<&RuleDef>,
+    tag_category: Option<String>,
+    warnings: &mut Vec<String>,
+    errors: &mut Vec<String>,
+) -> Option<SplitExpansion> {
+    let explicit = parsed.allocations.iter().any(Allocation::is_explicit);
+    if parsed.allocations.len() < 2 || !explicit {
+        return None;
+    }
+
+    // Resolve percentages against the line total; a group that adds up to 100 %
+    // takes the exact split so rounding never drifts onto the wrong side.
+    let mut amounts: Vec<Option<Amount>> = vec![None; parsed.allocations.len()];
+    let mut percent_slots: Vec<usize> = Vec::new();
+    for (i, alloc) in parsed.allocations.iter().enumerate() {
+        match alloc.percent {
+            Some(pct) => {
+                if pct > Decimal::from(100) {
+                    errors.push(format!("{pct}% 大于 100%，最多只能分配 100%"));
+                }
+                percent_slots.push(i);
+            }
+            None => amounts[i] = alloc.amount.clone(),
+        }
+    }
+    if !percent_slots.is_empty() {
+        let percents: Vec<Decimal> = percent_slots
+            .iter()
+            .map(|i| parsed.allocations[*i].percent.unwrap_or_default())
+            .collect();
+        let hundred = Decimal::from(100);
+        let sum: Decimal = percents.iter().copied().sum();
+        let shares = if (sum - hundred).abs() < Decimal::new(1, 2) {
+            split_percent(total.quantity, &percents, precision)
+        } else {
+            percents
+                .iter()
+                .map(|p| (total.quantity * *p / hundred).round_dp(precision))
+                .collect()
+        };
+        for (slot, share) in percent_slots.iter().zip(shares) {
+            amounts[*slot] = Some(Amount::canonical(share, &total.commodity, precision));
+        }
+    }
+
+    let mut categories: Vec<Posting> = Vec::new();
+    let mut fundings: Vec<Posting> = Vec::new();
+    for (i, alloc) in parsed.allocations.iter().enumerate() {
+        let account = accounts
+            .get(i)
+            .cloned()
+            .unwrap_or_else(|| alloc.account.clone());
+        let funding_side = match kind_of_account(vault, &account) {
+            'A' | 'L' => true,
+            'R' | 'X' | 'E' => false,
+            // An undeclared name is the wallet when a rule supplies the
+            // categories (or for income), matching the single-account rule.
+            _ => rule_hit.is_some() || direction == Direction::Income,
+        };
+        let name = if account.contains(':') {
+            account
+        } else if funding_side {
+            prefixed(&account, "assets")
+        } else {
+            prefixed(&account, "expenses")
+        };
+        let signed = amounts[i].as_ref().map(|amt| {
+            // A bare number takes the line's commodity so the split totals compare
+            // against the total instead of an empty commodity.
+            let amt = if amt.commodity.is_empty() {
+                Amount::canonical(amt.quantity, &total.commodity, precision)
+            } else {
+                amt.clone()
+            };
+            let negative = match (funding_side, direction) {
+                (true, Direction::Income) => false,
+                (true, _) => true,
+                (false, Direction::Income) => true,
+                (false, _) => false,
+            };
+            if negative {
+                amt.neg()
+            } else {
+                amt
+            }
+        });
+        let post = posting(&name, signed, None);
+        if funding_side {
+            fundings.push(post);
+        } else {
+            categories.push(post);
+        }
+    }
+
+    let mut rule_id = None;
+    let mut unclassified = false;
+    if categories.is_empty() {
+        if let Some(rule) = rule_hit {
+            rule_id = Some(rule.id.clone());
+            for (account, amount) in rule.expand(total, direction).postings {
+                categories.push(posting(&account, Some(amount), None));
+            }
+        }
+        if categories.is_empty() {
+            let cat = match tag_category {
+                Some(c) => c,
+                None => {
+                    warnings.push(format!(
+                        "split has no category — booked to {} (Inbox)",
+                        vault.opts.default_unclassified
+                    ));
+                    unclassified = true;
+                    vault.opts.default_unclassified.clone()
+                }
+            };
+            let signed = if direction == Direction::Income {
+                total.neg()
+            } else {
+                total.clone()
+            };
+            categories.push(posting(&cat, Some(signed), None));
+        }
+    }
+    if fundings.is_empty() {
+        fundings.push(posting(&vault.opts.default_funding.clone(), None, None));
+    }
+
+    if let Some((kind, price_amount)) = &parsed.price {
+        if let Some(first) = categories.first_mut() {
+            first.price = Some(Price {
+                kind: *kind,
+                amount: price_amount.clone(),
+                span: Default::default(),
+            });
+        }
+    }
+
+    let tolerance = Decimal::new(1, precision);
+    for (label, group) in [("分类", &categories), ("资金", &fundings)] {
+        if !same_commodity(group, &total.commodity) {
+            continue;
+        }
+        if let Some(sum) = explicit_sum(group) {
+            if (sum - total.quantity).abs() >= tolerance {
+                errors.push(format!(
+                    "{label}合计 {} 与总额 {} 不一致——检查每个 @账户 后面的金额",
+                    vault
+                        .commodities
+                        .format(&Amount::canonical(sum, &total.commodity, precision)),
+                    vault.commodities.format(total)
+                ));
+            }
+        }
+    }
+
+    let mut postings = categories;
+    postings.append(&mut fundings);
+    Some(SplitExpansion {
+        postings,
+        rule_id,
+        unclassified,
+    })
 }
 
 /// Expand a parsed capture line into a balanced transaction.
@@ -519,110 +769,132 @@ pub fn expand(vault: &Vault, parsed: &ParsedCapture) -> ExpandedCapture {
             .iter()
             .find(|t| t.value.is_none() && !matches!(t.key.as_str(), "inbox" | "txn" | "rule"))
             .map(|t| prefixed(&t.key, "expenses"));
-        match accounts.len() {
-            0 => {}
-            1 => {
-                let acct = accounts[0].clone();
-                match kind_of_account(vault, &acct) {
-                    'A' | 'L' => funding = Some(prefixed(&acct, "assets")),
-                    'R' | 'X' | 'E' => category = Some(prefixed(&acct, "expenses")),
-                    _ => {
-                        // An undeclared name is the funding account when a rule
-                        // supplies the categories (or for income), otherwise the
-                        // category itself.
-                        if rule_hit.is_some()
-                            || direction == Direction::Income
-                            || tag_category.is_some()
-                        {
-                            funding = Some(prefixed(&acct, "assets"));
-                            if let Some(cat) = tag_category.clone() {
-                                category = Some(cat);
+        let split = expand_split(
+            vault,
+            parsed,
+            &accounts,
+            &total,
+            direction,
+            precision,
+            rule_hit.as_ref(),
+            tag_category.clone(),
+            &mut warnings,
+            &mut errors,
+        );
+        // `@account amount` splits go their own way; everything below is the
+        // single/dual-account shorthand.
+        'side: {
+            if let Some(split) = split {
+                postings = split.postings;
+                rule_id = split.rule_id;
+                unclassified = split.unclassified;
+                break 'side;
+            }
+            match accounts.len() {
+                0 => {}
+                1 => {
+                    let acct = accounts[0].clone();
+                    match kind_of_account(vault, &acct) {
+                        'A' | 'L' => funding = Some(prefixed(&acct, "assets")),
+                        'R' | 'X' | 'E' => category = Some(prefixed(&acct, "expenses")),
+                        _ => {
+                            // An undeclared name is the funding account when a rule
+                            // supplies the categories (or for income), otherwise the
+                            // category itself.
+                            if rule_hit.is_some()
+                                || direction == Direction::Income
+                                || tag_category.is_some()
+                            {
+                                funding = Some(prefixed(&acct, "assets"));
+                                if let Some(cat) = tag_category.clone() {
+                                    category = Some(cat);
+                                }
+                            } else {
+                                warnings.push(format!(
+                                    "`{acct}` is not declared; treated as the category account"
+                                ));
+                                category = Some(prefixed(&acct, "expenses"));
                             }
-                        } else {
-                            warnings.push(format!(
-                                "`{acct}` is not declared; treated as the category account"
-                            ));
-                            category = Some(prefixed(&acct, "expenses"));
                         }
                     }
                 }
+                _ => {
+                    category = Some(prefixed(&accounts[0], "expenses"));
+                    funding = Some(prefixed(&accounts[1], "assets"));
+                }
             }
-            _ => {
-                category = Some(prefixed(&accounts[0], "expenses"));
-                funding = Some(prefixed(&accounts[1], "assets"));
-            }
-        }
 
-        let both_funding = category
-            .as_deref()
-            .map(|a| matches!(kind_of_account(vault, a), 'A' | 'L'))
-            .unwrap_or(false)
-            && funding
+            let both_funding = category
                 .as_deref()
                 .map(|a| matches!(kind_of_account(vault, a), 'A' | 'L'))
-                .unwrap_or(false);
-        if both_funding {
-            // `@招行 @现金` between two assets reads as a transfer.
-            let src = category.clone().unwrap();
-            let dst = funding.clone().unwrap();
-            postings.push(posting(&src, Some(total.neg()), None));
-            postings.push(posting(&dst, Some(total.clone()), None));
-        } else {
-            if let Some(rule) = rule_hit.clone() {
-                rule_id = Some(rule.id.clone());
-                let expansion = rule.expand(&total, direction);
-                for (account, amount) in expansion.postings {
-                    postings.push(posting(&account, Some(amount), None));
-                }
-                if funding.is_none() {
-                    funding = expansion
-                        .funding
-                        .or_else(|| Some(vault.opts.default_funding.clone()));
+                .unwrap_or(false)
+                && funding
+                    .as_deref()
+                    .map(|a| matches!(kind_of_account(vault, a), 'A' | 'L'))
+                    .unwrap_or(false);
+            if both_funding {
+                // `@招行 @现金` between two assets reads as a transfer.
+                let src = category.clone().unwrap();
+                let dst = funding.clone().unwrap();
+                postings.push(posting(&src, Some(total.neg()), None));
+                postings.push(posting(&dst, Some(total.clone()), None));
+            } else {
+                if let Some(rule) = rule_hit.clone() {
+                    rule_id = Some(rule.id.clone());
+                    let expansion = rule.expand(&total, direction);
+                    for (account, amount) in expansion.postings {
+                        postings.push(posting(&account, Some(amount), None));
+                    }
+                    if funding.is_none() {
+                        funding = expansion
+                            .funding
+                            .or_else(|| Some(vault.opts.default_funding.clone()));
+                    }
+                    if postings.is_empty() {
+                        warnings.push(format!(
+                            "rule {} has no template postings; falling back to a single category",
+                            rule.id
+                        ));
+                    }
                 }
                 if postings.is_empty() {
-                    warnings.push(format!(
-                        "rule {} has no template postings; falling back to a single category",
-                        rule.id
-                    ));
-                }
-            }
-            if postings.is_empty() {
-                let cat = match category.or_else(|| tag_category.clone()) {
-                    Some(c) => c,
-                    None => {
-                        warnings.push(format!(
-                            "no rule and no category account — booked to {} (Inbox)",
-                            vault.opts.default_unclassified
-                        ));
-                        unclassified = true;
-                        vault.opts.default_unclassified.clone()
-                    }
-                };
-                let signed = if direction == Direction::Income {
-                    total.neg()
-                } else {
-                    total.clone()
-                };
-                let price = parsed.price.as_ref().map(|(kind, amount)| Price {
-                    kind: *kind,
-                    amount: amount.clone(),
-                    span: Default::default(),
-                });
-                postings.push(posting(&cat, Some(signed), price));
-            } else if let Some((kind, price_amount)) = &parsed.price {
-                if let Some(first) = postings.first_mut() {
-                    first.price = Some(Price {
+                    let cat = match category.or_else(|| tag_category.clone()) {
+                        Some(c) => c,
+                        None => {
+                            warnings.push(format!(
+                                "no rule and no category account — booked to {} (Inbox)",
+                                vault.opts.default_unclassified
+                            ));
+                            unclassified = true;
+                            vault.opts.default_unclassified.clone()
+                        }
+                    };
+                    let signed = if direction == Direction::Income {
+                        total.neg()
+                    } else {
+                        total.clone()
+                    };
+                    let price = parsed.price.as_ref().map(|(kind, amount)| Price {
                         kind: *kind,
-                        amount: price_amount.clone(),
+                        amount: amount.clone(),
                         span: Default::default(),
                     });
+                    postings.push(posting(&cat, Some(signed), price));
+                } else if let Some((kind, price_amount)) = &parsed.price {
+                    if let Some(first) = postings.first_mut() {
+                        first.price = Some(Price {
+                            kind: *kind,
+                            amount: price_amount.clone(),
+                            span: Default::default(),
+                        });
+                    }
                 }
+                let funding = funding.unwrap_or_else(|| vault.opts.default_funding.clone());
+                if is_zero_amount(&total) {
+                    errors.push("the amount is zero".into());
+                }
+                postings.push(posting(&funding, None, None));
             }
-            let funding = funding.unwrap_or_else(|| vault.opts.default_funding.clone());
-            if is_zero_amount(&total) {
-                errors.push("the amount is zero".into());
-            }
-            postings.push(posting(&funding, None, None));
         }
     }
 
@@ -965,6 +1237,135 @@ mod tests {
             .map(|p| p.account.as_str())
             .collect();
         assert_eq!(accounts, vec!["assets:招行", "assets:现金"]);
+    }
+
+    fn split_postings(expanded: &ExpandedCapture) -> Vec<(String, Option<Decimal>)> {
+        expanded
+            .txn
+            .postings
+            .iter()
+            .map(|p| (p.account.clone(), p.effective_amount().map(|a| a.quantity)))
+            .collect()
+    }
+
+    fn sum_of(expanded: &ExpandedCapture) -> Decimal {
+        expanded
+            .txn
+            .postings
+            .iter()
+            .filter_map(|p| p.effective_amount().map(|a| a.quantity))
+            .sum()
+    }
+
+    #[test]
+    fn parses_per_account_amounts() {
+        let parsed = parse_capture("火锅 168 @assets:wallet 100 @assets:cash 68");
+        assert_eq!(parsed.accounts, vec!["assets:wallet", "assets:cash"]);
+        assert_eq!(parsed.allocations.len(), 2);
+        assert_eq!(
+            parsed.allocations[0].amount.as_ref().map(|a| a.quantity),
+            Some(Decimal::new(100, 0))
+        );
+        assert_eq!(
+            parsed.allocations[1].amount.as_ref().map(|a| a.quantity),
+            Some(Decimal::new(68, 0))
+        );
+        // The total stays the line amount, not the last allocation.
+        assert_eq!(
+            parsed.amount.as_ref().map(|a| a.quantity),
+            Some(Decimal::new(168, 0))
+        );
+    }
+
+    #[test]
+    fn keeps_single_account_captures_unchanged() {
+        let parsed = parse_capture("咖啡 4.5 @微信 +餐饮");
+        assert_eq!(parsed.allocations.len(), 1);
+        assert!(parsed.allocations[0].amount.is_none());
+        assert!(parsed.allocations[0].percent.is_none());
+    }
+
+    #[test]
+    fn splits_the_funding_side_across_accounts() {
+        let (_dir, vault) = test_vault();
+        let expanded = expand(
+            &vault,
+            &parse_capture("火锅 168 @assets:wallet 100 @assets:cash 68 +餐饮"),
+        );
+        assert!(expanded.errors.is_empty(), "{:?}", expanded.errors);
+        assert_eq!(
+            split_postings(&expanded),
+            vec![
+                ("expenses:餐饮".to_string(), Some(Decimal::new(168, 0))),
+                ("assets:wallet".to_string(), Some(Decimal::new(-100, 0))),
+                ("assets:cash".to_string(), Some(Decimal::new(-68, 0))),
+            ]
+        );
+        assert_eq!(sum_of(&expanded), Decimal::ZERO);
+    }
+
+    #[test]
+    fn splits_the_category_side_and_elides_the_funding() {
+        let (_dir, vault) = test_vault();
+        let expanded = expand(
+            &vault,
+            &parse_capture("超市 200 @expenses:food 120 @日用 80 @assets:cash"),
+        );
+        assert!(expanded.errors.is_empty(), "{:?}", expanded.errors);
+        assert_eq!(
+            split_postings(&expanded),
+            vec![
+                ("expenses:food".to_string(), Some(Decimal::new(120, 0))),
+                ("expenses:日用".to_string(), Some(Decimal::new(80, 0))),
+                ("assets:cash".to_string(), Some(Decimal::new(-200, 0))),
+            ]
+        );
+    }
+
+    #[test]
+    fn percentages_split_without_rounding_drift() {
+        let (_dir, vault) = test_vault();
+        let expanded = expand(
+            &vault,
+            &parse_capture("超市 100 @expenses:food 33.33% @日用 33.33% @其他 33.34% @assets:cash"),
+        );
+        assert!(expanded.errors.is_empty(), "{:?}", expanded.errors);
+        let postings = split_postings(&expanded);
+        assert_eq!(postings[0].1, Some(Decimal::new(3333, 2)));
+        assert_eq!(postings[1].1, Some(Decimal::new(3333, 2)));
+        assert_eq!(postings[2].1, Some(Decimal::new(3334, 2)));
+        assert_eq!(sum_of(&expanded), Decimal::ZERO);
+    }
+
+    #[test]
+    fn reports_a_split_that_does_not_add_up_to_the_total() {
+        let (_dir, vault) = test_vault();
+        let expanded = expand(
+            &vault,
+            &parse_capture("火锅 168 @assets:wallet 100 @assets:cash 50"),
+        );
+        assert!(
+            expanded
+                .errors
+                .iter()
+                .any(|e| e.contains("资金合计 150.00 CNY 与总额 168.00 CNY 不一致")),
+            "{:?}",
+            expanded.errors
+        );
+    }
+
+    #[test]
+    fn three_funding_accounts_keep_their_own_amounts() {
+        let (_dir, vault) = test_vault();
+        let expanded = expand(
+            &vault,
+            &parse_capture(
+                "团建 300 @expenses:food 300 @assets:cash 100 @assets:bank 120 @assets:wallet 80",
+            ),
+        );
+        assert!(expanded.errors.is_empty(), "{:?}", expanded.errors);
+        assert_eq!(sum_of(&expanded), Decimal::ZERO);
+        assert_eq!(expanded.txn.postings.len(), 4);
     }
 
     #[test]

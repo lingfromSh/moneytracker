@@ -43,6 +43,13 @@ function SyntaxHint() {
         </span>
       </div>
       <div className="flex gap-2">
+        <span className="w-7 shrink-0 opacity-60">分录</span>
+        <span className="min-w-0">
+          <Code>火锅 168 @微信 100 @现金 68</Code> 一笔支出多个来源 ·{" "}
+          <Code>@餐饮 70%</Code> 按比例 · 不写金额的账户由程序补平
+        </span>
+      </div>
+      <div className="flex gap-2">
         <span className="w-7 shrink-0 opacity-60">其他</span>
         <span className="min-w-0">
           <Code>+餐饮</Code> 加标签 · <Code>&gt; @a &gt; @b</Code> 转账 · <Code>=</Code>{" "}
@@ -280,10 +287,10 @@ export function CaptureWindow() {
   const llm = llmStatus.data;
 
   return (
-    <div className="flex h-full flex-col justify-center p-3">
+    <div className="flex h-full flex-col p-3">
       <div
         className={cn(
-          "rounded-[var(--radius-card)] border bg-[var(--color-surface)]/95 p-3 shadow-xl backdrop-blur",
+          "flex h-full min-h-0 flex-col rounded-[var(--radius-card)] border bg-[var(--color-surface)]/95 p-3 shadow-xl backdrop-blur",
           error ? "border-[var(--color-danger)]" : "border-[var(--color-line)]",
         )}
       >
@@ -325,7 +332,7 @@ export function CaptureWindow() {
           ) : null}
         </div>
 
-        <div className="mt-2 min-h-[46px] border-t border-[var(--color-line)] pt-2 text-xs">
+        <div className="mt-2 min-h-0 flex-1 overflow-y-auto border-t border-[var(--color-line)] pt-2 text-xs">
           {error ? (
             <div className="text-[var(--color-danger)]">{error}</div>
           ) : mode === "llm" && draft ? (
