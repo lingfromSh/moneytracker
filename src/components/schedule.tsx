@@ -138,7 +138,7 @@ export function ScheduleCard({ onOpen }: { onOpen: () => void }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-auto p-3 text-xs">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <Cell label={totals ? monthLabel(totals.month) : "本月"} tone="income">
           <span className="font-mono">{money(totals?.income.value, totals?.income.display)}</span>
         </Cell>

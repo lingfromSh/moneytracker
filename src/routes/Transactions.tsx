@@ -447,7 +447,7 @@ function TxnEditor({
   return (
     <Modal open onClose={onClose} title="编辑交易" width="max-w-2xl">
       <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Field label="日期">
             <Input value={date} onChange={(e) => setDate(e.target.value)} />
           </Field>
