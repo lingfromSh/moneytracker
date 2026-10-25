@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-25
+
 ### Added
 
 - **手机端自适应**: safe-area insets (`env(safe-area-inset-*)`) on the header and the tab bar, a
@@ -260,6 +262,7 @@ First complete release: the ledger format, the engine and every view are in plac
   unstable `fmt::from_fn` helper and `tauri-specta` pins that exact version.
 - The app targets macOS 13+; the Rust core is portable but the window/tray layer is not.
 
-[Unreleased]: https://github.com/lingfromSh/moneytracker/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/lingfromSh/moneytracker/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/lingfromSh/moneytracker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/lingfromSh/moneytracker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/lingfromSh/moneytracker/releases/tag/v0.1.0
