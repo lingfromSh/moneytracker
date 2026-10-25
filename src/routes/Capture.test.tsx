@@ -76,11 +76,11 @@ function preview(overrides: Partial<CaptureParseDto_Serialize> = {}): CapturePar
   };
 }
 
-function renderCapture() {
+function renderCapture(onDone?: () => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: 0 } } });
   return render(
     <QueryClientProvider client={client}>
-      <CaptureWindow />
+      <CaptureWindow onDone={onDone} />
     </QueryClientProvider>,
   );
 }
@@ -128,6 +128,33 @@ describe("CaptureWindow", () => {
     await userEvent.keyboard("{Meta>}{Enter}{/Meta}");
 
     await waitFor(() => expect(hideMock).toHaveBeenCalled());
+  });
+
+  it("hides the palette when it owns the window (desktop)", async () => {
+    // Regression: the palette must never navigate to a route — that turned the
+    // floating 640×208 window into a miniature dashboard.
+    parseMock.mockResolvedValue(preview());
+    renderCapture();
+
+    await userEvent.type(screen.getByLabelText("快录输入"), "咖啡 4.5 @微信");
+    await waitFor(() => expect(parseMock).toHaveBeenCalled());
+    await userEvent.keyboard("{Meta>}{Enter}{/Meta}");
+
+    await waitFor(() => expect(commitMock).toHaveBeenCalled());
+    expect(hideMock).toHaveBeenCalled();
+  });
+
+  it("calls onDone instead of hiding when embedded in the mobile shell", async () => {
+    const onDone = vi.fn();
+    parseMock.mockResolvedValue(preview());
+    renderCapture(onDone);
+
+    await userEvent.type(screen.getByLabelText("快录输入"), "咖啡 4.5 @微信");
+    await waitFor(() => expect(parseMock).toHaveBeenCalled());
+    await userEvent.keyboard("{Meta>}{Enter}{/Meta}");
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(hideMock).not.toHaveBeenCalled();
   });
 
   it("shows parser errors instead of a preview", async () => {

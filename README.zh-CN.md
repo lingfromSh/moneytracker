@@ -312,7 +312,7 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 
 ```bash
 scripts/android-apk.sh          # release / arm64 / 已签名
-adb install -r dist/moneytracker-*.apk
+adb install -r build/android/moneytracker-*.apk
 ```
 
 需要 Android SDK（`platform-tools`、`platforms;android-35`、`build-tools;35.0.0`、`ndk;27.2.12479018`）、JDK 17+ 和 `rustup target add aarch64-linux-android`。签名密钥在 `~/.moneytracker-android/moneytracker.jks`(口令见本机)，**务必备份**：只有同一把钥匙签出来的新版本才能覆盖安装。

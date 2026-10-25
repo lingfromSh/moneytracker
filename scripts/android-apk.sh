@@ -46,15 +46,15 @@ if [ ! -f "$UNSIGNED" ]; then
 fi
 
 VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
-OUT="dist/moneytracker-$VERSION-$TARGET.apk"
-mkdir -p dist
+OUT="build/android/moneytracker-$VERSION-$TARGET.apk"
+mkdir -p build/android
 echo "==> 签名"
-"$BUILD_TOOLS/zipalign" -p -f 4 "$UNSIGNED" dist/aligned.apk
+"$BUILD_TOOLS/zipalign" -p -f 4 "$UNSIGNED" build/android/aligned.apk
 "$BUILD_TOOLS/apksigner" sign \
   --ks "$KEYSTORE" --ks-pass "pass:$KEYSTORE_PASS" --key-pass "pass:$KEYSTORE_PASS" \
-  --ks-key-alias "$KEY_ALIAS" --out "$OUT" dist/aligned.apk
+  --ks-key-alias "$KEY_ALIAS" --out "$OUT" build/android/aligned.apk
 "$BUILD_TOOLS/apksigner" verify --verbose "$OUT" | head -3
-rm -f dist/aligned.apk
+rm -f build/android/aligned.apk
 
 echo "==> $OUT ($(du -h "$OUT" | cut -f1))"
 echo "    adb install -r \"$OUT\""

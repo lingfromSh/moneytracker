@@ -1,4 +1,5 @@
 import * as React from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, onLedgerChanged, onParseDiagnostics, queryKeys } from "./lib/ipc";
 import { cn } from "./lib/format";
@@ -69,10 +70,36 @@ export function useRoute(): [Route, (next: Route) => void] {
   return [route, go];
 }
 
+/**
+ * `true` inside the floating capture window.
+ *
+ * That window is a palette, not a place: it must render the capture form no
+ * matter what its URL says. Losing the `#/capture` hash (or any navigation
+ * inside it) used to leave a miniature copy of the dashboard floating over the
+ * app, which is exactly what a palette must never do.
+ */
+function useCaptureHost(): boolean {
+  const [host, setHost] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      setHost(getCurrentWindow().label === "capture");
+    } catch {
+      /* plain browser preview and tests have no Tauri window */
+    }
+  }, []);
+  return host;
+}
+
 export function App() {
   const [route, go] = useRoute();
-  if (route === "capture")
-    return <CaptureWindow onDone={() => go("dashboard")} />;
+  const captureHost = useCaptureHost();
+  if (route === "capture" || captureHost)
+    return (
+      // `onDone` is the mobile shell, where capture is a page in the only
+      // window: navigating back is the only way to leave it. On the desktop the
+      // palette must hide itself instead of navigating to the dashboard.
+      <CaptureWindow onDone={isMobile ? () => go("dashboard") : undefined} />
+    );
   return <Shell route={route} go={go} />;
 }
 

@@ -337,7 +337,7 @@ Build an installable APK:
 
 ```bash
 scripts/android-apk.sh          # release, arm64, signed
-adb install -r dist/moneytracker-*.apk
+adb install -r build/android/moneytracker-*.apk
 ```
 
 It needs the Android SDK (`platform-tools`, `platforms;android-35`, `build-tools;35.0.0`,

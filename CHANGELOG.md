@@ -128,6 +128,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The 快速记账 palette no longer turns into a miniature dashboard. Committing an entry navigated the
+  capture window to `#/dashboard`, which left a 640×208 copy of the app floating above the main
+  window; the palette now hides itself on the desktop (only the mobile shell, where capture is a page,
+  navigates back) and the capture window renders the palette regardless of its URL.
+
 - A dashboard panel added by a newer version no longer stays invisible for anyone who already saved a
   layout: missing panels (e.g. 固定收支) are appended below the existing arrangement instead of being
   dropped, so a saved layout keeps working across upgrades.
