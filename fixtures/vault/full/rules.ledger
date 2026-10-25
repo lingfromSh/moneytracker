@@ -1,0 +1,20 @@
+; MoneyTracker rules — read by the app, never included by index.ledger.
+; New entries typed into the capture window pick the first rule whose query
+; matches; percentages always add up to the whole amount.
+
+= desc:星巴克  ; rule:r-star order:10 enabled:true from:assets:wallet:alipay
+    expenses:food:coffee      70.00%
+    expenses:food             30.00%
+    assets:wallet:alipay
+
+= desc:盒马  ; rule:r-hema order:20 enabled:true from:assets:wallet:alipay
+    expenses:food:groceries  100.00%
+    assets:wallet:alipay
+
+= desc:加油  ; rule:r-fuel order:30 enabled:true from:assets:wallet:wechat
+    expenses:transport:fuel  100.00%
+    assets:wallet:wechat
+
+= desc:房租收入 and not desc:押金  ; rule:r-rent order:40 enabled:true from:assets:bank:cmb
+    income:rent              100.00%
+    assets:bank:cmb

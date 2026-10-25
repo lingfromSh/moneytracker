@@ -483,7 +483,16 @@ fn budget_rows(vault: &Vault, month: &str) -> Vec<BudgetRowDto> {
             } else {
                 Decimal::ZERO
             };
-            let spent = actual.get(&b.account).copied().unwrap_or_default();
+            // An envelope on `expenses:food` also covers its sub-accounts, which is
+            // how people actually budget ("餐饮" means all of 餐饮:*).
+            let prefix = format!("{}:", b.account);
+            let spent: Decimal = actual
+                .iter()
+                .filter(|(account, _)| {
+                    account.as_str() == b.account || account.starts_with(&prefix)
+                })
+                .map(|(_, value)| *value)
+                .sum();
             BudgetRowDto {
                 account: b.account.clone(),
                 kind: b.kind.clone(),

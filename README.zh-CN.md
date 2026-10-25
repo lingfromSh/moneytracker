@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-136_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-142_passing-brightgreen.svg)](#测试)
 [![Front-end tests](https://img.shields.io/badge/vitest-38_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
@@ -38,6 +38,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 - [写入安全](#写入安全)
 - [开发](#开发)
 - [测试](#测试)
+  - [示例账本](#示例账本)
 - [项目结构](#项目结构)
 - [已知限制](#已知限制)
 - [参与贡献](#参与贡献)
@@ -245,22 +246,35 @@ pnpm bindings                    # 由 Rust 命令重新生成 src/lib/bindings.
 ## 测试
 
 ```bash
-cargo test --workspace                        # 110 个 Rust 测试，12 个 suite
+cargo test --workspace                        # 142 个 Rust 测试，13 个 suite
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 15 个 Vitest 测试
+pnpm test                                     # 38 个 Vitest 测试
 pnpm build                                    # tsc --noEmit && vite build
 ```
 
 | 层 | 覆盖内容 |
 | --- | --- |
 | `crates/ledger-core/tests/corpus.rs` | `fixtures/grammar/*.ledger` 解析无错、打印→解析→打印逐字节一致；`fixtures/errors/*.ledger` 产出文档化的诊断码与行号 |
-| `crates/ledger-engine` | include 图、通配符、循环、账户类型推断、汇率、规则、快录展开、报表、写入安全，以及仓库内的样例账本端到端 |
+| `crates/ledger-engine` | include 图、通配符、循环、账户类型推断、汇率、规则、快录展开、报表、写入安全，以及仓库内的样例账本与示例账本端到端 |
 | `crates/ledger-engine/tests/hledger_diff.rs` | `Vault::balances()` 与 `hledger balance --flat --no-total -O csv` 完全一致；`hledger check` 接受引擎刚写出的账本（无 `hledger` 时跳过） |
 | `src-tauri/src/editing.rs` | 快录 → 落盘 → 重载、span 级修改、删除、批量修改，以及文件被外部改动时拒绝写入 |
 | `src/**/*.test.tsx` | 快录面板、看板、流水列表（mock IPC 层） |
 
 `scripts/smoke.sh` 会跑完上述全部检查，并在提交的 TypeScript 绑定过期时失败。
+
+### 示例账本
+
+仓库里带了两份账本，都是可以直接用 `hledger` 读的纯文本，也可以让应用打开
+（**设置 → 账本 → 打开已有账本**）：
+
+| 账本 | 内容 |
+| --- | --- |
+| `fixtures/vault/sample` | 7 笔：工资、房租、规则拆分的咖啡、一次美元旅行——小到可以逐行核对 |
+| `fixtures/vault/full` | 16 个月、336 笔：现金、两张储蓄卡、电子钱包、信用卡、房贷与车贷、自住房与出租房、基金股票持仓、利息与分红、月度与年度预算信封，以及若干大额支出（装修 104,300、家电 58,200、购车）。净资产 2,384,394 CNY |
+
+`fixtures/vault/full` 由 `scripts/gen-full-vault.py` 生成；每个账户/特性演示了什么，见
+[`fixtures/vault/full/README.md`](fixtures/vault/full/README.md)。
 
 性能（M 系列笔记本，`cargo run -q --release -p ledger-engine --example bench_load -- 100000`
 生成 10 万笔交易、5183 个文件）：
@@ -279,7 +293,7 @@ crates/ledger-query    hledger 查询子集：acct/desc/date/tag/amt，and/or/no
 crates/ledger-engine   include 图、索引、余额、快录、规则、汇率、报表、安全写入
 src-tauri              窗口、托盘、全局快捷键、文件监听、IPC
 src                    React 19 + Vite + Tailwind v4 + Recharts + d3-sankey
-fixtures/              语法语料、错误语料、样例账本
+fixtures/              语法语料、错误语料、样例账本与示例账本
 docs/                 架构与账本格式
 ```
 

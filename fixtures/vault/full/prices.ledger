@@ -1,0 +1,8 @@
+; Exchange rates. MoneyTracker only trusts `P` lines: the rate for a
+; transaction is the latest one on or before its date.
+P 2025-07-01 USD 7.16 CNY
+P 2025-10-01 USD 7.12 CNY
+P 2026-01-01 USD 7.30 CNY
+P 2026-04-01 USD 7.24 CNY
+P 2026-07-01 USD 7.18 CNY
+P 2026-10-01 USD 7.21 CNY

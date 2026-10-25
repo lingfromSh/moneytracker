@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `fixtures/vault/full` — a 16-month, 336-entry showcase household ledger (cash, two bank accounts,
+  e-wallets, a credit card, mortgage and car loans, a self-owned and a rented flat, fund/stock
+  positions, interest, dividends, monthly and yearly envelopes, and big one-off expenses) plus
+  `scripts/gen-full-vault.py` and an engine integration test that pins its balance sheet.
 - Budget envelopes in `budgets.ledger` now cover **savings goals**, not just spending budgets: the
   positive leg of a `~ monthly` block is the envelope, an `assets:` / `liabilities:` account is
   measured by the money that actually moved into it this month, and the dashboard labels those rows
@@ -59,6 +63,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Budgets on a parent account now measure the whole subtree: an `expenses:food` envelope counts
+  `expenses:food:groceries` instead of showing 0 spent.
+- Amounts rendered from a computed quantity keep the ledger's grouping style, so budget rows read
+  `4,500.00 CNY` instead of `4500.00 CNY`.
 - Switching the LLM provider in 设置 → AI 记一笔 silently snapped back to the previous provider:
   the select emitted four `update()` calls in one event and each one spread the render-time draft, so
   only the last change survived. `update()` is now a functional state update and the provider switch

@@ -1,0 +1,12 @@
+; 2026 — month files, newest last.
+
+include 2026-01.ledger
+include 2026-02.ledger
+include 2026-03.ledger
+include 2026-04.ledger
+include 2026-05.ledger
+include 2026-06.ledger
+include 2026-07.ledger
+include 2026-08.ledger
+include 2026-09.ledger
+include 2026-10.ledger

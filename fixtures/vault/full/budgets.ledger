@@ -1,0 +1,18 @@
+; Envelope budgets. `~` blocks belong here, not in the day files.
+; expenses:* envelopes cap spending; assets:*/liabilities:* envelopes are
+; savings goals and count money moved towards them.
+
+~ monthly from 2025-07-01
+    expenses:food                      4,500.00 CNY
+    expenses:transport                 1,800.00 CNY
+    expenses:home:utilities              800.00 CNY
+    expenses:home:mortgage_interest    6,400.00 CNY
+    expenses:shopping                  1,500.00 CNY
+    expenses:entertainment             1,000.00 CNY
+    expenses:health                      600.00 CNY
+    assets:savings:emergency           1,500.00 CNY
+
+~ yearly from 2025-07-01
+    expenses:travel                   30,000.00 CNY
+    expenses:insurance                12,000.00 CNY
+    expenses:vehicle:maintenance       6,000.00 CNY

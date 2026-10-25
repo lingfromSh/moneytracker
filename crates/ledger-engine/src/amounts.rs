@@ -61,10 +61,21 @@ impl CommodityTable {
     }
 
     /// Amount rendered at this commodity's display precision.
+    ///
+    /// Amounts built with `Amount::canonical` carry no grouping, so the style
+    /// recorded from the ledger's `commodity`/posting declarations is used to
+    /// fill in the group mark (and the prefix/space layout) when it is missing.
     pub fn format(&self, amount: &Amount) -> String {
-        amount
-            .with_precision(self.precision_of(&amount.commodity))
-            .format()
+        let mut rendered = amount.with_precision(self.precision_of(&amount.commodity));
+        if rendered.style.group_mark.is_none() {
+            if let Some(style) = self.symbols.get(&rendered.commodity) {
+                rendered.style.group_mark = style.group_mark;
+                rendered.style.prefix = style.prefix;
+                rendered.style.space = style.space;
+                rendered.style.decimal_mark = style.decimal_mark;
+            }
+        }
+        rendered.format()
     }
 }
 

@@ -1,0 +1,58 @@
+; MoneyTracker showcase vault — account declarations.
+; `type:` tags drive the dashboard (A assets, L liabilities, R income,
+; X expenses). Anything without a tag falls back to the top-level name.
+
+account assets:cash                        ; type:A
+account assets:bank:icbc                   ; type:A
+account assets:bank:cmb                    ; type:A
+account assets:wallet:alipay               ; type:A
+account assets:wallet:wechat               ; type:A
+account assets:savings:emergency           ; type:A
+account assets:invest:fund                 ; type:A
+account assets:invest:stock                ; type:A
+account assets:property:home               ; type:A
+account assets:property:rental             ; type:A
+account assets:vehicle:car                 ; type:A
+
+account liabilities:credit:cmb             ; type:L
+account liabilities:mortgage:home          ; type:L
+account liabilities:loan:car               ; type:L
+
+account equity:opening                     ; type:E
+account equity:gift                        ; type:E
+
+account income:salary                      ; type:R
+account income:bonus                       ; type:R
+account income:interest                    ; type:R
+account income:dividend                    ; type:R
+account income:rent                        ; type:R
+account income:invest:gain                 ; type:R
+account income:other                       ; type:R
+
+account expenses:food:groceries            ; type:X
+account expenses:food:restaurant           ; type:X
+account expenses:food:coffee               ; type:X
+account expenses:home:mortgage_interest    ; type:X
+account expenses:home:utilities            ; type:X
+account expenses:home:property_fee         ; type:X
+account expenses:home:repair               ; type:X
+account expenses:home:renovation           ; type:X
+account expenses:home:appliance            ; type:X
+account expenses:transport:fuel            ; type:X
+account expenses:transport:transit         ; type:X
+account expenses:transport:parking         ; type:X
+account expenses:transport:loan_interest   ; type:X
+account expenses:vehicle:maintenance       ; type:X
+account expenses:shopping                  ; type:X
+account expenses:shopping:clothing         ; type:X
+account expenses:shopping:electronics      ; type:X
+account expenses:health:clinic             ; type:X
+account expenses:health:pharmacy           ; type:X
+account expenses:education:books           ; type:X
+account expenses:education:course          ; type:X
+account expenses:entertainment             ; type:X
+account expenses:travel                    ; type:X
+account expenses:insurance                 ; type:X
+account expenses:fees:bank                 ; type:X
+account expenses:tax                       ; type:X
+account expenses:unclassified              ; type:X
