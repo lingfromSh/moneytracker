@@ -305,6 +305,9 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 
 手机版不是复刻：还是同一份 `ledger-core` / `ledger-engine` / `ledger-sync`，只是把桌面专属的层（托盘图标、菜单栏定位、全局快捷键、置顶记账小窗）在编译期摘掉。
 
+已经打好包的安装包在 [Releases](https://github.com/lingfromSh/moneytracker/releases/latest) 里，下载 `moneytracker-<版本>-arm64.apk` 直接装（需要允许「未知来源」）。
+
+
 | 手机上 | 行为 |
 | --- | --- |
 | 首次启动 | 在 App 私有目录（`/data/data/dev.moneytracker.app/files/ledger`）自动建账本并打开，不需要选文件夹 |

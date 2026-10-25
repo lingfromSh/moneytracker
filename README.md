@@ -332,6 +332,8 @@ The phone build is not a port: it is the same `ledger-core` / `ledger-engine` / 
 with the desktop-only layers compiled out (tray icon, menu-bar positioning, global hotkey, the
 always-on-top capture palette).
 
+Signed installers live in [Releases](https://github.com/lingfromSh/moneytracker/releases/latest) — grab `moneytracker-<version>-arm64.apk` and allow installing from unknown sources.
+
 | on the phone | behaviour |
 | --- | --- |
 | first launch | creates a vault in the app's private storage (`/data/data/dev.moneytracker.app/files/ledger`) and opens it — no folder picker |
