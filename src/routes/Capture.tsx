@@ -120,7 +120,9 @@ function LlmHint({
  * `llm_draft` for natural language), so this component only renders the preview,
  * switches modes and decides what Enter means for each kind.
  */
-export function CaptureWindow() {
+/** `onDone` is passed by the mobile shell, where capture is a route rather than
+ * a separate always-on-top window: finishing navigates back instead of hiding. */
+export function CaptureWindow({ onDone }: { onDone?: () => void } = {}) {
   const [text, setText] = React.useState("");
   const [mode, setMode] = React.useState<Mode>(
     () => (localStorage.getItem(MODE_KEY) === "llm" ? "llm" : "ledger"),
@@ -238,7 +240,10 @@ export function CaptureWindow() {
           setStatus(`已记入 ${saved.file}`);
         }
         reset();
-        if (!keepOpen) await hideCaptureWindow();
+        if (!keepOpen) {
+          if (onDone) onDone();
+          else await hideCaptureWindow();
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -269,6 +274,7 @@ export function CaptureWindow() {
     } else if (event.key === "Escape") {
       event.preventDefault();
       if (text) reset();
+      else if (onDone) onDone();
       else void hideCaptureWindow();
     } else if (event.key === "Tab") {
       event.preventDefault();

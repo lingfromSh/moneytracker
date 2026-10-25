@@ -46,7 +46,11 @@ pub(crate) fn emit_ledger_changed(app: &AppHandle, paths: Vec<String>, reason: &
 
 // ---------------------------------------------------------------- session
 
-fn open_and_store(app: &AppHandle, state: &AppState, path: &Path) -> CmdResult<OpenVaultResultDto> {
+pub(crate) fn open_and_store(
+    app: &AppHandle,
+    state: &AppState,
+    path: &Path,
+) -> CmdResult<OpenVaultResultDto> {
     let mut settings = state.settings();
     let opts = settings.vault_options();
     let vault = Arc::new(Vault::load(path, &opts)?);

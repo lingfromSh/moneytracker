@@ -15,9 +15,12 @@ mod window;
 
 use std::sync::Arc;
 
+#[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+#[cfg(desktop)]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
+#[cfg(desktop)]
 use tauri_plugin_positioner::{Position, WindowExt};
 use tauri_specta::{collect_commands, collect_events, Builder};
 
@@ -108,6 +111,7 @@ pub fn build_specta() -> Builder<tauri::Wry> {
         ])
 }
 
+#[cfg(desktop)]
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "打开 MoneyTracker", true, None::<&str>)?;
     let capture = MenuItem::with_id(app, "capture", "快速记账", true, None::<&str>)?;
@@ -155,6 +159,48 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Where `settings.json`, the audit log and `sync.json` live.
+///
+/// `dirs::config_dir()` is `None` on Android, where the only writable place is
+/// the app's own private directory, so ask Tauri for that instead.
+fn config_dir(app: &tauri::App) -> std::path::PathBuf {
+    #[cfg(desktop)]
+    {
+        let _ = app;
+        state::default_config_dir()
+    }
+    #[cfg(not(desktop))]
+    {
+        app.path()
+            .app_config_dir()
+            .unwrap_or_else(|_| state::default_config_dir())
+    }
+}
+
+/// Phones have no folder picker, so the first launch creates a vault inside the
+/// app's private storage and remembers it as the current one.
+#[cfg(mobile)]
+fn ensure_mobile_vault(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    if state.settings().vault_path.is_some() {
+        return;
+    }
+    let Ok(dir) = app.path().app_data_dir() else {
+        return;
+    };
+    let root = dir.join("ledger");
+    if !root.join("index.ledger").exists() {
+        let opts = ledger_engine::VaultCreateOptions::default();
+        if let Err(err) = ledger_engine::vault::create_vault(&root, &opts) {
+            eprintln!("moneytracker: 无法创建手机账本: {err:?}");
+            return;
+        }
+    }
+    if let Err(err) = commands::open_and_store(app, &state, &root) {
+        eprintln!("moneytracker: 无法打开手机账本: {err:?}");
+    }
+}
+
 fn boot(app: &AppHandle) {
     let state = app.state::<AppState>();
     let settings = state.settings();
@@ -165,6 +211,8 @@ fn boot(app: &AppHandle) {
             watcher::watch(app.clone(), std::path::Path::new(&path).to_path_buf());
         }
     }
+    #[cfg(mobile)]
+    ensure_mobile_vault(app);
     if let Err(err) = shortcut::register(app, &settings.shortcut) {
         eprintln!("moneytracker: {err}");
         state.set_shortcut_error(Some(err));
@@ -174,6 +222,7 @@ fn boot(app: &AppHandle) {
     }
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let specta = build_specta();
 
@@ -187,36 +236,43 @@ pub fn run() {
 
     let specta_for_setup = specta;
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_positioner::init())
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, shortcut, event| {
-                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let settings = app.state::<AppState>().settings();
-                        if let Ok(expected) =
-                            <tauri_plugin_global_shortcut::Shortcut as std::str::FromStr>::from_str(
-                                &settings.shortcut,
-                            )
-                        {
-                            if expected == *shortcut {
-                                window::toggle_capture(app);
-                            }
+        .plugin(tauri_plugin_opener::init());
+
+    // Menu-bar positioning and the global hotkey have no mobile equivalent.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_positioner::init()).plugin(
+        tauri_plugin_global_shortcut::Builder::new()
+            .with_handler(|app, shortcut, event| {
+                if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                    let settings = app.state::<AppState>().settings();
+                    if let Ok(expected) =
+                        <tauri_plugin_global_shortcut::Shortcut as std::str::FromStr>::from_str(
+                            &settings.shortcut,
+                        )
+                    {
+                        if expected == *shortcut {
+                            window::toggle_capture(app);
                         }
                     }
-                })
-                .build(),
-        )
-        .manage(AppState::new(state::default_config_dir()))
+                }
+            })
+            .build(),
+    );
+
+    builder
         .invoke_handler(specta_for_setup.invoke_handler())
         .setup(move |app| {
             specta_for_setup.mount_events(app);
             let handle = app.handle().clone();
-            setup_tray(app)?;
-            if app.get_webview_window(window::CAPTURE).is_none() {
-                let _ = window::create_capture_window(&handle);
+            app.manage(AppState::new(config_dir(app)));
+            #[cfg(desktop)]
+            {
+                setup_tray(app)?;
+                if app.get_webview_window(window::CAPTURE).is_none() {
+                    let _ = window::create_capture_window(&handle);
+                }
             }
             boot(&handle);
             Ok(())

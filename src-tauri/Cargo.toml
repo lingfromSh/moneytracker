@@ -13,11 +13,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri = { version = "2", features = ["macos-private-api", "image-png"] }
 tauri-plugin-dialog = "2"
-tauri-plugin-global-shortcut = "2"
 tauri-plugin-opener = "2"
-tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
 tauri-specta = { version = "=2.0.0-rc.26", features = ["derive", "typescript"] }
 specta-typescript = "0.0.13"
 specta = { workspace = true }
@@ -33,6 +31,13 @@ ledger-core = { path = "../crates/ledger-core" }
 ledger-query = { path = "../crates/ledger-query" }
 ledger-engine = { path = "../crates/ledger-engine" }
 ledger-sync = { path = "../crates/ledger-sync" }
+
+# Tray, menu-bar positioning and the global hotkey only exist on the desktop
+# shells; Android/iOS would fail to link them.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
 
 [dev-dependencies]
 tempfile = "3"

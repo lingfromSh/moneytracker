@@ -16,6 +16,7 @@ import { Reports } from "./routes/Reports";
 import { SettingsView } from "./routes/Settings";
 import { Welcome } from "./routes/Welcome";
 import { useShortcutLabel } from "./lib/shortcut";
+import { isMobile } from "./lib/platform";
 
 type Route =
   | "capture"
@@ -70,7 +71,8 @@ export function useRoute(): [Route, (next: Route) => void] {
 
 export function App() {
   const [route, go] = useRoute();
-  if (route === "capture") return <CaptureWindow />;
+  if (route === "capture")
+    return <CaptureWindow onDone={() => go("dashboard")} />;
   return <Shell route={route} go={go} />;
 }
 
@@ -98,7 +100,9 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
   }, [queryClient]);
 
   React.useEffect(() => {
-    const off = onParseDiagnostics((event) => setDiagCount(event.payload.count ?? 0));
+    const off = onParseDiagnostics((event) =>
+      setDiagCount(event.payload.count ?? 0),
+    );
     return () => {
       void off.then((unlisten) => unlisten());
     };
@@ -141,66 +145,103 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
   }, [route]);
 
   const hasVault = Boolean(info.data);
+  const mobile = isMobile;
+  const capture = () => {
+    if (mobile) go("capture");
+    else void api.showCapture();
+  };
 
   return (
-    <div className="flex h-full w-full">
-      <aside className="flex w-48 shrink-0 flex-col gap-1 border-r border-[var(--color-line)] bg-[var(--color-surface-2)]/60 p-3">
-        <div className="mb-3 flex items-center gap-2 px-1">
+    <div className={cn("flex h-full w-full", mobile && "flex-col")}>
+      {mobile ? (
+        <header className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] bg-[var(--color-surface-2)]/60 px-3 py-2">
           <span className="grid h-6 w-6 place-items-center rounded-md bg-[var(--color-accent)] text-[11px] font-bold text-white">
             MT
           </span>
-          <span className="text-sm font-semibold">MoneyTracker</span>
-        </div>
+          <span className="text-sm font-semibold">
+            {NAV.find((item) => item.route === route)?.label ?? "MoneyTracker"}
+          </span>
+          <Button variant="primary" className="ml-auto" onClick={capture}>
+            记一笔
+          </Button>
+        </header>
+      ) : (
+        <aside className="flex w-48 shrink-0 flex-col gap-1 border-r border-[var(--color-line)] bg-[var(--color-surface-2)]/60 p-3">
+          <div className="mb-3 flex items-center gap-2 px-1">
+            <span className="grid h-6 w-6 place-items-center rounded-md bg-[var(--color-accent)] text-[11px] font-bold text-white">
+              MT
+            </span>
+            <span className="text-sm font-semibold">MoneyTracker</span>
+          </div>
 
-        <Button variant="primary" className="mb-2 justify-start" onClick={() => void api.showCapture()}>
-          快速记账
-          <span className="ml-auto text-[11px] opacity-70">{shortcutLabel}</span>
-        </Button>
-
-        {NAV.map((item) => (
-          <button
-            key={item.route}
-            onClick={() => go(item.route)}
-            className={cn(
-              "flex items-center justify-between rounded-lg px-2 py-1.5 text-sm transition",
-              route === item.route
-                ? "bg-[var(--color-surface)] font-medium shadow-sm"
-                : "hover:bg-[var(--color-surface)]/70",
-            )}
+          <Button
+            variant="primary"
+            className="mb-2 justify-start"
+            onClick={capture}
           >
-            <span>{item.label}</span>
-            <span className="text-[11px] text-[var(--color-muted)]">{item.hint}</span>
-          </button>
-        ))}
+            快速记账
+            <span className="ml-auto text-[11px] opacity-70">
+              {shortcutLabel}
+            </span>
+          </Button>
 
-        <div className="mt-auto space-y-1 px-1 text-[11px] text-[var(--color-muted)]">
-          {info.data ? (
-            <>
-              <div className="truncate" title={info.data.path}>
-                {info.data.base_commodity} · {info.data.transaction_count ?? 0} 笔
+          {NAV.map((item) => (
+            <button
+              key={item.route}
+              onClick={() => go(item.route)}
+              className={cn(
+                "flex items-center justify-between rounded-lg px-2 py-1.5 text-sm transition",
+                route === item.route
+                  ? "bg-[var(--color-surface)] font-medium shadow-sm"
+                  : "hover:bg-[var(--color-surface)]/70",
+              )}
+            >
+              <span>{item.label}</span>
+              <span className="text-[11px] text-[var(--color-muted)]">
+                {item.hint}
+              </span>
+            </button>
+          ))}
+
+          <div className="mt-auto space-y-1 px-1 text-[11px] text-[var(--color-muted)]">
+            {info.data ? (
+              <>
+                <div className="truncate" title={info.data.path}>
+                  {info.data.base_commodity} ·{" "}
+                  {info.data.transaction_count ?? 0} 笔
+                </div>
+                <div className="truncate">{info.data.path}</div>
+              </>
+            ) : (
+              <div>未打开账本</div>
+            )}
+            {diagCount > 0 ? (
+              <div className="text-amber-600 dark:text-amber-400">
+                {diagCount} 条解析诊断
               </div>
-              <div className="truncate">{info.data.path}</div>
-            </>
-          ) : (
-            <div>未打开账本</div>
-          )}
-          {diagCount > 0 ? (
-            <div className="text-amber-600 dark:text-amber-400">{diagCount} 条解析诊断</div>
-          ) : null}
-        </div>
-      </aside>
+            ) : null}
+          </div>
+        </aside>
+      )}
 
-      <main className="min-w-0 flex-1 overflow-hidden">
+      <main
+        className={cn(
+          "min-w-0 flex-1",
+          mobile ? "overflow-y-auto" : "overflow-hidden",
+        )}
+      >
         {!hasVault && route !== "settings" ? (
           <Welcome />
         ) : (
           <>
             {route === "dashboard" && <Dashboard />}
-            {route === "transactions" && <Transactions initialQuery={pendingSearch} />}
+            {route === "transactions" && (
+              <Transactions initialQuery={pendingSearch} />
+            )}
             {route === "import" && <Import />}
             {route === "accounts" && <Accounts />}
             {route === "categories" && <Categories />}
-            {route === "rules" && <Rules onCapture={() => void api.showCapture()} />}
+            {route === "rules" && <Rules onCapture={capture} />}
             {route === "plan" && <Plan />}
             {route === "schedule" && <Schedule />}
             {route === "reports" && <Reports />}
@@ -209,7 +250,30 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
         )}
       </main>
 
-      <Modal open={paletteOpen} onClose={() => setPaletteOpen(false)} title="命令面板">
+      {mobile ? (
+        <nav className="flex shrink-0 gap-1 overflow-x-auto border-t border-[var(--color-line)] bg-[var(--color-surface-2)]/60 px-2 py-1.5">
+          {NAV.map((item) => (
+            <button
+              key={item.route}
+              onClick={() => go(item.route)}
+              className={cn(
+                "shrink-0 rounded-lg px-3 py-1.5 text-xs transition",
+                route === item.route
+                  ? "bg-[var(--color-surface)] font-medium shadow-sm"
+                  : "text-[var(--color-muted)]",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      ) : null}
+
+      <Modal
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        title="命令面板"
+      >
         <div className="space-y-2">
           <Input
             autoFocus
@@ -225,8 +289,8 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
             }}
           />
           <div className="text-[11px] text-[var(--color-muted)]">
-            支持 <code>acct:</code> <code>desc:</code> <code>date:</code> <code>tag:</code>{" "}
-            <code>amt:</code>，可用 and / or / not 组合。
+            支持 <code>acct:</code> <code>desc:</code> <code>date:</code>{" "}
+            <code>tag:</code> <code>amt:</code>，可用 and / or / not 组合。
           </div>
         </div>
       </Modal>

@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop-hotkey",
+  "description": "Global capture hotkey (desktop shells only).",
+  "platforms": [
+    "macOS",
+    "windows",
+    "linux"
+  ],
+  "windows": [
+    "main",
+    "capture"
+  ],
+  "permissions": [
+    "global-shortcut:default"
+  ]
+}

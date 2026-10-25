@@ -2,6 +2,7 @@ import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { GridLayout } from "react-grid-layout";
+import { isMobile } from "../lib/platform";
 import type { Layout } from "react-grid-layout";
 import type { DashboardDto_Serialize, PlanOverviewDto_Serialize } from "../lib/bindings";
 import { api, queryKeys } from "../lib/ipc";
@@ -149,6 +150,27 @@ export function Dashboard() {
     [layout, hiddenCards],
   );
 
+  const mobile = isMobile;
+
+  // A 12-column grid is unusable on a phone: stack every card full-width, in the
+  // saved order, and freeze it (dragging on a touch screen fights the scroll).
+  const mobileLayout = React.useMemo<Layout>(
+    () =>
+      mobile
+        ? visibleLayout.map((item, index) => ({
+            ...item,
+            x: 0,
+            y: index * 4,
+            w: 1,
+            h: Math.max(3, item.h),
+            minW: 1,
+            minH: 2,
+            static: true,
+          }))
+        : visibleLayout,
+    [mobile, visibleLayout],
+  );
+
   const saveLayout = React.useMemo(() => {
     let timer: number | undefined;
     return (next: Layout) => {
@@ -266,14 +288,18 @@ export function Dashboard() {
           <GridLayout
             key={width}
             width={Math.max(320, width)}
-            layout={visibleLayout}
-            gridConfig={{ ...GRID, rowHeight: compact ? 38 : 46 }}
-            dragConfig={{ enabled: true, handle: ".drag-handle" }}
-            resizeConfig={{ enabled: true }}
+            layout={mobileLayout}
+            gridConfig={{
+              ...GRID,
+              cols: mobile ? 1 : GRID.cols,
+              rowHeight: mobile ? 44 : compact ? 38 : 46,
+            }}
+            dragConfig={{ enabled: !mobile, handle: ".drag-handle" }}
+            resizeConfig={{ enabled: !mobile }}
             autoSize
-            onLayoutChange={saveLayout}
+            onLayoutChange={mobile ? () => {} : saveLayout}
           >
-            {visibleLayout.map((item) => (
+            {mobileLayout.map((item) => (
               <div key={item.i} className="h-full">
                 {panels[item.i] ?? null}
               </div>
