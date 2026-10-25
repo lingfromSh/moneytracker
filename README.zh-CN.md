@@ -5,7 +5,7 @@
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust tests](https://img.shields.io/badge/rust_tests-229_passing-brightgreen.svg)](#测试)
-[![Front-end tests](https://img.shields.io/badge/vitest-77_passing-brightgreen.svg)](#测试)
+[![Front-end tests](https://img.shields.io/badge/vitest-95_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#环境要求)
@@ -314,7 +314,8 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 | 记账 | 变成主窗口里的整页路由；侧边栏变底部标签栏 |
 | 看板 | 卡片按你在桌面上排好的顺序堆成一列，并且禁用拖拽，让滚动优先 |
 | 同步 | 完全一样：设置 → 同步 里填 endpoint / bucket / 密钥 |
-| 托盘、全局快捷键 | 不可用 —— 手机上不存在这两个概念 |
+| 托盘、全局快捷键 | 不可用 —— 手机上不存在这两个概念，设置页里对应的入口直接隐藏 |
+| 选路径（账本目录 / 导入文件） | 系统选择器在 Android 上只能选文件，返回的还是 `content://` 地址，`std::fs` 打不开；所以账本固定在 App 私有目录，对账单请在桌面上导入、由同步带过来 |
 
 打安装包：
 
@@ -457,7 +458,7 @@ pnpm bindings                    # 由 Rust 命令重新生成 src/lib/bindings.
 cargo test --workspace                        # 229 个 Rust 测试，15 个 suite
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 86 个 Vitest 测试
+pnpm test                                     # 95 个 Vitest 测试
 pnpm build                                    # tsc --noEmit && vite build
 ```
 

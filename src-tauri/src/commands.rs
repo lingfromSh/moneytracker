@@ -112,6 +112,22 @@ pub fn vault_open(
     open_and_store(&app, &state, &root)
 }
 
+/// 手机上 App 只认自己的私有目录（系统文件选择器给的是 `content://` 地址，
+/// `std::fs` 打不开），所以前端需要知道「能放在哪」；桌面返回 `None`，由用户自己选。
+#[tauri::command]
+#[specta::specta]
+pub fn vault_default_dir(app: AppHandle) -> Option<String> {
+    #[cfg(mobile)]
+    {
+        crate::mobile_vault_dir(&app).map(|dir| dir.display().to_string())
+    }
+    #[cfg(not(mobile))]
+    {
+        let _ = app;
+        None
+    }
+}
+
 #[tauri::command(async)]
 #[specta::specta]
 pub fn vault_close(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {

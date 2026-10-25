@@ -5,7 +5,7 @@
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust tests](https://img.shields.io/badge/rust_tests-229_passing-brightgreen.svg)](#testing)
-[![Front-end tests](https://img.shields.io/badge/vitest-77_passing-brightgreen.svg)](#testing)
+[![Front-end tests](https://img.shields.io/badge/vitest-95_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
@@ -340,7 +340,8 @@ Signed installers live in [Releases](https://github.com/lingfromSh/moneytracker/
 | capture | a full-page route inside the main window; the sidebar becomes a bottom tab bar |
 | dashboard | cards stack in one column in the order you arranged them on the desktop; dragging is off so scrolling wins |
 | sync | identical: fill in endpoint / bucket / keys under 设置 → 同步 |
-| tray, global hotkey | not available — those concepts do not exist on a phone |
+| tray, global hotkey | not available — those concepts do not exist on a phone, so the settings entries are hidden |
+| picking a path (vault folder / import file) | Android's picker only returns files, and as `content://` URIs `std::fs` cannot open. The vault therefore lives in the app's private storage; statements are imported on the desktop and arrive over sync |
 
 Build an installable APK:
 
@@ -496,7 +497,7 @@ check (`brew install hledger`).
 cargo test --workspace                        # 229 Rust tests, 15 suites
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 86 Vitest tests
+pnpm test                                     # 95 Vitest tests
 pnpm build                                    # tsc --noEmit && vite build
 ```
 

@@ -1,10 +1,10 @@
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/ipc";
 import { Button, Card, Field, Input } from "../components/ui";
 import { useShortcutLabel } from "../lib/shortcut";
 import { isMobile } from "../lib/platform";
+import { canPickPaths, MOBILE_DIR_HINT, pickDirectory } from "../lib/picker";
 
 /**
  * First-run screen: create a vault, open an existing one, or drop in the sample
@@ -21,10 +21,27 @@ export function Welcome() {
 
   const refresh = () => void queryClient.invalidateQueries();
 
+  // 手机上路径是系统给的，填好即可；桌面留空让用户自己选。
+  React.useEffect(() => {
+    if (canPickPaths) return;
+    let live = true;
+    void api
+      .vaultDefaultDir()
+      .then((dir) => {
+        if (!live || !dir) return;
+        const next: string = dir;
+        setPath((current) => (current ? current : next));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+
   const pick = async () => {
     try {
-      const picked = await open({ directory: true, multiple: false, title: "选择目录" });
-      if (typeof picked === "string") setPath(picked);
+      const picked = await pickDirectory("选择目录");
+      if (picked) setPath(picked);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -61,10 +78,15 @@ export function Welcome() {
             <Field label="目录">
               <div className="flex gap-2">
                 <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="~/Documents/ledger" />
-                <Button variant="subtle" className="shrink-0 whitespace-nowrap" onClick={pick}>
-                  选择
-                </Button>
+                {canPickPaths ? (
+                  <Button variant="subtle" className="shrink-0 whitespace-nowrap" onClick={pick}>
+                    选择
+                  </Button>
+                ) : null}
               </div>
+              {canPickPaths ? null : (
+                <div className="text-[11px] text-[var(--color-muted)]">{MOBILE_DIR_HINT}</div>
+              )}
             </Field>
             <div className="grid grid-cols-2 gap-2">
               <Field label="基准币种">
@@ -100,9 +122,11 @@ export function Welcome() {
             <div className="text-[11px] text-[var(--color-muted)]">
               目录里需要有 <code>index.ledger</code>；已有 hledger 账本可直接打开。
             </div>
-            <Button variant="subtle" className="w-full" disabled={busy} onClick={pick}>
-              选择目录
-            </Button>
+            {canPickPaths ? (
+              <Button variant="subtle" className="w-full" disabled={busy} onClick={pick}>
+                选择目录
+              </Button>
+            ) : null}
             <Button
               variant="subtle"
               className="w-full"

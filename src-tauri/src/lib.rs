@@ -31,6 +31,7 @@ pub fn build_specta() -> Builder<tauri::Wry> {
         .commands(collect_commands![
             commands::vault_create,
             commands::vault_open,
+            commands::vault_default_dir,
             commands::vault_close,
             commands::vault_recent,
             commands::vault_info,
@@ -177,18 +178,21 @@ fn config_dir(app: &tauri::App) -> std::path::PathBuf {
     }
 }
 
-/// Phones have no folder picker, so the first launch creates a vault inside the
-/// app's private storage and remembers it as the current one.
+/// 手机上没有文件夹选择器，账本只能住在 App 私有目录里，路径由系统决定。
+#[cfg(mobile)]
+pub(crate) fn mobile_vault_dir(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_data_dir().ok().map(|dir| dir.join("ledger"))
+}
+
 #[cfg(mobile)]
 fn ensure_mobile_vault(app: &AppHandle) {
     let state = app.state::<AppState>();
     if state.settings().vault_path.is_some() {
         return;
     }
-    let Ok(dir) = app.path().app_data_dir() else {
+    let Some(root) = mobile_vault_dir(app) else {
         return;
     };
-    let root = dir.join("ledger");
     if !root.join("index.ledger").exists() {
         let opts = ledger_engine::vault::VaultCreateOptions::default();
         if let Err(err) = ledger_engine::vault::create_vault(&root, &opts) {

@@ -7,6 +7,11 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 export const commands = {
 	vaultCreate: (path: string, opts: VaultCreateOptions_Deserialize | null) => typedError<OpenVaultResultDto_Serialize, CmdError>(__TAURI_INVOKE("vault_create", { path, opts })),
 	vaultOpen: (path: string) => typedError<OpenVaultResultDto_Serialize, CmdError>(__TAURI_INVOKE("vault_open", { path })),
+	/**
+	 *  手机上 App 只认自己的私有目录（系统文件选择器给的是 `content://` 地址，
+	 *  `std::fs` 打不开），所以前端需要知道「能放在哪」；桌面返回 `None`，由用户自己选。
+	 */
+	vaultDefaultDir: () => __TAURI_INVOKE<string | null>("vault_default_dir"),
 	vaultClose: () => typedError<null, CmdError>(__TAURI_INVOKE("vault_close")),
 	vaultRecent: () => typedError<string[], CmdError>(__TAURI_INVOKE("vault_recent")),
 	vaultInfo: () => typedError<VaultInfoDto_Serialize | null, CmdError>(__TAURI_INVOKE("vault_info")),

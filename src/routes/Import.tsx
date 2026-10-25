@@ -1,9 +1,9 @@
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { open } from "@tauri-apps/plugin-dialog";
 import { FileUp, Upload } from "lucide-react";
 import type { ImportPreviewDto_Serialize, ImportProbeDto_Serialize } from "../lib/bindings";
 import { api } from "../lib/ipc";
+import { canPickPaths, MOBILE_FILE_HINT, pickFile } from "../lib/picker";
 import { cn, money } from "../lib/format";
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Switch } from "../components/ui";
 
@@ -100,12 +100,8 @@ export function Import() {
   const choose = React.useCallback(async () => {
     setError(null);
     try {
-      const picked = await open({
-        multiple: false,
-        directory: false,
-        filters: [{ name: "对账单", extensions: ["csv", "txt", "tsv"] }],
-      });
-      if (typeof picked !== "string") return;
+      const picked = await pickFile(["csv", "txt", "tsv"]);
+      if (!picked) return;
       setBusy(true);
       const next = await api.importProbe(picked);
       setProbe(next);
@@ -193,10 +189,12 @@ export function Import() {
             支付宝 / 微信 / 银行导出的 CSV，先预览、去重，再写入账本
           </div>
         </div>
-        <Button variant="subtle" onClick={() => void choose()} disabled={busy}>
-          <FileUp className="mr-1 h-3.5 w-3.5" />
-          {probe ? "换一个文件" : "选择文件"}
-        </Button>
+        {canPickPaths ? (
+          <Button variant="subtle" onClick={() => void choose()} disabled={busy}>
+            <FileUp className="mr-1 h-3.5 w-3.5" />
+            {probe ? "换一个文件" : "选择文件"}
+          </Button>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-4 pb-8">
@@ -214,12 +212,18 @@ export function Import() {
         {!probe ? (
           <Card className="p-4">
             <EmptyState
-              title={busy ? "正在读取…" : "选择一份对账单"}
-              hint="支持 UTF-8 与 GBK 编码，自动识别分隔符、日期与金额列；重复导入会被指纹识别并跳过。"
+              title={busy ? "正在读取…" : canPickPaths ? "选择一份对账单" : "在桌面上导入"}
+              hint={
+                canPickPaths
+                  ? "支持 UTF-8 与 GBK 编码，自动识别分隔符、日期与金额列；重复导入会被指纹识别并跳过。"
+                  : MOBILE_FILE_HINT
+              }
               action={
-                <Button variant="primary" onClick={() => void choose()} disabled={busy}>
-                  选择 CSV 文件
-                </Button>
+                canPickPaths ? (
+                  <Button variant="primary" onClick={() => void choose()} disabled={busy}>
+                    选择 CSV 文件
+                  </Button>
+                ) : null
               }
             />
           </Card>

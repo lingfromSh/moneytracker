@@ -62,6 +62,8 @@ export const api = {
   vaultCreate: (path: string, opts: VaultCreateOptions_Deserialize | null = null) =>
     call(commands.vaultCreate(path, opts)),
   vaultOpen: (path: string) => call(commands.vaultOpen(path)),
+  /** 手机上账本只能放在 App 私有目录；桌面端返回 null。 */
+  vaultDefaultDir: () => commands.vaultDefaultDir(),
   vaultClose: () => call(commands.vaultClose()),
   vaultRecent: () => call(commands.vaultRecent()),
   vaultInfo: () => call(commands.vaultInfo()),

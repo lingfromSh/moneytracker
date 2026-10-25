@@ -1,14 +1,25 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { open } from "@tauri-apps/plugin-dialog";
 import type { Settings_Serialize } from "../lib/bindings";
+import { canPickPaths, MOBILE_DIR_HINT, pickDirectory } from "../lib/picker";
+import { isMobile } from "../lib/platform";
 import { api, queryKeys } from "../lib/ipc";
 import { cn } from "../lib/format";
 import { ShortcutInput } from "../components/shortcut-input";
 import { LlmSettings } from "../components/llm-settings";
 import { Automation } from "../components/automation";
 import { SyncSettings } from "../components/sync";
-import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Select, Switch } from "../components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Switch,
+} from "../components/ui";
 
 const THEMES = [
   { value: "system", label: "跟随系统" },
@@ -20,18 +31,28 @@ export function applyTheme(theme: string): void {
   const root = document.documentElement;
   const dark =
     theme === "dark" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    (theme === "system" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
   root.classList.toggle("dark", dark);
 }
 
 export function SettingsView() {
   const queryClient = useQueryClient();
-  const settings = useQuery({ queryKey: queryKeys.settings, queryFn: () => api.settings() });
+  const settings = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: () => api.settings(),
+  });
   const [draft, setDraft] = React.useState<Settings_Serialize | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const audit = useQuery({ queryKey: queryKeys.audit, queryFn: () => api.audit(30) });
-  const version = useQuery({ queryKey: ["version"], queryFn: () => api.version() });
+  const audit = useQuery({
+    queryKey: queryKeys.audit,
+    queryFn: () => api.audit(30),
+  });
+  const version = useQuery({
+    queryKey: ["version"],
+    queryFn: () => api.version(),
+  });
   const shortcut = useQuery({
     queryKey: queryKeys.shortcutStatus,
     queryFn: () => api.shortcutStatus(),
@@ -53,13 +74,14 @@ export function SettingsView() {
       setMessage("已保存");
       void queryClient.invalidateQueries();
     },
-    onError: (err: unknown) => setError(err instanceof Error ? err.message : String(err)),
+    onError: (err: unknown) =>
+      setError(err instanceof Error ? err.message : String(err)),
   });
 
   const pickVault = async () => {
     try {
-      const picked = await open({ directory: true, multiple: false, title: "选择账本目录" });
-      if (typeof picked === "string") {
+      const picked = await pickDirectory("选择账本目录");
+      if (picked) {
         await api.vaultOpen(picked);
         setMessage(`已打开 ${picked}`);
         void queryClient.invalidateQueries();
@@ -71,7 +93,10 @@ export function SettingsView() {
 
   if (settings.isLoading || !draft) return <EmptyState title="正在读取设置…" />;
 
-  const update = <K extends keyof Settings_Serialize>(key: K, value: Settings_Serialize[K]) => {
+  const update = <K extends keyof Settings_Serialize>(
+    key: K,
+    value: Settings_Serialize[K],
+  ) => {
     // Functional update: several fields often change in one event (switching the
     // LLM provider resets protocol/base URL/model), and a spread of the render-time
     // draft would let the last call overwrite the earlier ones.
@@ -94,12 +119,21 @@ export function SettingsView() {
         <div>
           <div className="text-lg font-semibold">设置</div>
           <div className="text-xs text-[var(--color-muted)]">
-            MoneyTracker {version.data ?? ""} · 账本是纯文本，随时可用 hledger 读取
+            MoneyTracker {version.data ?? ""} · 账本是纯文本，随时可用 hledger
+            读取
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {message ? <span className="text-xs text-[var(--color-accent)]">{message}</span> : null}
-          <Button variant="primary" onClick={() => save.mutate(draft)} disabled={save.isPending}>
+          {message ? (
+            <span className="text-xs text-[var(--color-accent)]">
+              {message}
+            </span>
+          ) : null}
+          <Button
+            variant="primary"
+            onClick={() => save.mutate(draft)}
+            disabled={save.isPending}
+          >
             保存
           </Button>
         </div>
@@ -107,15 +141,33 @@ export function SettingsView() {
 
       <div className="grid gap-3 p-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="账本" hint="vault 是一个普通目录，可交给 git / iCloud 同步" />
+          <CardHeader
+            title="账本"
+            hint="vault 是一个普通目录，可交给 git / iCloud 同步"
+          />
           <div className="space-y-3 p-4">
             <Field label="当前账本路径">
               <div className="flex gap-2">
-                <Input value={draft.vault_path ?? ""} readOnly placeholder="尚未打开账本" />
-                <Button variant="subtle" onClick={pickVault}>
-                  选择
-                </Button>
+                <Input
+                  value={draft.vault_path ?? ""}
+                  readOnly
+                  placeholder="尚未打开账本"
+                />
+                {canPickPaths ? (
+                  <Button
+                    variant="subtle"
+                    className="shrink-0 whitespace-nowrap"
+                    onClick={pickVault}
+                  >
+                    选择
+                  </Button>
+                ) : null}
               </div>
+              {canPickPaths ? null : (
+                <div className="text-[11px] text-[var(--color-muted)]">
+                  {MOBILE_DIR_HINT}
+                </div>
+              )}
             </Field>
             <div className="flex flex-wrap gap-2">
               {draft.recent_vaults.map((path) => (
@@ -130,7 +182,9 @@ export function SettingsView() {
                         void queryClient.invalidateQueries();
                       })
                       .catch((err: unknown) =>
-                        setError(err instanceof Error ? err.message : String(err)),
+                        setError(
+                          err instanceof Error ? err.message : String(err),
+                        ),
                       );
                   }}
                 >
@@ -160,7 +214,9 @@ export function SettingsView() {
                       void queryClient.invalidateQueries();
                     })
                     .catch((err: unknown) =>
-                      setError(err instanceof Error ? err.message : String(err)),
+                      setError(
+                        err instanceof Error ? err.message : String(err),
+                      ),
                     );
                 }}
               >
@@ -176,7 +232,9 @@ export function SettingsView() {
             <Field label="基准币种">
               <Input
                 value={draft.base_commodity}
-                onChange={(e) => update("base_commodity", e.target.value.toUpperCase())}
+                onChange={(e) =>
+                  update("base_commodity", e.target.value.toUpperCase())
+                }
               />
             </Field>
             <Field label="显示精度">
@@ -185,7 +243,9 @@ export function SettingsView() {
                 min={0}
                 max={6}
                 value={draft.base_precision}
-                onChange={(e) => update("base_precision", Number(e.target.value))}
+                onChange={(e) =>
+                  update("base_precision", Number(e.target.value))
+                }
               />
             </Field>
             <Field label="默认资金账户" hint="快录未指定时使用">
@@ -226,25 +286,41 @@ export function SettingsView() {
         </Card>
 
         <Card>
-          <CardHeader title="快捷键与汇率" hint="系统级快录键，切换后会立即重新注册" />
+          <CardHeader
+            title="快捷键与汇率"
+            hint={
+              isMobile
+                ? "手机上没有系统级快捷键；这里只管汇率"
+                : "系统级快录键，切换后会立即重新注册"
+            }
+          />
           <div className="space-y-3 p-4">
-            <Field label="全局唤起快录" hint="点击后直接按下组合键，保存后立即生效">
-              <ShortcutInput
-                value={draft.shortcut}
-                onChange={(next) => update("shortcut", next)}
-                invalid={shortcut.data ? !shortcut.data.ok : false}
-                onRecordingChange={(active) => {
-                  // Release the live chord so pressing it cannot open the capture
-                  // window mid-recording; restore it when the recorder closes.
-                  void api
-                    .shortcutRecording(active)
-                    .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.shortcutStatus }))
-                    .catch(() => {
-                      /* the recorder still works; the save path re-reports errors */
-                    });
-                }}
-              />
-            </Field>
+            {isMobile ? null : (
+              <Field
+                label="全局唤起快录"
+                hint="点击后直接按下组合键，保存后立即生效"
+              >
+                <ShortcutInput
+                  value={draft.shortcut}
+                  onChange={(next) => update("shortcut", next)}
+                  invalid={shortcut.data ? !shortcut.data.ok : false}
+                  onRecordingChange={(active) => {
+                    // Release the live chord so pressing it cannot open the capture
+                    // window mid-recording; restore it when the recorder closes.
+                    void api
+                      .shortcutRecording(active)
+                      .then(() =>
+                        queryClient.invalidateQueries({
+                          queryKey: queryKeys.shortcutStatus,
+                        }),
+                      )
+                      .catch(() => {
+                        /* the recorder still works; the save path re-reports errors */
+                      });
+                  }}
+                />
+              </Field>
+            )}
             {shortcut.data && !shortcut.data.ok && shortcut.data.error ? (
               <div className="rounded-lg border border-[var(--color-danger)] px-3 py-2 text-[11px] text-[var(--color-danger)]">
                 {shortcut.data.error}
@@ -254,7 +330,8 @@ export function SettingsView() {
               <div>
                 <div className="text-sm">启用历史汇率</div>
                 <div className="text-[11px] text-[var(--color-muted)]">
-                  只读取 <code>prices.ledger</code> 的 P 指令，联网同步由你手动触发
+                  只读取 <code>prices.ledger</code> 的 P
+                  指令，联网同步由你手动触发
                 </div>
               </div>
               <Switch
@@ -263,7 +340,11 @@ export function SettingsView() {
                 label="启用历史汇率"
               />
             </div>
-            <FxSync enabled={draft.fx_enabled} onMessage={setMessage} onError={setError} />
+            <FxSync
+              enabled={draft.fx_enabled}
+              onMessage={setMessage}
+              onError={setError}
+            />
           </div>
         </Card>
 
@@ -300,7 +381,9 @@ export function SettingsView() {
             <Field label="每周起始" hint="影响列表里的按周分组">
               <Select
                 value={String(draft.week_start ?? 1)}
-                onChange={(event) => update("week_start", Number(event.target.value))}
+                onChange={(event) =>
+                  update("week_start", Number(event.target.value))
+                }
                 aria-label="每周起始"
                 className="w-full"
               >
@@ -312,7 +395,10 @@ export function SettingsView() {
         </Card>
 
         <Card>
-          <CardHeader title="自动化" hint="定期交易、月度报告、git 快照与预算提醒" />
+          <CardHeader
+            title="自动化"
+            hint="定期交易、月度报告、git 快照与预算提醒"
+          />
           <div className="p-3">
             <Automation
               draft={draft}
@@ -326,15 +412,25 @@ export function SettingsView() {
         <SyncSettings onMessage={setMessage} onError={setError} />
 
         <Card>
-          <CardHeader title="写入审计" hint="每次改写账本都会记录 before/after" />
+          <CardHeader
+            title="写入审计"
+            hint="每次改写账本都会记录 before/after"
+          />
           <div className="max-h-72 overflow-auto p-2">
             {audit.data && audit.data.length > 0 ? (
               audit.data.map((entry, index) => (
-                <div key={index} className="border-b border-[var(--color-line)]/60 px-2 py-1.5 text-[11px] last:border-0">
+                <div
+                  key={index}
+                  className="border-b border-[var(--color-line)]/60 px-2 py-1.5 text-[11px] last:border-0"
+                >
                   <div className="flex items-center gap-2">
                     <Badge tone="neutral">{entry.op}</Badge>
-                    <span className="truncate text-[var(--color-muted)]">{entry.file}</span>
-                    <span className="ml-auto text-[var(--color-muted)]">{entry.ts}</span>
+                    <span className="truncate text-[var(--color-muted)]">
+                      {entry.file}
+                    </span>
+                    <span className="ml-auto text-[var(--color-muted)]">
+                      {entry.ts}
+                    </span>
                   </div>
                   {entry.after ? (
                     <pre className="mt-1 max-h-16 overflow-hidden whitespace-pre-wrap font-mono text-[10px] text-[var(--color-muted)]">
@@ -344,14 +440,18 @@ export function SettingsView() {
                 </div>
               ))
             ) : (
-              <div className="p-3 text-xs text-[var(--color-muted)]">还没有写入记录。</div>
+              <div className="p-3 text-xs text-[var(--color-muted)]">
+                还没有写入记录。
+              </div>
             )}
           </div>
         </Card>
       </div>
 
       {error ? (
-        <div className={cn("px-4 pb-4 text-xs text-[var(--color-danger)]")}>{error}</div>
+        <div className={cn("px-4 pb-4 text-xs text-[var(--color-danger)]")}>
+          {error}
+        </div>
       ) : null}
     </div>
   );
@@ -376,7 +476,8 @@ function FxSync({
 
   const sync = useMutation({
     mutationFn: async () => {
-      const rows: { date: string; from: string; to: string; rate: string }[] = [];
+      const rows: { date: string; from: string; to: string; rate: string }[] =
+        [];
       const seen = new Set<string>();
       for (const item of missing.data ?? []) {
         const key = `${item.date}|${item.commodity}`;
@@ -386,10 +487,17 @@ function FxSync({
         try {
           const response = await fetch(url);
           if (!response.ok) continue;
-          const payload = (await response.json()) as { rates?: Record<string, number> };
+          const payload = (await response.json()) as {
+            rates?: Record<string, number>;
+          };
           const rate = payload.rates?.CNY;
           if (typeof rate === "number") {
-            rows.push({ date: item.date, from: item.commodity, to: "CNY", rate: rate.toFixed(6) });
+            rows.push({
+              date: item.date,
+              from: item.commodity,
+              to: "CNY",
+              rate: rate.toFixed(6),
+            });
           }
         } catch {
           /* offline: skip this pair */
@@ -398,10 +506,13 @@ function FxSync({
       return api.fxApplyRates(rows);
     },
     onSuccess: (result) => {
-      onMessage(`写入 ${result.written.length} 条汇率，失败 ${result.failed.length} 条`);
+      onMessage(
+        `写入 ${result.written.length} 条汇率，失败 ${result.failed.length} 条`,
+      );
       void queryClient.invalidateQueries();
     },
-    onError: (err: unknown) => onError(err instanceof Error ? err.message : String(err)),
+    onError: (err: unknown) =>
+      onError(err instanceof Error ? err.message : String(err)),
   });
 
   return (
@@ -415,7 +526,9 @@ function FxSync({
       </div>
       <Button
         variant="subtle"
-        disabled={!enabled || sync.isPending || (missing.data?.length ?? 0) === 0}
+        disabled={
+          !enabled || sync.isPending || (missing.data?.length ?? 0) === 0
+        }
         onClick={() => sync.mutate()}
       >
         {sync.isPending ? "同步中…" : "同步 ECB 汇率"}

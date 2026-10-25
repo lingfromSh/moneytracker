@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-25
+
+### Fixed
+
+- **手机上所有「选路径」入口**: Android 的系统文件选择器只能选文件，而且返回的是
+  `content://` 地址，`std::fs` 打不开。新增 `src/lib/picker.ts` 统一收口，手机上不再弹
+  选择器而是给出说明；新建账本的目录自动填成 App 私有目录（新增 `vault_default_dir` 命令），
+  设置页的「全局唤起快录」在手机上隐藏，导入页改为提示「在桌面上导入，同步会带过来」。
+
 ## [0.1.2] - 2026-10-25
 
 ### Added
@@ -262,7 +271,8 @@ First complete release: the ledger format, the engine and every view are in plac
   unstable `fmt::from_fn` helper and `tauri-specta` pins that exact version.
 - The app targets macOS 13+; the Rust core is portable but the window/tray layer is not.
 
-[Unreleased]: https://github.com/lingfromSh/moneytracker/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/lingfromSh/moneytracker/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/lingfromSh/moneytracker/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/lingfromSh/moneytracker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/lingfromSh/moneytracker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/lingfromSh/moneytracker/releases/tag/v0.1.0
