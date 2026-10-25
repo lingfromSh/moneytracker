@@ -463,6 +463,11 @@ pub fn fire_projection(
     targets.sort_by(|a, b| a.swr.cmp(&b.swr));
     let note = if annual_expense <= Decimal::ZERO {
         Some("账本里还没有支出记录，先记几个月再算目标".into())
+    } else if balance <= Decimal::ZERO {
+        Some(
+            "资产池还不是正数：现金账户为负说明收入还没记账；也可以用 `pool ;` 指定哪些账户算可投资"
+                .into(),
+        )
     } else if contribution <= Decimal::ZERO && real_return <= Decimal::ZERO {
         Some("储蓄为负且实际收益不为正，无法推算达成时间".into())
     } else if targets.iter().all(|t| t.months.is_none()) {
@@ -502,6 +507,11 @@ fn months_to_target(
     }
     // Solving for n needs logs; keep the money in Decimal and only round at the end.
     let n = if contribution.is_zero() {
+        // Compounding alone cannot lift a non-positive pool: `ln` of a negative
+        // ratio is NaN, which used to reach the UI as "0 months — already done".
+        if balance <= Decimal::ZERO {
+            return None;
+        }
         let ratio = (target / balance).to_f64()?;
         ratio.ln() / (1.0 + m).ln()
     } else {
@@ -620,21 +630,53 @@ fn trailing_contribution(vault: &Vault, months: usize) -> Decimal {
     net / Decimal::from(series.len() as u64)
 }
 
-/// Pool accounts: explicit `pool ;` wins, otherwise every asset that does not
-/// look like a home or a car.
-fn pool_accounts(vault: &Vault, plan: &PlanSet) -> Vec<String> {
-    if !plan.pool.is_empty() {
-        return plan.pool.clone();
+/// Pool roots: explicit `pool ;` wins, otherwise every asset that has money in
+/// it and does not look like a home or a car.
+///
+/// Candidates come from the balances, not from `Vault::accounts` — that map also
+/// carries synthetic ancestors (`assets`, `assets:cash`) which would each sum the
+/// same subtree again, so the investable number came out inflated (a 1,000 cash
+/// balance counted as 2,000+). Only the outermost candidate is kept, and every
+/// figure below sums its whole subtree.
+fn pool_accounts(vault: &Vault, plan: &PlanSet, sums: &BTreeMap<String, Decimal>) -> Vec<String> {
+    let mut names: Vec<String> = if plan.pool.is_empty() {
+        const EXCLUDED: [&str; 6] = ["房", "home", "house", "property", "车", "car"];
+        sums.keys()
+            .filter(|name| vault.kind_for(name) == 'A')
+            .filter(|name| !EXCLUDED.iter().any(|word| name.contains(word)))
+            .cloned()
+            .collect()
+    } else {
+        plan.pool.clone()
+    };
+    names.sort();
+    names.dedup();
+    let mut roots: Vec<String> = Vec::new();
+    for name in names {
+        if !roots
+            .iter()
+            .any(|root| name.starts_with(&format!("{root}:")))
+        {
+            roots.push(name);
+        }
     }
-    const EXCLUDED: [&str; 6] = ["房", "home", "house", "property", "车", "car"];
-    vault
-        .accounts()
-        .iter()
-        .filter(|(name, info)| info.kind == 'A' && !EXCLUDED.iter().any(|word| name.contains(word)))
-        .map(|(name, _)| name.clone())
-        .collect()
+    roots
 }
 
+/// Accounts holding a balance of their own under `root`, so the pool can be
+/// listed per account without counting a subtree twice.
+fn pool_breakdown(sums: &BTreeMap<String, Decimal>, root: &str) -> Vec<(String, Decimal)> {
+    let prefix = format!("{root}:");
+    let mut rows: Vec<(String, Decimal)> = sums
+        .iter()
+        .filter(|(name, _)| *name == root || name.starts_with(&prefix))
+        .map(|(name, value)| (name.clone(), *value))
+        .collect();
+    if rows.is_empty() {
+        rows.push((root.to_string(), Decimal::ZERO));
+    }
+    rows
+}
 fn cash_accounts(vault: &Vault, pool: &[String]) -> Vec<String> {
     const CASH_WORDS: [&str; 8] = [
         "cash", "现金", "wallet", "钱包", "bank", "储蓄", "saving", "checking",
@@ -768,17 +810,15 @@ pub fn overview(vault: &Vault) -> PlanOverviewDto {
     let text = plan_text(vault);
     let plan = PlanSet::parse(GOALS_FILE, &text);
     let sums = account_sums(vault);
-    let pool = pool_accounts(vault, &plan);
+    let pool = pool_accounts(vault, &plan, &sums);
 
     let pool_members: Vec<PoolMemberDto> = pool
         .iter()
-        .map(|account| {
-            let amount = signed_balance(&sums, account, 'A');
-            PoolMemberDto {
-                account: account.clone(),
-                class: vault.class_of(account).map(|c| c.to_string()),
-                amount: fmt_money(vault, amount),
-            }
+        .flat_map(|root| pool_breakdown(&sums, root))
+        .map(|(account, amount)| PoolMemberDto {
+            class: vault.class_of(&account).map(|c| c.to_string()),
+            amount: fmt_money(vault, amount),
+            account,
         })
         .collect();
     let balance: Decimal = pool.iter().map(|a| signed_balance(&sums, a, 'A')).sum();
@@ -818,7 +858,13 @@ pub fn overview(vault: &Vault) -> PlanOverviewDto {
         primary_swr: f64_of(primary_swr * Decimal::ONE_HUNDRED),
         progress: primary_target
             .filter(|t| t.target > Decimal::ZERO)
-            .map(|t| f64_of((balance / t.target * Decimal::ONE_HUNDRED).min(Decimal::ONE_HUNDRED)))
+            .map(|t| {
+                f64_of(
+                    (balance / t.target * Decimal::ONE_HUNDRED)
+                        .max(Decimal::ZERO)
+                        .min(Decimal::ONE_HUNDRED),
+                )
+            })
             .unwrap_or(0.0),
         targets: projection
             .targets
@@ -1200,6 +1246,84 @@ mod tests {
         };
         assert_eq!(strip(&first), strip(&again));
         assert_eq!(first.render(), again.render());
+    }
+
+    #[test]
+    fn the_pool_counts_each_asset_once() {
+        // `accounts` also carries the ancestors of every used account, so a naive
+        // pool would hold both `assets:cash` and `assets:cash:cmb` and count the
+        // child twice — the investable number came out double.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let opts = crate::vault::VaultOptions::default();
+        crate::vault::create_vault(dir.path(), &crate::vault::VaultCreateOptions::default())
+            .expect("vault");
+        let day: chrono::NaiveDate = "2026-01-01".parse().unwrap();
+        let file = crate::writer::ensure_day_file(dir.path(), day, &opts).expect("day file");
+        let (src, state) = crate::writer::read_rel(dir.path(), &file.rel).expect("read");
+        let block = "\n2026-01-01 期初\n    assets:cash:cmb        1000.00 CNY\n                         assets:fund             500.00 CNY\n    assets:home:flat      8000.00 CNY\n                         equity:opening        -9500.00 CNY\n";
+        crate::writer::write_rel(
+            dir.path(),
+            &file.rel,
+            &format!("{src}{block}"),
+            Some(&state),
+            &opts,
+        )
+        .expect("write");
+        let vault = Vault::load(dir.path(), &opts).expect("load");
+        let over = overview(&vault);
+
+        // cash 1000 + fund 500; the house is excluded and nothing is counted twice.
+        assert_eq!(over.fire.balance.value, 1500.0);
+        let accounts: Vec<&str> = over.pool.iter().map(|m| m.account.as_str()).collect();
+        assert_eq!(accounts, vec!["assets:cash:cmb", "assets:fund"]);
+        assert_eq!(over.pool[0].amount.value, 1000.0);
+    }
+
+    #[test]
+    fn a_non_positive_pool_has_no_eta() {
+        // A negative pool with no savings used to produce `Some(0)` months,
+        // i.e. "already achieved", because ln(negative) became NaN and NaN as i64
+        // is 0.
+        let p = fire_projection(
+            Decimal::new(15_000, 0),
+            Decimal::new(-1_987_468, 2),
+            Decimal::ZERO,
+            Decimal::new(6, 2),
+            Decimal::new(25, 3),
+            Decimal::new(40, 3),
+        );
+        assert!(p.targets.iter().all(|t| t.months.is_none()));
+        assert!(p.note.as_deref().unwrap_or_default().contains("资产池"));
+    }
+
+    #[test]
+    fn progress_never_goes_negative() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let opts = crate::vault::VaultOptions::default();
+        crate::vault::create_vault(dir.path(), &crate::vault::VaultCreateOptions::default())
+            .expect("vault");
+        std::fs::write(
+            dir.path().join("goals.ledger"),
+            "goal fire 自由 ; spend:15000.00 CNY\n",
+        )
+        .expect("goals");
+        let day: chrono::NaiveDate = "2026-01-01".parse().unwrap();
+        let file = crate::writer::ensure_day_file(dir.path(), day, &opts).expect("day file");
+        let (src, state) = crate::writer::read_rel(dir.path(), &file.rel).expect("read");
+        let block = "\n2026-01-01 支出\n    expenses:food    1200.00 CNY\n                         assets:cash     -1200.00 CNY\n";
+        crate::writer::write_rel(
+            dir.path(),
+            &file.rel,
+            &format!("{src}{block}"),
+            Some(&state),
+            &opts,
+        )
+        .expect("write");
+        let vault = Vault::load(dir.path(), &opts).expect("load");
+        let over = overview(&vault);
+        assert_eq!(over.fire.balance.value, -1200.0);
+        assert_eq!(over.fire.progress, 0.0);
+        assert!(over.fire.targets.iter().all(|t| t.eta_months.is_none()));
     }
 
     #[test]

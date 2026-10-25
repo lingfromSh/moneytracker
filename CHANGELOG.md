@@ -128,6 +128,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- 资产池为负时不再显示「已达成」。`months_to_target` 对负余额且没有储蓄的情况取 `ln(负数)` 得到 NaN，
+  `NaN as i64` 变成 0，界面于是显示「0 个月、已完成」；现在直接返回「无预计时间」并给出提示，
+  进度条也夹在 0–100% 之间（以前会出现 −5.3% 这种负数）。
+- 可投资资产不再重复计数。`Vault::accounts` 里既有 `assets:现金` 也有 `assets:现金:招商银行`，
+  旧的资产池把它们各按子树求和，同一笔钱被加了两遍（祖先账户 `assets` 还会再加一遍），财富自由
+  的分子因此偏大。现在只从**有余额**的资产账户里取最外层作为池子的根。
+
 - The 快速记账 palette is actually frameless again: its window is transparent, but nothing told the page behind the card
   to stop painting, so the rounded card sat on a square white rectangle. The window label (not the URL hash) now decides
   that the page is transparent, `backdrop-blur` was dropped (in a transparent window it samples an undefined backdrop and

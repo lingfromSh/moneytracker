@@ -382,6 +382,10 @@ debt 房贷 ; account:liabilities:mortgage rate:3.15% payment:8200.00 CNY
 - **FIRE** = annual expenses ÷ withdrawal rate. Expenses come from the trailing 12 months (or
   `expenses:annual`), the pool is the current balance of the `pool` accounts, and the ETA uses the
   real (after-inflation) return with a 6-month average contribution.
+  Without a `pool` line the pool defaults to **every asset account whose name does not contain
+  `房 / home / house / property / 车 / car`** — a home you live in cannot pay for groceries, so it
+  counts in net worth but not here. Each asset is counted once: a parent (`assets:cash`) and its
+  children (`assets:cash:cmb`) never both count.
 - **Reserve months** = cash ÷ average monthly expenses; the target is `reserve:` in `assume`.
 - **Debt progress** amortises each `debt` line monthly: payoff date, interest paid since the ledger
   began, and *what an extra 500 / 1000 / 2000 per month would save* — read-only, nothing is written.
