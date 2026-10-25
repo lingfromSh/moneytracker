@@ -32,6 +32,7 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 ledger-core = { path = "../crates/ledger-core" }
 ledger-query = { path = "../crates/ledger-query" }
 ledger-engine = { path = "../crates/ledger-engine" }
+ledger-sync = { path = "../crates/ledger-sync" }
 
 [dev-dependencies]
 tempfile = "3"

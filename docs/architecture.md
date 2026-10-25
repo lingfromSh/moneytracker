@@ -7,10 +7,12 @@
 | `crates/ledger-core` | AST, byte-span parser, canonical printer, diagnostics. No I/O. |
 | `crates/ledger-query` | Query subset: `acct:` `desc:` `date:` `tag:` `amt:` `status:` `cur:` with `and` / `or` / `not` / parentheses. |
 | `crates/ledger-engine` | Vault loading (include graph), index, balances, account types, capture parsing/expansion, rules, FX, budgets, forecast, reports, safe writing. |
+| `crates/ledger-sync` | S3/MinIO mirror: SigV4 signing, object store trait, three-way diff, two-phase commit, conflict reporting. No Tauri, no UI. |
 | `src-tauri` | Tauri shell: windows, tray, global shortcut, file watcher, IPC command layer, generated TypeScript bindings. |
 | `src` | React 19 UI. |
 
-`ledger-engine` depends on `ledger-core` and `ledger-query`; `src-tauri` depends on all three;
+`ledger-engine` depends on `ledger-core` and `ledger-query`; `ledger-sync` depends on `ledger-engine`
+(and only on the public vault/writer API); `src-tauri` depends on all of them;
 the UI depends on nothing but the generated bindings.
 
 ## Data flow
@@ -233,6 +235,44 @@ the file: the automation switch only makes `maintenance.rs` call `commit_due()` 
 The file is app metadata, never included by `index.ledger`. If it were, `report::budgets` (which turns
 every positive X/A/L leg of every included `~` block into an envelope) would read each template as a
 budget, and the forecast would treat the plan as history.
+
+## Multi-device sync
+
+The vault is a directory of text files, so sync is a file problem: `crates/ledger-sync` mirrors
+`*.ledger` into an S3-compatible bucket and never touches anything else. It is deliberately a
+separate crate with no Tauri dependency, so the same engine can drive a phone build later.
+
+```
+        local scan ──┐
+                     ├─ diff(local, remote, base) ──> Plan { uploads, downloads, deletes, conflicts }
+ bucket manifest ────┘                                        │
+                                                              ▼
+      conflicts non-empty? ──> stop, return the list, write nothing
+                                                              │
+                                                              ▼
+  blobs (content-addressed, `head` then `put`) → download+verify → deletes → manifest (If-Match) → .sync/index.json
+```
+
+- **Base** is `.sync/index.json`: the hashes both sides agreed on last time. Without it every
+  difference would look like a conflict, and with it the ordinary cases — edited here, edited there,
+  deleted here — resolve without asking.
+- **Blobs are content-addressed** (`<prefix>/blobs/<blake3>`), so re-uploading an unchanged file is a
+  `HEAD`; a file is only written after its blob arrives and the hash matches, and it goes through
+  `ledger_engine::writer::write_rel` with the current `FileState` so the optimistic-concurrency guard
+  still applies.
+- **The manifest is the transaction commit**, replaced with `If-Match: <etag>` (or `If-None-Match: *`
+  for the first push). A 412 means another device pushed between our read and write; the run retries
+  up to three times, threading the downloads it already applied into the next attempt so they are not
+  mistaken for local edits.
+- **Conflicts are terminal, not automatic.** The run returns `complete: false` with a per-file list
+  (both hashes, both mtimes, both sizes) and the UI asks. `Side::Local` uploads, `Side::Remote`
+  downloads, and the next run records the agreed hash.
+- **Deletes are soft**: a file that disappeared locally is deleted from the bucket, a file deleted
+  remotely is moved into `.sync/trash/<timestamp>/`, so a mistaken delete is recoverable.
+- The vault id is adopted from the bucket on the first pull (and generated on the first push); a
+  bucket that belongs to another ledger is refused rather than merged.
+- Storage is plaintext by decision: private bucket, HTTPS, keys scoped to the prefix. Secrets live in
+  `sync.json` (`0600`) beside `settings.json`, never in the ledger or in the manifest.
 
 ## Statement import
 

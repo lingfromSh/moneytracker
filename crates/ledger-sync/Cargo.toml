@@ -1,0 +1,20 @@
+[package]
+name = "ledger-sync"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ledger-core = { path = "../ledger-core" }
+ledger-engine = { path = "../ledger-engine" }
+serde.workspace = true
+chrono.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+blake3.workspace = true
+sha2 = "0.10"
+hmac = "0.12"
+ureq = { version = "2.12", default-features = false, features = ["tls", "gzip"] }
+
+[dev-dependencies]
+tempfile = "3"

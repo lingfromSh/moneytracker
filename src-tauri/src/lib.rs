@@ -9,6 +9,7 @@ mod llm;
 mod maintenance;
 mod shortcut;
 mod state;
+mod sync;
 mod watcher;
 mod window;
 
@@ -89,6 +90,12 @@ pub fn build_specta() -> Builder<tauri::Wry> {
             commands::llm_set_key,
             commands::llm_test,
             commands::llm_draft,
+            sync::sync_config,
+            sync::sync_save,
+            sync::sync_set_keys,
+            sync::sync_test,
+            sync::sync_preview,
+            sync::sync_run,
             commands::sample_vault_path,
             commands::create_sample_vault,
             commands::app_version,
@@ -97,6 +104,7 @@ pub fn build_specta() -> Builder<tauri::Wry> {
             commands::LedgerChanged,
             commands::CaptureSaved,
             commands::ParseDiagnostics,
+            sync::SyncFinished,
         ])
 }
 
@@ -160,6 +168,9 @@ fn boot(app: &AppHandle) {
     if let Err(err) = shortcut::register(app, &settings.shortcut) {
         eprintln!("moneytracker: {err}");
         state.set_shortcut_error(Some(err));
+    }
+    if settings.sync_enabled && settings.sync_auto {
+        sync::auto_pull(app.clone());
     }
 }
 

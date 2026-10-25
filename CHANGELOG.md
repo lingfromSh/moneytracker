@@ -31,6 +31,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Multi-device sync over any S3-compatible bucket (MinIO, R2, S3, B2). New crate `crates/ledger-sync`:
+  hand-rolled SigV4 (verified against an independent HMAC computation), an `ObjectStore` trait with an
+  in-memory store for tests, content-addressed blobs, a manifest published under `If-Match`, and a
+  three-way diff against `.sync/index.json` so "edited here" and "deleted there" resolve without
+  asking. A file edited on two devices **stops the run** and asks which side to keep; deletes go to
+  `.sync/trash/` instead of being unlinked. 设置 → 同步 has endpoint / bucket / prefix / region /
+  path-style, keys in `sync.json` (`0600`), 测试连接, 预览差异 (writes nothing), 立即同步, a per-file
+  conflict picker, and an optional pull at launch (`sync-finished` event). Only `*.ledger` travels.
 - Declared schedules (日程): `recurring.ledger` holds hand-editable `~ monthly` templates for money that
   happens every month — 工资 with its 五险二金 split (应发 and the employer side both booked), the
   mortgage payment split into interest and principal, rent income, subscriptions. The 日程 view lists

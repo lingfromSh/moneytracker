@@ -73,6 +73,20 @@ pub struct Settings {
     pub auto_recur: bool,
     /// Commit the vault to its own git repository after maintenance.
     pub git_auto_commit: bool,
+    /// Mirror the vault to an S3-compatible bucket so several devices agree.
+    pub sync_enabled: bool,
+    pub sync_endpoint: String,
+    pub sync_region: String,
+    pub sync_bucket: String,
+    /// Key prefix inside the bucket; defaults to `moneytracker`.
+    pub sync_prefix: String,
+    /// Path-style addressing — what MinIO wants, and what most self-hosted
+    /// S3 needs.
+    pub sync_path_style: bool,
+    /// Pull on launch (and after maintenance) instead of only on demand.
+    pub sync_auto: bool,
+    /// Human name for this device, recorded in the manifest.
+    pub sync_device: String,
     /// `comfortable` | `compact` — dashboard row height and spacing.
     pub density: String,
     /// `1` (Monday) or `0` (Sunday); drives week grouping in lists.
@@ -117,6 +131,14 @@ impl Default for Settings {
             llm_model: String::new(),
             auto_recur: false,
             git_auto_commit: false,
+            sync_enabled: false,
+            sync_endpoint: String::new(),
+            sync_region: "us-east-1".to_string(),
+            sync_bucket: String::new(),
+            sync_prefix: "moneytracker".to_string(),
+            sync_path_style: true,
+            sync_auto: false,
+            sync_device: String::new(),
             density: "comfortable".to_string(),
             week_start: 1,
             hidden_cards: Vec::new(),
@@ -262,6 +284,74 @@ impl AppState {
             )
         })?;
         let body = serde_json::json!({ "api_key": key }).to_string();
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        use std::io::Write;
+        let mut file = options
+            .open(&path)
+            .map_err(|e| CmdError::new("app.io", format!("无法写入 {}：{e}", path.display())))?;
+        file.write_all(body.as_bytes())
+            .map_err(|e| CmdError::new("app.io", format!("无法写入 {}：{e}", path.display())))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+        }
+        Ok(())
+    }
+    /// Access key / secret key for the bucket. Same rules as the LLM key:
+    /// outside `settings.json`, `0600`, only the credentials.
+    fn sync_secret_path(&self) -> PathBuf {
+        self.config_dir.join("sync.json")
+    }
+
+    pub fn sync_keys(&self) -> (Option<String>, Option<String>) {
+        let Ok(src) = std::fs::read_to_string(self.sync_secret_path()) else {
+            return (None, None);
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&src) else {
+            return (None, None);
+        };
+        let read = |name: &str| {
+            value
+                .get(name)
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|text| !text.is_empty())
+                .map(str::to_string)
+        };
+        (read("access_key"), read("secret_key"))
+    }
+
+    pub fn set_sync_keys(&self, access_key: &str, secret_key: &str) -> CmdResult<()> {
+        let path = self.sync_secret_path();
+        let access_key = access_key.trim();
+        let secret_key = secret_key.trim();
+        if access_key.is_empty() && secret_key.is_empty() {
+            match std::fs::remove_file(&path) {
+                Ok(()) => return Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                Err(e) => {
+                    return Err(CmdError::new(
+                        "app.io",
+                        format!("无法删除 {}：{e}", path.display()),
+                    ))
+                }
+            }
+        }
+        std::fs::create_dir_all(&self.config_dir).map_err(|e| {
+            CmdError::new(
+                "app.io",
+                format!("无法创建 {}：{e}", self.config_dir.display()),
+            )
+        })?;
+        let body =
+            serde_json::json!({ "access_key": access_key, "secret_key": secret_key }).to_string();
         let mut options = std::fs::OpenOptions::new();
         options.write(true).create(true).truncate(true);
         #[cfg(unix)]

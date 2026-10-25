@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-194_passing-brightgreen.svg)](#testing)
-[![Front-end tests](https://img.shields.io/badge/vitest-72_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-220_passing-brightgreen.svg)](#testing)
+[![Front-end tests](https://img.shields.io/badge/vitest-77_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
@@ -38,6 +38,7 @@ rich dashboard — with **zero proprietary storage**. Delete the app and you sti
 - [Importing statements](#importing-statements)
 - [Recurring entries & automation](#recurring-entries--automation)
 - [Declared schedules](#declared-schedules)
+- [Multi-device sync](#multi-device-sync)
 - [Insights & questions](#insights--questions)
 - [Personalising](#personalising)
 - [Planning & reports](#planning--reports)
@@ -75,6 +76,7 @@ the source of truth and treats the UI as a fast editor for it:
 | **Import** | Alipay / WeChat Pay / bank CSV statements: auto-detected columns, dedupe by fingerprint, preview before writing, keyword→category rules, then reconcile the account against what the bank says |
 | **Schedule** | `recurring.ledger` holds hand-written `~ monthly` templates — salary with the employer side and the 五险二金 split, mortgage interest + principal, rent, subscriptions; the 日程 page lists the next 6/12/24 months with 记入 / 跳过, and the dashboard gets a 固定收支 card |
 | **Automation** | detects monthly patterns (payee + amount + postings, ≥3 months), offers a one-click "record next month", tags what it writes with `recur:<id>@<month>`, keeps a monthly report in `reports/`, can snapshot the vault into git, and warns when a budget passes 90 % |
+| **Sync** | mirrors the vault into an S3-compatible bucket (MinIO, R2, S3) with a 3-way merge against a manifest; a file edited on two devices is **stopped on**, never silently overwritten, and the settings page asks which side to keep |
 | **Planning** | `goals.ledger` drives a FIRE projection (SWR 3.0/3.5/4.0 %), a reserve-months gauge, per-account goals with target dates, debt payoff dates (plus what an extra payment saves) and allocation drift against `class:` tags |
 | **Reports** | balance sheet, income statement for any month/quarter/year, and a net-worth bridge that reconciles closing net worth to opening plus income minus expense |
 | **Accounts & categories** | account tree with own/total balances and type inference; category view by account or by tag |
@@ -284,6 +286,38 @@ plain hledger periodic syntax:
 MoneyTracker's own budget envelope scan, cash-flow forecast and payoff estimate skip the file by name,
 so a declared schedule is never counted as a month that already happened.
 
+## Multi-device sync
+
+The vault is a folder of text files, so syncing it is syncing files. MoneyTracker can mirror it to
+any S3-compatible bucket (MinIO, Cloudflare R2, AWS S3, Backblaze B2 …) and keeps a manifest of the
+hash every device agreed on last time, which turns "who changed what" into a three-way question:
+
+| local | remote | base | result |
+| --- | --- | --- | --- |
+| changed | unchanged | — | upload |
+| unchanged | changed | — | download |
+| changed | changed | same hash | both sides agree: nothing to do |
+| changed | changed | different | **conflict — the run stops and asks** |
+| changed | deleted | — | delete on the other side |
+| changed | changed | no base | **conflict** (a file both devices created) |
+
+Setup lives in 设置 → 同步: endpoint, bucket, prefix (one bucket can hold several vaults), region,
+path-style addressing for MinIO, and the two keys — those go into `sync.json` next to
+`settings.json` with `0600`, never into the ledger. **测试连接** reads the bucket, **预览差异** shows
+what a run would do without writing anything, **立即同步** does it.
+
+- Only `*.ledger` files travel. `.bak/`, `.git/`, `.sync/` and editor temp files stay local.
+- A file is written only after its blobs arrive and their blake3 hash matches, and always through
+  the same atomic writer the UI uses, so a half-synced file can never appear.
+- A deleted file is moved to `.sync/trash/<timestamp>/` rather than unlinked.
+- The manifest is replaced under `If-Match`, so two devices pushing at the same moment get a
+  retry instead of a lost update. Nothing resolves a conflict on your behalf: pick 保留本机 or 用云端
+  per file, or open the file yourself and merge it.
+- Plaintext in the bucket. Use a private bucket, HTTPS, and keys that can only touch that prefix.
+
+The `auto` switch pulls once at launch (and reports through `sync-finished`) so a phone edit is
+there before you start typing.
+
 ## Insights & questions
 
 The dashboard's 洞察 panel is computed by rules, not by a model: budget envelopes above 90 %, the two
@@ -350,6 +384,7 @@ statement on the clipboard for your journal.
     2026-10.ledger             # includes the day files
     2026-10-04.ledger          # one day of transactions
   .bak/                        # pre-write snapshots (git-ignored)
+  .sync/                       # sync state: last agreed hashes, conflict trash (git-ignored)
 ```
 
 Everything is plain hledger syntax: `include` / `!include` (globs and cycle detection), `account`
@@ -417,10 +452,10 @@ check (`brew install hledger`).
 ## Testing
 
 ```bash
-cargo test --workspace                        # 194 Rust tests, 13 suites
+cargo test --workspace                        # 220 Rust tests, 15 suites
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 72 Vitest tests
+pnpm test                                     # 77 Vitest tests
 pnpm build                                    # tsc --noEmit && vite build
 ```
 
@@ -464,6 +499,7 @@ Performance, measured on an M-series laptop with a generated 100 000-transaction
 crates/ledger-core     AST, byte-span parser, printer, diagnostics
 crates/ledger-query    hledger query subset: acct/desc/date/tag/amt, and/or/not
 crates/ledger-engine   include graph, index, balances, capture, rules, FX, reports, safe writes
+crates/ledger-sync     S3/MinIO mirror: SigV4, 3-way diff, conflict detection, trash
 src-tauri              windows, tray, global shortcut, watcher, IPC
 src                    React 19 + Vite + Tailwind v4 + Recharts + d3-sankey
 fixtures/              grammar and error corpora, sample + showcase vaults

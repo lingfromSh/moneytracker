@@ -36,7 +36,7 @@ pub struct ParseDiagnostics {
     pub count: usize,
 }
 
-fn emit_ledger_changed(app: &AppHandle, paths: Vec<String>, reason: &str) {
+pub(crate) fn emit_ledger_changed(app: &AppHandle, paths: Vec<String>, reason: &str) {
     let _ = LedgerChanged {
         paths,
         reason: reason.to_string(),

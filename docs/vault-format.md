@@ -20,7 +20,12 @@ plain hledger syntax; the app only refuses what it cannot represent exactly.
     <year>-<MM>.ledger    includes the day files of that month
     <year>-<MM>-<DD>.ledger  one day of transactions
   .bak/                   snapshots taken before every rewrite
+  .sync/                  sync state: `index.json` (last agreed hashes), `trash/` (git-ignored)
 ```
+
+`.sync/` is device-local: it records the hash of every file the last sync agreed on, which is what
+lets the next run tell "changed here" from "changed there". It is not part of the ledger, not
+uploaded, and git-ignored, so deleting it only costs one full comparison.
 
 The include chain is created lazily: a transaction written on 2026-10-04 creates
 `2026/2026-10-04.ledger`, adds `include 2026-10-04.ledger` to `2026/2026-10.ledger`, adds
@@ -151,6 +156,26 @@ debt 房贷 ; account:liabilities:mortgage rate:3.15% payment:8200.00 CNY
 
 Unknown directives produce `plan.unknown_directive` diagnostics with line numbers and are shown in
 the 规划 view instead of failing the load.
+
+## Sync metadata
+
+Sync keeps its own state under `.sync/`; nothing about it enters the ledger:
+
+```json
+{
+  "schema": 1,
+  "vault": "3f9c…",
+  "device": "9a1c…",
+  "last_sync": "2026-11-20T02:46:11Z",
+  "files": { "2026/2026-11.ledger": "b3f1…", "index.ledger": "77aa…" }
+}
+```
+
+`files` maps a vault-relative path to the blake3 hash both sides agreed on at `last_sync`. The same
+manifest, plus a per-file hash, size and mtime, is stored in the bucket as
+`<prefix>/manifest.json`, and the file contents themselves live at `<prefix>/blobs/<hash>` (content
+addressed, so an unchanged file is never re-uploaded). A file removed by a sync is moved to
+`.sync/trash/<timestamp>/<path>`, not unlinked.
 
 ## Recurring decisions
 

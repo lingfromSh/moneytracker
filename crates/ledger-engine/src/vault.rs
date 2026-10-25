@@ -212,7 +212,8 @@ pub fn create_vault(root: &Path, opts: &VaultCreateOptions) -> Result<Vec<String
 
     let gitignore = root.join(".gitignore");
     if with_template && !gitignore.exists() {
-        std::fs::write(&gitignore, ".bak/\n").map_err(|e| EngineError::Io(e.to_string()))?;
+        std::fs::write(&gitignore, ".bak/\n.sync/\n")
+            .map_err(|e| EngineError::Io(e.to_string()))?;
         created.push(".gitignore".to_string());
     }
 

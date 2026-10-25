@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-194_passing-brightgreen.svg)](#测试)
-[![Front-end tests](https://img.shields.io/badge/vitest-72_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-220_passing-brightgreen.svg)](#测试)
+[![Front-end tests](https://img.shields.io/badge/vitest-77_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#环境要求)
@@ -37,6 +37,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 - [导入对账单](#导入对账单)
 - [定期交易与自动化](#定期交易与自动化)
 - [固定收支日程](#固定收支日程)
+- [多端同步](#多端同步)
 - [洞察与提问](#洞察与提问)
 - [个性化](#个性化)
 - [规划与报表](#规划与报表)
@@ -73,6 +74,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 | **导入** | 支付宝 / 微信支付 / 银行 CSV：自动识别列、指纹去重、先预览再写入、关键词→分类规则，并可对账户做对账 |
 | **日程** | `recurring.ledger` 里手写 `~ monthly` 模板：工资（应发+公司缴纳+五险二金）、房贷本息、房租、订阅；日程页按 6/12/24 个月列出到期项，一键记入或跳过，看板有「固定收支」卡片 |
 | **自动化** | 自动发现按月重复的收支（同摘要、同金额、同分录，≥3 个月），一键记入下个月并打 `recur:<id>@<月份>` 标签；每月生成 `reports/` 报告、可选提交 git、预算超 90% 提醒 |
+| **同步** | 把账本镜像到任意 S3 兼容存储（MinIO / R2 / S3），靠 manifest 做三方比对；两边都改过的文件**停下来问你**，绝不静默覆盖 |
 | **规划** | `goals.ledger` 驱动财富自由测算（SWR 3.0/3.5/4.0%）、储备月数、带目标日期的账户目标、负债还清日期（含“多还一点能省多少”）以及按 `class:` 标签的配置偏离 |
 | **报表** | 资产负债表、任意月/季/年的损益表，以及把期末净资产对齐到「期初 + 收入 − 支出」的净值变动表 |
 | **账户与分类** | 账户树显示自身/合计余额与类型推断；分类视图可按账户或按标签统计 |
@@ -264,6 +266,35 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 `recurring.ledger` 和 `rules.ledger`、`goals.ledger` 一样 **不被 `index.ledger` 包含**：它是计划，
 不是已经发生的钱。否则 hledger、预算和现金流预测都会把同一个月算两遍。
 
+## 多端同步
+
+账本就是一个文本目录，同步账本＝同步文件。MoneyTracker 可以把它镜像到任意 S3 兼容存储
+（MinIO / Cloudflare R2 / AWS S3 / B2 …），并记住每台设备上次一致时的哈希，于是「谁改了什么」
+变成一个三方问题：
+
+| 本机 | 云端 | 上次一致 | 结果 |
+| --- | --- | --- | --- |
+| 改过 | 没改 | — | 上传 |
+| 没改 | 改过 | — | 下载 |
+| 改过 | 改过 | 哈希相同 | 两边一致，什么都不做 |
+| 改过 | 改过 | 哈希不同 | **冲突：这次同步停下来问你** |
+| 改过 | 被删 | — | 对面也删掉 |
+| 改过 | 改过 | 没有基线 | **冲突**（两边各自新建了同名文件） |
+
+配置在「设置 → 同步」：端点、bucket、前缀（一个 bucket 可以放多个账本）、区域、MinIO 需要的
+路径风格访问，以及两个密钥 —— 密钥写在 `settings.json` 旁边的 `sync.json`（`0600`），不会进账本。
+**测试连接**只读 bucket，**预览差异**告诉你这次会做什么但不写任何东西，**立即同步**才真正执行。
+
+- 只有 `*.ledger` 参与同步，`.bak/`、`.git/`、`.sync/` 和编辑器临时文件都留在本机。
+- 文件先下载 blob 并校验 blake3 再落盘，且走和界面同一套原子写入，不会出现「同步了一半」的文件。
+- 被删除的文件不直接 unlink，而是移到 `.sync/trash/<时间戳>/`。
+- manifest 用 `If-Match` 替换：两台设备同时推送时是重试，而不是丢更新。任何冲突都不会自动裁决 ——
+  逐个文件选「保留本机」或「用云端」，或者自己打开文件合并。
+- 桶里是明文。请用私有 bucket + HTTPS + 只能访问该前缀的密钥。
+
+打开「启动时自动拉取」后，启动会先合并云端改动（并通过 `sync-finished` 事件告诉界面），
+手机上的改动在你开始记账之前就已经在了。
+
 ## 洞察与提问
 
 看板的「洞察」面板完全由规则算出，不经过模型：超过 90% 的预算、相对上月变化最大的两个分类、
@@ -390,10 +421,10 @@ pnpm bindings                    # 由 Rust 命令重新生成 src/lib/bindings.
 ## 测试
 
 ```bash
-cargo test --workspace                        # 194 个 Rust 测试，13 个 suite
+cargo test --workspace                        # 220 个 Rust 测试，15 个 suite
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 72 个 Vitest 测试
+pnpm test                                     # 77 个 Vitest 测试
 pnpm build                                    # tsc --noEmit && vite build
 ```
 
@@ -435,6 +466,7 @@ pnpm build                                    # tsc --noEmit && vite build
 crates/ledger-core     AST、字节 span 解析器、打印器、诊断
 crates/ledger-query    hledger 查询子集：acct/desc/date/tag/amt，and/or/not
 crates/ledger-engine   include 图、索引、余额、快录、规则、汇率、报表、安全写入
+crates/ledger-sync     S3 / MinIO 镜像：SigV4 签名、三方比对、冲突检测、回收站
 src-tauri              窗口、托盘、全局快捷键、文件监听、IPC
 src                    React 19 + Vite + Tailwind v4 + Recharts + d3-sankey
 fixtures/              语法语料、错误语料、样例账本与示例账本

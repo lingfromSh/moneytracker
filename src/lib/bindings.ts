@@ -109,6 +109,16 @@ export const commands = {
 	 *  checks and the write path are identical to a typed entry.
 	 */
 	llmDraft: (text: string) => typedError<LlmDraftDto_Serialize, CmdError>(__TAURI_INVOKE("llm_draft", { text })),
+	syncConfig: () => typedError<SyncConfigDto_Serialize, CmdError>(__TAURI_INVOKE("sync_config")),
+	syncSave: (patch: SyncPatchDto) => typedError<SyncConfigDto_Serialize, CmdError>(__TAURI_INVOKE("sync_save", { patch })),
+	syncSetKeys: (accessKey: string, secretKey: string) => typedError<SyncConfigDto_Serialize, CmdError>(__TAURI_INVOKE("sync_set_keys", { accessKey, secretKey })),
+	/**
+	 *  Reads the bucket (the manifest, at most) so 设置 can prove the credentials
+	 *  and the endpoint work before anything is written.
+	 */
+	syncTest: () => typedError<string, CmdError>(__TAURI_INVOKE("sync_test")),
+	syncPreview: () => typedError<SyncPreviewDto_Serialize, CmdError>(__TAURI_INVOKE("sync_preview")),
+	syncRun: (choices: SyncChoiceDto[]) => typedError<SyncReportDto_Serialize, CmdError>(__TAURI_INVOKE("sync_run", { choices })),
 	sampleVaultPath: () => typedError<string, CmdError>(__TAURI_INVOKE("sample_vault_path")),
 	createSampleVault: () => typedError<OpenVaultResultDto_Serialize, CmdError>(__TAURI_INVOKE("create_sample_vault")),
 	appVersion: () => typedError<string, CmdError>(__TAURI_INVOKE("app_version")),
@@ -119,6 +129,7 @@ export const events = {
 	captureSaved: makeEvent<CaptureSaved, CaptureSaved>("capture-saved"),
 	ledgerChanged: makeEvent<LedgerChanged, LedgerChanged>("ledger-changed"),
 	parseDiagnostics: makeEvent<ParseDiagnostics, ParseDiagnostics>("parse-diagnostics"),
+	syncFinished: makeEvent<SyncFinished, SyncFinished>("sync-finished"),
 };
 
 /* Types */
@@ -1583,6 +1594,22 @@ export type Settings_Deserialize = {
 	auto_recur: boolean,
 	/**  Commit the vault to its own git repository after maintenance. */
 	git_auto_commit: boolean,
+	/**  Mirror the vault to an S3-compatible bucket so several devices agree. */
+	sync_enabled: boolean,
+	sync_endpoint: string,
+	sync_region: string,
+	sync_bucket: string,
+	/**  Key prefix inside the bucket; defaults to `moneytracker`. */
+	sync_prefix: string,
+	/**
+	 *  Path-style addressing — what MinIO wants, and what most self-hosted
+	 *  S3 needs.
+	 */
+	sync_path_style: boolean,
+	/**  Pull on launch (and after maintenance) instead of only on demand. */
+	sync_auto: boolean,
+	/**  Human name for this device, recorded in the manifest. */
+	sync_device: string,
 	/**  `comfortable` | `compact` — dashboard row height and spacing. */
 	density: string,
 	/**  `1` (Monday) or `0` (Sunday); drives week grouping in lists. */
@@ -1627,6 +1654,22 @@ export type Settings_Serialize = {
 	auto_recur: boolean,
 	/**  Commit the vault to its own git repository after maintenance. */
 	git_auto_commit: boolean,
+	/**  Mirror the vault to an S3-compatible bucket so several devices agree. */
+	sync_enabled: boolean,
+	sync_endpoint: string,
+	sync_region: string,
+	sync_bucket: string,
+	/**  Key prefix inside the bucket; defaults to `moneytracker`. */
+	sync_prefix: string,
+	/**
+	 *  Path-style addressing — what MinIO wants, and what most self-hosted
+	 *  S3 needs.
+	 */
+	sync_path_style: boolean,
+	/**  Pull on launch (and after maintenance) instead of only on demand. */
+	sync_auto: boolean,
+	/**  Human name for this device, recorded in the manifest. */
+	sync_device: string,
 	/**  `comfortable` | `compact` — dashboard row height and spacing. */
 	density: string,
 	/**  `1` (Monday) or `0` (Sunday); drives week grouping in lists. */
@@ -1701,6 +1744,147 @@ export type StatementRowDto_Serialize = {
 	label: string,
 	unit: AmountDto,
 	hint: string | null,
+};
+
+export type SyncChoiceDto = {
+	rel: string,
+	/**  `local` keeps this device's version, `remote` takes the bucket's. */
+	side: string,
+};
+
+export type SyncConfigDto = SyncConfigDto_Serialize | SyncConfigDto_Deserialize;
+
+export type SyncConfigDto_Deserialize = {
+	enabled: boolean,
+	endpoint: string,
+	region: string,
+	bucket: string,
+	prefix: string,
+	path_style: boolean,
+	auto: boolean,
+	device: string,
+	has_keys: boolean,
+	/**  `AKIA…4F2` — enough to recognise the key, not enough to use it. */
+	access_key_hint: string,
+	configured: boolean,
+	last_sync?: string | null,
+	has_ledger: boolean,
+};
+
+export type SyncConfigDto_Serialize = {
+	enabled: boolean,
+	endpoint: string,
+	region: string,
+	bucket: string,
+	prefix: string,
+	path_style: boolean,
+	auto: boolean,
+	device: string,
+	has_keys: boolean,
+	/**  `AKIA…4F2` — enough to recognise the key, not enough to use it. */
+	access_key_hint: string,
+	configured: boolean,
+	last_sync: string | null,
+	has_ledger: boolean,
+};
+
+export type SyncConflictDto = SyncConflictDto_Serialize | SyncConflictDto_Deserialize;
+
+export type SyncConflictDto_Deserialize = {
+	rel: string,
+	local_hash?: string | null,
+	remote_hash?: string | null,
+	base_hash?: string | null,
+	local_mtime?: string | null,
+	remote_mtime?: string | null,
+	local_bytes?: number | null,
+	remote_bytes?: number | null,
+};
+
+export type SyncConflictDto_Serialize = {
+	rel: string,
+	local_hash: string | null,
+	remote_hash: string | null,
+	base_hash: string | null,
+	local_mtime: string | null,
+	remote_mtime: string | null,
+	local_bytes: number | null,
+	remote_bytes: number | null,
+};
+
+/**  Emitted after a background pull so the UI can reload without polling. */
+export type SyncFinished = {
+	summary: string,
+	complete: boolean,
+	conflicts: number | null,
+	pulled: number | null,
+};
+
+export type SyncPatchDto = {
+	enabled: boolean,
+	endpoint: string,
+	region: string,
+	bucket: string,
+	prefix: string,
+	path_style: boolean,
+	auto: boolean,
+	device: string,
+};
+
+export type SyncPreviewDto = SyncPreviewDto_Serialize | SyncPreviewDto_Deserialize;
+
+export type SyncPreviewDto_Deserialize = {
+	uploads: string[],
+	downloads: string[],
+	delete_remote: string[],
+	delete_local: string[],
+	conflicts: SyncConflictDto_Deserialize[],
+	remote_updated_at?: string | null,
+	remote_device?: string | null,
+	last_sync?: string | null,
+	files_local: number | null,
+	files_remote: number | null,
+};
+
+export type SyncPreviewDto_Serialize = {
+	uploads: string[],
+	downloads: string[],
+	delete_remote: string[],
+	delete_local: string[],
+	conflicts: SyncConflictDto_Serialize[],
+	remote_updated_at: string | null,
+	remote_device: string | null,
+	last_sync: string | null,
+	files_local: number | null,
+	files_remote: number | null,
+};
+
+export type SyncReportDto = SyncReportDto_Serialize | SyncReportDto_Deserialize;
+
+export type SyncReportDto_Deserialize = {
+	pushed: string[],
+	pulled: string[],
+	removed_local: string[],
+	removed_remote: string[],
+	conflicts: SyncConflictDto_Deserialize[],
+	bytes_up: number | null,
+	bytes_down: number | null,
+	last_sync?: string | null,
+	complete: boolean,
+	summary: string,
+};
+
+export type SyncReportDto_Serialize = {
+	pushed: string[],
+	pulled: string[],
+	removed_local: string[],
+	removed_remote: string[],
+	conflicts: SyncConflictDto_Serialize[],
+	bytes_up: number | null,
+	bytes_down: number | null,
+	last_sync: string | null,
+	complete: boolean,
+	summary: string,
 };
 
 export type TagDto = TagDto_Serialize | TagDto_Deserialize;

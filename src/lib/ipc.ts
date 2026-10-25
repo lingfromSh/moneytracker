@@ -4,7 +4,12 @@
  * Every command returns a `{ status, data | error }` union; `call` turns it into
  * a resolved value or a thrown {@link ApiError} so React Query sees real errors.
  */
-import { commands, events } from "./bindings";
+import {
+  SyncChoiceDto,
+  SyncPatchDto,
+  commands,
+  events,
+} from "./bindings";
 import type {
   BulkPatch_Deserialize,
   CaptureParseDto_Serialize,
@@ -135,6 +140,15 @@ export const api = {
   scheduleSalaryPreview: (request: SalaryTemplateDto_Deserialize) =>
     call(commands.scheduleSalaryPreview(request)),
 
+  // multi-device sync
+  syncConfig: () => call(commands.syncConfig()),
+  syncSave: (patch: SyncPatchDto) => call(commands.syncSave(patch)),
+  syncSetKeys: (accessKey: string, secretKey: string) =>
+    call(commands.syncSetKeys(accessKey, secretKey)),
+  syncTest: () => call(commands.syncTest()),
+  syncPreview: () => call(commands.syncPreview()),
+  syncRun: (choices: SyncChoiceDto[]) => call(commands.syncRun(choices)),
+
   // recurring transactions and automation
   recurList: (lookbackMonths: number | null = 12) => call(commands.recurList(lookbackMonths)),
   recurCommit: (ids: string[]) => call(commands.recurCommit(ids)),
@@ -157,6 +171,7 @@ export type PostingPatch = PostingPatch_Deserialize;
 export const onLedgerChanged = events.ledgerChanged.listen;
 export const onCaptureSaved = events.captureSaved.listen;
 export const onParseDiagnostics = events.parseDiagnostics.listen;
+export const onSyncFinished = events.syncFinished.listen;
 
 export const queryKeys = {
   snapshot: ["snapshot"] as const,
@@ -165,6 +180,7 @@ export const queryKeys = {
   accounts: ["accounts"] as const,
   rules: ["rules"] as const,
   settings: ["settings"] as const,
+  sync: ["sync"] as const,
   fxMissing: ["fx-missing"] as const,
   importPreview: (path: string) => ["import-preview", path],
   reconcile: (account: string, asOf: string | null) => ["reconcile", account, asOf],

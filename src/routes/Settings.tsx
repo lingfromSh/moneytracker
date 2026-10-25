@@ -7,6 +7,7 @@ import { cn } from "../lib/format";
 import { ShortcutInput } from "../components/shortcut-input";
 import { LlmSettings } from "../components/llm-settings";
 import { Automation } from "../components/automation";
+import { SyncSettings } from "../components/sync";
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Select, Switch } from "../components/ui";
 
 const THEMES = [
@@ -321,6 +322,8 @@ export function SettingsView() {
             />
           </div>
         </Card>
+
+        <SyncSettings onMessage={setMessage} onError={setError} />
 
         <Card>
           <CardHeader title="写入审计" hint="每次改写账本都会记录 before/after" />

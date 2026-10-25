@@ -1,5 +1,11 @@
 [workspace]
-members = ["crates/ledger-core", "crates/ledger-query", "crates/ledger-engine", "src-tauri"]
+members = [
+    "crates/ledger-core",
+    "crates/ledger-query",
+    "crates/ledger-engine",
+    "crates/ledger-sync",
+    "src-tauri",
+]
 resolver = "2"
 
 [workspace.package]
