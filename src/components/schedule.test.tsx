@@ -30,10 +30,10 @@ const occurrence = (over: Record<string, unknown>) => ({
   recorded: false,
   skipped: false,
   due: true,
-  settle: amount(26239.5, "26,239.50 CNY"),
-  income: amount(52122, "52,122.00 CNY"),
-  expense: amount(4462.5, "3,750.00 CNY"),
-  assets: amount(47659.5, "47,659.50 CNY"),
+  settle: amount(23550, "23,550.00 CNY"),
+  income: amount(42300, "42,300.00 CNY"),
+  expense: amount(3750, "3,750.00 CNY"),
+  assets: amount(38550, "38,550.00 CNY"),
   debt: amount(0, "0.00 CNY"),
   legs: [],
   txn_id: null,
@@ -50,9 +50,9 @@ const overview = (over: Record<string, unknown> = {}) => ({
   month_totals: [
     {
       month: "2026-11",
-      income: amount(52122, "52,122.00 CNY"),
-      expense: amount(4462.5, "3,750.00 CNY"),
-      assets: amount(47659.5, "47,659.50 CNY"),
+      income: amount(42300, "42,300.00 CNY"),
+      expense: amount(3750, "3,750.00 CNY"),
+      assets: amount(38550, "38,550.00 CNY"),
       debt: amount(0, "0.00 CNY"),
       template_count: 1,
       recorded: 0,
@@ -86,10 +86,10 @@ describe("ScheduleCard", () => {
   it("shows the fixed income, expense and leftover of the month", async () => {
     wrap();
     expect(await screen.findByText("26年11月")).toBeInTheDocument();
-    expect(screen.getByText("52,122.00 CNY")).toBeInTheDocument();
+    expect(screen.getByText("42,300.00 CNY")).toBeInTheDocument();
     expect(screen.getByText("3,750.00 CNY")).toBeInTheDocument();
-    // 52122 - 4462.5
-    expect(screen.getByText("47659.50")).toBeInTheDocument();
+    // 42300 - 3750
+    expect(screen.getByText("38550.00")).toBeInTheDocument();
   });
 
   it("books one occurrence on demand", async () => {

@@ -241,7 +241,7 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
     income:benefit                       -9,900.00 CNY  ; 公司缴纳侧
     assets:cn:fund                         4,200.00 CNY  ; 公积金 个人 2,100 + 公司 2,100
     assets:cn:pension                      7,200.00 CNY  ; 养老 个人 2,400 + 公司 4,800
-    expenses:insurance:medical             3,000.00 CNY  ; 医疗 个人 714 + 公司 2,400
+    expenses:insurance:medical             3,000.00 CNY  ; 医疗 个人 600 + 公司 2,400
     expenses:insurance:unemployment          300.00 CNY
     expenses:insurance:injury                150.00 CNY
     expenses:insurance:maternity             300.00 CNY
@@ -323,7 +323,7 @@ scripts/android-apk.sh          # release / arm64 / 已签名
 adb install -r build/android/moneytracker-*.apk
 ```
 
-需要 Android SDK（`platform-tools`、`platforms;android-35`、`build-tools;35.0.0`、`ndk;27.2.12479018`）、JDK 17+ 和 `rustup target add aarch64-linux-android`。签名密钥在 `~/.moneytracker-android/moneytracker.jks`(口令见本机)，**务必备份**：只有同一把钥匙签出来的新版本才能覆盖安装。
+需要 Android SDK（`platform-tools`、`platforms;android-35`、`build-tools;35.0.0`、`ndk;27.2.12479018`）、JDK 17+ 和 `rustup target add aarch64-linux-android`。签名密钥在 `~/.moneytracker-android/moneytracker.jks`，**务必备份**：只有同一把钥匙签出来的新版本才能覆盖安装。口令不写进仓库：脚本读环境变量 `$KEYSTORE_PASS`，没有就退回到 `~/.moneytracker-android/pass`。
 
 ## 洞察与提问
 

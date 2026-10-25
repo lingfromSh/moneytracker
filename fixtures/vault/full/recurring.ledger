@@ -21,8 +21,8 @@
     assets:cn:fund                         4,200.00 CNY  ; 公积金 个人 2,100 + 公司 2,100
     assets:cn:pension                      7,200.00 CNY  ; 养老 个人 2,400 + 公司 4,800
     assets:cn:annuity                      3,600.00 CNY  ; 年金 个人 1,200 + 公司 2,400
-    expenses:insurance:medical             3,000.00 CNY  ; 医疗 个人 714 + 公司 2,400
-    expenses:insurance:unemployment          300.00 CNY  ; 失业 个人 150.00 + 公司 150.00
+    expenses:insurance:medical             3,000.00 CNY  ; 医疗 个人 600 + 公司 2,400
+    expenses:insurance:unemployment          300.00 CNY  ; 失业 个人 150 + 公司 150
     expenses:insurance:injury                150.00 CNY  ; 工伤（公司）
     expenses:insurance:maternity             300.00 CNY  ; 生育（公司）
     assets:bank:cmb                       23,550.00 CNY  ; 到手

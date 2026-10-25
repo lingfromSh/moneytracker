@@ -209,7 +209,7 @@ export function SyncSettings({ onMessage, onError }: Props) {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="服务端点" hint="MinIO 例如 https://api.minio.example.com">
+          <Field label="服务端点" hint="MinIO 例如 https://s3.example.com:9000">
             <Input
               value={form.endpoint}
               placeholder="https://s3.example.com"

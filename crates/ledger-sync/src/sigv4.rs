@@ -146,7 +146,7 @@ mod tests {
         };
         let headers = signed_headers(
             "PUT",
-            "https://api.minio.example.com/ledger/blobs/abc123",
+            "https://s3.example.com/blobs/abc123",
             br#"{"hello":1}"#,
             &[("if-none-match", "*")],
             &creds,
@@ -162,7 +162,7 @@ mod tests {
             auth,
             "AWS4-HMAC-SHA256 Credential=AKIATEST/20261025/us-east-1/s3/aws4_request, \
              SignedHeaders=host;if-none-match;x-amz-content-sha256;x-amz-date, \
-             Signature=7e5b6819c26bd63331e9e92376934c41f96570bfaf0dd05dc151b751cff07c39"
+             Signature=48a9dd319ec5cd1a45a3b2c2d5b76e3c91aef90347bf8f33b545a6ce28b10cc3"
         );
     }
 

@@ -28,7 +28,7 @@ vi.mock("../lib/ipc", () => ({
           {
             month: "2026-11",
             income: amount("52,122.00 CNY", 52122),
-            expense: amount("3,750.00 CNY", 4462.5),
+            expense: amount("3,750.00 CNY", 3750),
             assets: amount("47,659.50 CNY", 47659.5),
             debt: amount("0.00 CNY", 0),
             template_count: 0,

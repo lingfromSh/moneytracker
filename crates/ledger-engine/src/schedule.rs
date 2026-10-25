@@ -1550,9 +1550,9 @@ mod tests {
         // 公积金7，没有年金) → 到手 24,750.00.
         let totals = template.totals(&legs);
         assert_eq!(totals.income, Decimal::from(39900));
-        assert_eq!(totals.expense, Decimal::from(4462) + Decimal::new(50, 2));
-        assert_eq!(totals.assets, Decimal::from(43018) + Decimal::new(50, 2));
-        assert_eq!(totals.settle, Decimal::from(29452) + Decimal::new(50, 2));
+        assert_eq!(totals.expense, Decimal::from(3750));
+        assert_eq!(totals.assets, Decimal::from(36150));
+        assert_eq!(totals.settle, Decimal::from(24750));
         assert!(text.contains("assets:cn:fund"), "{text}");
         assert!(text.contains("expenses:cn:medical"), "{text}");
         // 企业年金是自愿的，默认不生成。

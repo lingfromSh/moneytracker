@@ -257,7 +257,7 @@ plain hledger periodic syntax:
     income:benefit                       -9,900.00 CNY  ; employer contributions
     assets:cn:fund                         4,200.00 CNY  ; housing fund: 2,100 you + 2,100 employer
     assets:cn:pension                      7,200.00 CNY  ; pension: 2,400 you + 4,800 employer
-    expenses:insurance:medical             3,000.00 CNY  ; 714 you + 2,400 employer
+    expenses:insurance:medical             3,000.00 CNY  ; 600 you + 2,400 employer
     expenses:insurance:unemployment          300.00 CNY
     expenses:insurance:injury                150.00 CNY
     expenses:insurance:maternity             300.00 CNY
@@ -351,8 +351,9 @@ adb install -r build/android/moneytracker-*.apk
 
 It needs the Android SDK (`platform-tools`, `platforms;android-35`, `build-tools;35.0.0`,
 `ndk;27.2.12479018`), a JDK 17+ and `rustup target add aarch64-linux-android`. The signing key lives
-at `~/.moneytracker-android/moneytracker.jks`  — **keep it**: a new version
-only upgrades an installed app when both are signed with the same key.
+at `~/.moneytracker-android/moneytracker.jks` — **keep it**: a new version only upgrades an installed
+app when both are signed with the same key. Its password is never stored in this repository: the
+script reads `$KEYSTORE_PASS`, or `~/.moneytracker-android/pass` when that is unset.
 
 ## Insights & questions
 

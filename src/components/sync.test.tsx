@@ -23,7 +23,7 @@ const { SyncSettings } = await import("./sync");
 
 const config = (over: Record<string, unknown> = {}) => ({
   enabled: true,
-  endpoint: "https://api.minio.example.com",
+  endpoint: "https://s3.example.com:9000",
   region: "us-east-1",
   bucket: "ledger",
   prefix: "moneytracker",

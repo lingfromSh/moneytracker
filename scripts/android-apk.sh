@@ -20,7 +20,15 @@ ANDROID_HOME=${ANDROID_HOME:-$HOME/Library/Android/sdk}
 NDK_HOME=${NDK_HOME:-$(ls -d "$ANDROID_HOME"/ndk/* 2>/dev/null | tail -1)}
 BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | tail -1)
 KEYSTORE=${KEYSTORE:-$HOME/.moneytracker-android/moneytracker.jks}
-KEYSTORE_PASS=${KEYSTORE_PASS:-***REDACTED***}
+# 口令只存在本机：环境变量优先，其次是 pass 文件。仓库里不留任何默认口令。
+PASS_FILE=${PASS_FILE:-$HOME/.moneytracker-android/pass}
+if [ -z "${KEYSTORE_PASS:-}" ] && [ -f "$PASS_FILE" ]; then
+  KEYSTORE_PASS=$(cat "$PASS_FILE")
+fi
+if [ -z "${KEYSTORE_PASS:-}" ]; then
+  echo "缺少签名口令：export KEYSTORE_PASS=… 或把它写进 ${PASS_FILE}（chmod 600，不要提交）" >&2
+  exit 1
+fi
 KEY_ALIAS=${KEY_ALIAS:-moneytracker}
 
 if [ ! -x "$BUILD_TOOLS/apksigner" ]; then
@@ -34,6 +42,9 @@ if [ ! -f "$KEYSTORE" ]; then
     -keystore "$KEYSTORE" -alias "$KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 10000 \
     -storepass "$KEYSTORE_PASS" -keypass "$KEYSTORE_PASS" \
     -dname "CN=MoneyTracker, OU=Personal, O=Personal, L=Shanghai, ST=Shanghai, C=CN" >/dev/null
+  umask 077
+  printf '%s' "$KEYSTORE_PASS" > "$PASS_FILE"
+  echo "==> 口令已写入 ${PASS_FILE}（只在本机，别提交）"
 fi
 
 echo "==> 编译（release / ${ARCH}）"

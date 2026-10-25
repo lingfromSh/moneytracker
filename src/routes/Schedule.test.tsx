@@ -40,9 +40,9 @@ const salaryTemplate = (over: Record<string, unknown> = {}) => ({
   start: "2026-11-15",
   until: null,
   enabled: true,
-  settle: amount(29452.5, "24,750.00 CNY"),
+  settle: amount(24750, "24,750.00 CNY"),
   income: amount(39900, "39,900.00 CNY"),
-  expense: amount(4462.5, "3,750.00 CNY"),
+  expense: amount(3750, "3,750.00 CNY"),
   assets: amount(43018.5, "43,018.50 CNY"),
   debt: amount(0, "0.00 CNY"),
   next_date: "2026-11-15",
@@ -63,12 +63,12 @@ const occurrence = (over: Record<string, unknown> = {}) => ({
   recorded: false,
   skipped: false,
   due: true,
-  settle: amount(29452.5, "24,750.00 CNY"),
+  settle: amount(24750, "24,750.00 CNY"),
   income: amount(39900, "39,900.00 CNY"),
-  expense: amount(4462.5, "3,750.00 CNY"),
+  expense: amount(3750, "3,750.00 CNY"),
   assets: amount(43018.5, "43,018.50 CNY"),
   debt: amount(0, "0.00 CNY"),
-  tax_base: amount(23452.5, "18,750.00 CNY"),
+  tax_base: amount(18750, "18,750.00 CNY"),
   tax: amount(562.50, "562.50 CNY"),
   legs: [],
   txn_id: null,
@@ -86,7 +86,7 @@ const overview = (over: Record<string, unknown> = {}) => ({
     {
       month: "2026-11",
       income: amount(39900, "39,900.00 CNY"),
-      expense: amount(4462.5, "3,750.00 CNY"),
+      expense: amount(3750, "3,750.00 CNY"),
       assets: amount(43018.5, "43,018.50 CNY"),
       debt: amount(0, "0.00 CNY"),
       template_count: 1,
@@ -128,7 +128,7 @@ describe("Schedule page", () => {
     expect(dialog).not.toBeNull();
     expect(screen.getByText("18,750.00")).toBeInTheDocument();
     expect(screen.getByLabelText(/本月个税/)).toBeDefined();
-    expect(screen.queryByText("28,748.92")).not.toBeNull();
+    expect(screen.queryByText("24,187.50")).not.toBeNull();
 
     await userEvent.click(within(dialog).getByRole("button", { name: "记入" }));
     await waitFor(() =>

@@ -214,7 +214,7 @@ fn schedule_templates_describe_the_showcase_fixed_costs() {
     // 应发 30,000 + 公司缴 12,300 = 42,300 收入,代扣 6,450.00 到手 23,550.00。
     assert_eq!(salary.income.display, "42,300.00 CNY");
     assert_eq!(salary.expense.display, "3,750.00 CNY");
-    assert_eq!(salary.assets.display, "45,874.50 CNY");
+    assert_eq!(salary.assets.display, "38,550.00 CNY");
     assert_eq!(salary.settle.display, "23,550.00 CNY");
     assert!(salary.legs.iter().all(|leg| leg.amount.value != 0.0));
 
