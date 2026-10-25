@@ -162,6 +162,12 @@ function renderDashboard() {
 }
 
 describe("Dashboard", () => {
+it("renders exactly one 自定义 button", async () => {
+  renderDashboard();
+  await screen.findByText("本月支出结构");
+  expect(screen.getAllByRole("button", { name: "自定义" })).toHaveLength(1);
+});
+
 it("hides cards and keeps only the chosen KPIs", async () => {
   settingsMock.mockResolvedValue(
     {

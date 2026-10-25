@@ -391,9 +391,6 @@ function Header({
           <Button variant="ghost" onClick={() => setCustomize(true)} title="选择卡片与指标">
             自定义
           </Button>
-          <Button variant="ghost" onClick={() => setCustomize(true)} title="选择卡片与指标">
-            自定义
-          </Button>
           <Button variant="subtle" onClick={() => void api.showCapture()}>
             记一笔
           </Button>
