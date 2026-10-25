@@ -63,10 +63,10 @@ jobs:
           MANAGER="${SDK}/cmdline-tools/latest/bin/sdkmanager"
           [ -x "$MANAGER" ] || MANAGER=$(ls -d "$SDK"/cmdline-tools/*/bin/sdkmanager | tail -1)
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          yes | "$MANAGER" --sdk_root="$SDK" --licenses > /dev/null || true
+          yes | "$MANAGER" --sdk_root="$SDK" --licenses > /dev/null 2>&1 || true
           "$MANAGER" --sdk_root="$SDK" --install \
             "platform-tools" \
-            "platforms;android-37" \
+            "platforms;android-37.0" \
             "build-tools;37.0.0" \
             "ndk;${NDK_VERSION}"
 
