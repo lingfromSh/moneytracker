@@ -4,6 +4,7 @@ import { Pencil, Target, TrendingUp, Wallet } from "lucide-react";
 import type { PlanOverviewDto_Serialize } from "../lib/bindings";
 import { api, queryKeys } from "../lib/ipc";
 import { cn, money, pct } from "../lib/format";
+import { AskCard } from "../components/ask-card";
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Modal, Textarea } from "../components/ui";
 
 const num = (value: number | null | undefined): number => Number(value ?? 0);
@@ -97,6 +98,7 @@ export function Plan() {
         </div>
         {data.goals.length > 0 ? <GoalsCard data={data} /> : null}
         <DebtCard data={data} />
+        <AskCard />
         <AllocationCard data={data} />
 
         {data.diagnostics.length > 0 ? (

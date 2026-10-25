@@ -63,6 +63,13 @@ export const commands = {
 	 */
 	fxApplyRates: (rows: FxRateRow[]) => typedError<FxSyncResultDto_Serialize, CmdError>(__TAURI_INVOKE("fx_apply_rates", { rows })),
 	writeAudit: (limit: number) => typedError<AuditEntryDto[], CmdError>(__TAURI_INVOKE("write_audit", { limit })),
+	/**  Deterministic insight bullets for the dashboard. */
+	insights: () => typedError<InsightDto_Serialize[], CmdError>(__TAURI_INVOKE("insights")),
+	/**
+	 *  Ask a question in plain language: the model picks query fields, the engine
+	 *  computes the numbers, and only then does the model get to phrase an answer.
+	 */
+	llmAsk: (question: string) => typedError<AskResultDto_Serialize, CmdError>(__TAURI_INVOKE("llm_ask", { question })),
 	settingsGet: () => typedError<Settings_Serialize, CmdError>(__TAURI_INVOKE("settings_get")),
 	settingsSet: (settings: Settings_Deserialize) => typedError<Settings_Serialize, CmdError>(__TAURI_INVOKE("settings_set", { settings })),
 	/**
@@ -153,6 +160,28 @@ export type AmountDto = {
 	value: number | null,
 	commodity: string,
 	display: string,
+};
+
+export type AskResultDto = AskResultDto_Serialize | AskResultDto_Deserialize;
+
+export type AskResultDto_Deserialize = {
+	question: string,
+	/**  The plan the model asked for, after validation against the ledger. */
+	plan: PlanQueryDto_Deserialize,
+	result: PlanResultDto_Deserialize,
+	/**  One paragraph written by the model; absent when only facts were computed. */
+	answer?: string | null,
+	error?: string | null,
+};
+
+export type AskResultDto_Serialize = {
+	question: string,
+	/**  The plan the model asked for, after validation against the ledger. */
+	plan: PlanQueryDto_Serialize,
+	result: PlanResultDto_Serialize,
+	/**  One paragraph written by the model; absent when only facts were computed. */
+	answer: string | null,
+	error: string | null,
 };
 
 export type AssumptionsDto = {
@@ -396,6 +425,12 @@ export type ExtraPaymentDto = {
 	extra: AmountDto,
 	months_saved: number | null,
 	interest_saved: AmountDto,
+};
+
+export type FactDto = {
+	label: string,
+	value: number | null,
+	display: string,
 };
 
 export type FireDto = FireDto_Serialize | FireDto_Deserialize;
@@ -723,6 +758,36 @@ export type IncomeStatementDto_Serialize = {
 	net: AmountDto,
 };
 
+export type InsightDto = InsightDto_Serialize | InsightDto_Deserialize;
+
+export type InsightDto_Deserialize = {
+	/**
+	 *  `budget_over` | `budget_near` | `spend_up` | `spend_down` |
+	 *  `unusual_expense` | `savings_low` | `savings_good` | `net_worth_high` |
+	 *  `fx_missing`
+	 */
+	kind: string,
+	/**  `info` | `warn` | `good` */
+	tone: string,
+	title: string,
+	detail: string,
+	amount?: AmountDto | null,
+};
+
+export type InsightDto_Serialize = {
+	/**
+	 *  `budget_over` | `budget_near` | `spend_up` | `spend_down` |
+	 *  `unusual_expense` | `savings_low` | `savings_good` | `net_worth_high` |
+	 *  `fx_missing`
+	 */
+	kind: string,
+	/**  `info` | `warn` | `good` */
+	tone: string,
+	title: string,
+	detail: string,
+	amount: AmountDto | null,
+};
+
 export type KpiDto = {
 	net_worth: AmountDto,
 	month_income: AmountDto,
@@ -897,6 +962,58 @@ export type PlanOverviewDto_Serialize = {
 	debts: DebtDto_Serialize[],
 	allocation: AllocationDto_Serialize,
 	diagnostics: DiagnosticDto[],
+};
+
+export type PlanQueryDto = PlanQueryDto_Serialize | PlanQueryDto_Deserialize;
+
+export type PlanQueryDto_Deserialize = {
+	metric: string,
+	accounts: string[],
+	tags: string[],
+	date_from?: string | null,
+	date_to?: string | null,
+	group_by?: string | null,
+	limit: number | null,
+	min_amount?: number | null,
+};
+
+export type PlanQueryDto_Serialize = {
+	metric: string,
+	accounts: string[],
+	tags: string[],
+	date_from: string | null,
+	date_to: string | null,
+	group_by: string | null,
+	limit: number | null,
+	min_amount: number | null,
+};
+
+export type PlanResultDto = PlanResultDto_Serialize | PlanResultDto_Deserialize;
+
+export type PlanResultDto_Deserialize = {
+	metric: string,
+	group_by?: string | null,
+	from?: string | null,
+	to?: string | null,
+	accounts: string[],
+	tags: string[],
+	facts: FactDto[],
+	total: AmountDto,
+	matched: number | null,
+	summary: string,
+};
+
+export type PlanResultDto_Serialize = {
+	metric: string,
+	group_by: string | null,
+	from: string | null,
+	to: string | null,
+	accounts: string[],
+	tags: string[],
+	facts: FactDto[],
+	total: AmountDto,
+	matched: number | null,
+	summary: string,
 };
 
 export type PointDto = {

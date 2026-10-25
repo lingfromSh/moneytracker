@@ -829,3 +829,64 @@ pub struct MaintenanceDto {
     pub git: Option<String>,
     pub alerts: Vec<String>,
 }
+
+// ---------------------------------------------------------------------------
+// insights and questions
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct InsightDto {
+    /// `budget_over` | `budget_near` | `spend_up` | `spend_down` |
+    /// `unusual_expense` | `savings_low` | `savings_good` | `net_worth_high` |
+    /// `fx_missing`
+    pub kind: String,
+    /// `info` | `warn` | `good`
+    pub tone: String,
+    pub title: String,
+    pub detail: String,
+    pub amount: Option<AmountDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct FactDto {
+    pub label: String,
+    pub value: f64,
+    pub display: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct PlanQueryDto {
+    pub metric: String,
+    pub accounts: Vec<String>,
+    pub tags: Vec<String>,
+    pub date_from: Option<String>,
+    pub date_to: Option<String>,
+    pub group_by: Option<String>,
+    pub limit: f64,
+    pub min_amount: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct PlanResultDto {
+    pub metric: String,
+    pub group_by: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub accounts: Vec<String>,
+    pub tags: Vec<String>,
+    pub facts: Vec<FactDto>,
+    pub total: AmountDto,
+    pub matched: f64,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct AskResultDto {
+    pub question: String,
+    /// The plan the model asked for, after validation against the ledger.
+    pub plan: PlanQueryDto,
+    pub result: PlanResultDto,
+    /// One paragraph written by the model; absent when only facts were computed.
+    pub answer: Option<String>,
+    pub error: Option<String>,
+}

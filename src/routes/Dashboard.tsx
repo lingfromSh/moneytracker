@@ -14,6 +14,7 @@ import {
   CategoryList,
   ForecastLine,
   Heatmap,
+  InsightList,
   MonthlyBars,
   NetWorthArea,
   SankeyDiagram,
@@ -29,8 +30,9 @@ const DEFAULT_LAYOUT: Layout = [
   { i: "budget", x: 8, y: 4, w: 4, h: 3, minW: 3, minH: 2 },
   { i: "stacked", x: 0, y: 7, w: 6, h: 3, minW: 4, minH: 2 },
   { i: "forecast", x: 6, y: 7, w: 6, h: 3, minW: 4, minH: 2 },
-  { i: "sankey", x: 0, y: 10, w: 8, h: 5, minW: 4, minH: 3 },
   { i: "heatmap", x: 8, y: 10, w: 4, h: 5, minW: 3, minH: 3 },
+  { i: "sankey", x: 0, y: 10, w: 8, h: 5, minW: 4, minH: 3 },
+  { i: "insights", x: 8, y: 15, w: 4, h: 4, minW: 3, minH: 3 },
 ];
 
 function Panel({
@@ -68,6 +70,12 @@ export function Dashboard() {
   });
   const settings = useQuery({ queryKey: queryKeys.settings, queryFn: () => api.settings() });
   const plan = useQuery({ queryKey: queryKeys.plan, queryFn: () => api.planOverview(), retry: 0 });
+  const insights = useQuery({
+    queryKey: queryKeys.insights,
+    queryFn: () => api.insights(),
+    retry: 0,
+  });
+  const insightList = insights.data ?? [];
 
   // Re-reads every ledger file from disk. The watcher covers external edits, but
   // a manual button is what people reach for after editing in another editor.
@@ -197,6 +205,11 @@ export function Dashboard() {
             <div key="sankey">
               <Panel title="资金流向" hint="收入 → 账户 → 支出分类">
                 <SankeyDiagram data={data.sankey} />
+              </Panel>
+            </div>
+            <div key="insights">
+              <Panel title="洞察" hint="按规则算出来的变化与提醒">
+                <InsightList items={insightList} />
               </Panel>
             </div>
             <div key="heatmap">

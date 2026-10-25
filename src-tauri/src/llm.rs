@@ -453,6 +453,123 @@ pub fn ground_draft(draft: &mut Draft, note: &str, catalog: &AccountCatalog) {
     }
 }
 
+/// A question turned into a structured query. The model only chooses fields;
+/// `commands::llm_ask` validates every one of them against the open ledger.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlanDraft {
+    pub metric: String,
+    pub accounts: Vec<String>,
+    pub tags: Vec<String>,
+    pub date_from: Option<String>,
+    pub date_to: Option<String>,
+    pub group_by: Option<String>,
+    pub limit: Option<usize>,
+    pub min_amount: Option<String>,
+}
+
+const PLAN_METRICS: [&str; 5] = ["spend", "income", "net", "balance", "count"];
+const PLAN_GROUPS: [&str; 3] = ["month", "account", "tag"];
+
+/// Prompt for the read-only question path: the answer is a plan, not prose.
+pub fn plan_system_prompt(today: &str, base_commodity: &str, catalog: &AccountCatalog) -> String {
+    let accounts = catalog.render(60);
+    format!(
+        r#"You turn a bookkeeping question into a JSON query plan for a plain-text ledger.
+Today is {today}. The base commodity is {base_commodity}.
+
+Return ONE JSON object and nothing else (no prose, no code fences):
+{{"metric":"spend|income|net|balance|count",
+  "accounts":["expenses:food"],
+  "tags":["trip"],
+  "date_from":"YYYY-MM or YYYY-MM-DD",
+  "date_to":"YYYY-MM or YYYY-MM-DD",
+  "group_by":"month|account|tag",
+  "limit":5,
+  "min_amount":"100"}}
+
+Rules:
+- metric spend = expenses, income = income, net = income minus expenses, balance = asset and
+  liability balances, count = number of matching transactions.
+- Use ONLY accounts from the list below. Pick the narrowest account that matches; an account
+  prefix is allowed and means "this subtree".
+- Omit a key (or use null) when the question does not mention it. Never guess a date range for
+  "本月"/"今年" — resolve it from today's date yourself.
+- "哪个月花得最多" means metric spend, group_by month. "哪类花得最多" means group_by account.
+- limit defaults to 12 and must be between 1 and 50.
+- min_amount is a decimal string, only when the question asks about large transactions.
+
+Accounts in this ledger:
+{accounts}
+"#
+    )
+}
+
+/// Parse and lightly normalise a plan. Anything unknown is dropped rather than
+/// rejected, so a chatty model still produces a usable query.
+pub fn plan_from_json(value: &Value) -> Result<PlanDraft, String> {
+    let object = value.as_object().ok_or("expected a JSON object")?;
+    let text = |key: &str| {
+        object
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty() && *text != "null")
+            .map(str::to_string)
+    };
+    let list = |key: &str| {
+        object
+            .get(key)
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::trim)
+                    .filter(|item| !item.is_empty())
+                    .map(|item| {
+                        item.trim_matches(|c| c == '+' || c == ':' || c == '#')
+                            .to_string()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    };
+
+    let metric = text("metric")
+        .map(|m| m.to_lowercase())
+        .filter(|m| PLAN_METRICS.contains(&m.as_str()))
+        .unwrap_or_else(|| "spend".to_string());
+    let group_by = text("group_by")
+        .map(|g| g.to_lowercase())
+        .filter(|g| PLAN_GROUPS.contains(&g.as_str()));
+    let limit = object
+        .get("limit")
+        .and_then(|value| match value {
+            Value::Number(number) => number.as_u64().map(|n| n as usize),
+            Value::String(text) => text.trim().parse::<usize>().ok(),
+            _ => None,
+        })
+        .map(|limit| limit.clamp(1, 50));
+
+    Ok(PlanDraft {
+        metric,
+        accounts: list("accounts"),
+        tags: list("tags"),
+        date_from: text("date_from"),
+        date_to: text("date_to"),
+        group_by,
+        limit,
+        min_amount: text("min_amount"),
+    })
+}
+
+/// Second call, only when the user wants prose: describe the numbers we computed.
+pub fn answer_prompt(question: &str, facts: &str) -> String {
+    format!(
+        "Question: {question}\n\nVerified numbers from the ledger:\n{facts}\n\n         Write one short paragraph (2-3 sentences, Chinese) answering the question using ONLY these          numbers. Do not invent figures, accounts or dates. If the numbers are empty, say so plainly."
+    )
+}
+
 /// The system prompt: the model returns one JSON object and nothing else.
 pub fn system_prompt(today: &str, base_commodity: &str, catalog: &AccountCatalog) -> String {
     let list = catalog.render(80);
@@ -1309,6 +1426,59 @@ mod tests {
             synthesize_line(&mirrored, "CNY", "2026-10-25"),
             "微信付款 45 @expenses:food @assets:wallet"
         );
+    }
+
+    #[test]
+    fn plan_prompt_names_the_schema_and_the_ledger_accounts() {
+        let catalog =
+            AccountCatalog::from_names(["assets:cash", "expenses:food:coffee", "income:salary"]);
+        let prompt = plan_system_prompt("2026-10-25", "CNY", &catalog);
+        assert!(prompt.contains("Today is 2026-10-25"));
+        assert!(prompt.contains("expenses:food:coffee"));
+        assert!(prompt.contains("group_by"));
+        assert!(prompt.contains("month|account|tag"));
+    }
+
+    #[test]
+    fn plan_json_keeps_known_fields_and_drops_the_rest() {
+        let value: serde_json::Value = serde_json::from_str(
+            r#"{"metric":"SPEND","accounts":["expenses:food","+expenses:travel"],
+                "tags":[":trip:"],"date_from":"2026-01","date_to":"2026-10",
+                "group_by":"Account","limit":999,"min_amount":"100","unknown":true}"#,
+        )
+        .unwrap();
+        let plan = plan_from_json(&value).unwrap();
+        assert_eq!(plan.metric, "spend");
+        assert_eq!(plan.accounts, vec!["expenses:food", "expenses:travel"]);
+        assert_eq!(plan.tags, vec!["trip"]);
+        assert_eq!(plan.group_by.as_deref(), Some("account"));
+        assert_eq!(plan.limit, Some(50));
+        assert_eq!(plan.min_amount.as_deref(), Some("100"));
+    }
+
+    #[test]
+    fn plan_json_falls_back_to_spend_and_ignores_bad_enums() {
+        let value: serde_json::Value =
+            serde_json::from_str(r#"{"metric":"vibes","group_by":"colour"}"#).unwrap();
+        let plan = plan_from_json(&value).unwrap();
+        assert_eq!(plan.metric, "spend");
+        assert_eq!(plan.group_by, None);
+        assert_eq!(plan.limit, None);
+        assert!(plan.accounts.is_empty());
+    }
+
+    #[test]
+    fn plan_json_rejects_non_objects() {
+        let value: serde_json::Value = serde_json::from_str(r#"["spend"]"#).unwrap();
+        assert!(plan_from_json(&value).is_err());
+    }
+
+    #[test]
+    fn answer_prompt_carries_only_the_computed_numbers() {
+        let prompt = answer_prompt("今年餐饮花了多少", "支出合计 2,200.00 CNY");
+        assert!(prompt.contains("今年餐饮花了多少"));
+        assert!(prompt.contains("2,200.00 CNY"));
+        assert!(prompt.contains("ONLY"));
     }
 
     #[test]

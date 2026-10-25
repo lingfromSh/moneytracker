@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-169_passing-brightgreen.svg)](#testing)
-[![Front-end tests](https://img.shields.io/badge/vitest-54_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-178_passing-brightgreen.svg)](#testing)
+[![Front-end tests](https://img.shields.io/badge/vitest-58_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
@@ -37,6 +37,7 @@ rich dashboard — with **zero proprietary storage**. Delete the app and you sti
 - [Natural language (optional)](#natural-language-optional)
 - [Importing statements](#importing-statements)
 - [Recurring entries & automation](#recurring-entries--automation)
+- [Insights & questions](#insights--questions)
 - [Planning & reports](#planning--reports)
 - [Where your data lives](#where-your-data-lives)
 - [Safety guarantees](#safety-guarantees)
@@ -237,6 +238,19 @@ auditable and re-running the detection never double-writes a month.
 
 Skipped cycles are stored as `; skip:<id>@<YYYY-MM>` lines in `recur.ledger`, next to `rules.ledger`
 and, like it, never included by `index.ledger`.
+
+## Insights & questions
+
+The dashboard's 洞察 panel is computed by rules, not by a model: budget envelopes above 90 %, the two
+biggest category moves against last month, an unusually large expense (3× the six-month average), the
+savings rate, a net-worth high, and missing FX rates. They are cheap, deterministic, and offline.
+
+规划 also has a read-only 问一句 card. When an LLM is configured, the model is asked for a **JSON query
+plan** — metric, accounts, tags, date range, grouping, limit — and nothing else. Every field is then
+validated against the open ledger (unknown accounts are dropped, bad dates ignored, `limit` clamped),
+the numbers are computed by the engine, and only then may the model phrase one paragraph from those
+computed figures. Turn the switch off and the same question still gets its fact table; the prose is
+the only thing that disappears.
 
 ## Planning & reports
 

@@ -73,6 +73,8 @@ pub fn build_specta() -> Builder<tauri::Wry> {
             commands::fx_missing,
             commands::fx_apply_rates,
             commands::write_audit,
+            commands::insights,
+            commands::llm_ask,
             commands::settings_get,
             commands::settings_set,
             commands::shortcut_status,

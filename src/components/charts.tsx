@@ -23,6 +23,7 @@ import type {
   CategoryTotalDto,
   ForecastPointDto,
   HeatPointDto,
+  InsightDto_Serialize,
   MonthPointDto,
   PointDto,
   SankeyDto,
@@ -395,5 +396,38 @@ export function HeatmapLegend() {
       <span>{dayLabel(new Date().toISOString().slice(0, 10))}</span>
       <span className="ml-auto">近 17 周支出</span>
     </div>
+  );
+}
+
+/** Rule-based insight bullets: no model involved, every line is computed. */
+export function InsightList({ items }: { items: InsightDto_Serialize[] }) {
+  if (items.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-xs text-[var(--color-muted)]">
+        还没有值得提醒的变化
+      </div>
+    );
+  }
+  return (
+    <ul className="h-full space-y-1.5 overflow-auto pr-1">
+      {items.map((item, index) => (
+        <li key={`${item.kind}-${index}`} className="flex gap-2 text-xs">
+          <span
+            className={cn(
+              "mt-1 h-1.5 w-1.5 shrink-0 rounded-full",
+              item.tone === "warn"
+                ? "bg-[var(--color-danger)]"
+                : item.tone === "good"
+                  ? "bg-[var(--color-accent)]"
+                  : "bg-[var(--color-muted)]",
+            )}
+          />
+          <span className="min-w-0">
+            <span className="font-medium">{item.title}</span>
+            <span className="ml-1 text-[var(--color-muted)]">{item.detail}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

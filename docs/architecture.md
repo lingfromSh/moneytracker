@@ -163,6 +163,24 @@ into an `LlmConfig` only when a request is built (`state.llm_key()`). It is deli
 `Settings`, so it never travels through `settings_set`, the settings document, the IPC error paths
 or the write audit.
 
+## Insights and questions
+
+`crates/ledger-engine/src/insights.rs` has two halves:
+
+- `insights(vault)` — nine fixed rules (budget over/near, top-2 month-over-month category moves,
+  an expense ≥3× the six-month average and ≥500, savings rate under 20 % / at least 40 %, net-worth
+  high, missing FX count). No model, no I/O, at most eight bullets.
+- `run_plan(vault, &QueryPlan)` — the only place a question's numbers come from. `QueryPlan` has
+  `metric` (`spend|income|net|balance|count`), `accounts`/`tags` filters, `date_from`/`date_to`
+  (`YYYY-MM` or `YYYY-MM-DD`), `group_by` (`month|account|tag`), `limit` (1–50) and `min_amount`.
+
+`src-tauri/src/llm.rs::plan_system_prompt` describes that schema and the ledger's grouped accounts;
+`plan_from_json` normalises whatever comes back (unknown metrics fall back to `spend`, unknown
+`group_by` is dropped, `limit` clamped, `+`/`:` trimmed from tag and account names). `llm_ask` then
+resolves accounts through the catalogue and `Vault::resolve_account`, discards unparseable dates, runs
+the plan, and makes a second call with `answer_prompt` to phrase the result — a failure there is not an
+error, the fact table still answers the question. Bad JSON surfaces as `llm.bad_plan`.
+
 ## Recurring detection
 
 `crates/ledger-engine/src/recur.rs` buckets every transaction of the lookback window by

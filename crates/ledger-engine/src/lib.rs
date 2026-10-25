@@ -8,6 +8,7 @@ pub mod amounts;
 pub mod capture;
 pub mod fx;
 pub mod import;
+pub mod insights;
 pub mod load;
 pub mod plan;
 pub mod reconcile;
@@ -27,6 +28,7 @@ pub use import::{
     batch_id, commit as import_commit, existing_fingerprints, fingerprint,
     preview as import_preview, probe as import_probe,
 };
+pub use insights::{insights, plan_markdown, run_plan, QueryPlan};
 pub use load::{
     diagnostic_dto, is_system_tag, posting_dto, split_comment, strip_system_tokens, txn_dto,
     AccountInfo, TxnRecord, Vault,

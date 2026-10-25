@@ -16,6 +16,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Insights panel on the dashboard: rule-based budget alerts, month-over-month category moves, unusual
+  expenses, savings rate, net-worth highs and missing FX rates (`crates/ledger-engine/src/insights.rs`,
+  `insights` command).
+- Read-only questions on 规划 (`llm_ask`): the model returns a JSON query plan, the engine validates it
+  against the ledger and computes every number, and the prose is written from those figures only.
 - Recurring transactions: patterns (same payee, amount and postings in ≥3 months, 20–45 day spacing)
   are detected and offered as a banner on 流水 with 全部记入 / 本月不算. Written occurrences carry
   `recur:<id>@<YYYY-MM>`; skips are `; skip:<id>@<YYYY-MM>` lines in `recur.ledger`. New commands

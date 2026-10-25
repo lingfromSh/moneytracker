@@ -1391,3 +1391,132 @@ pub fn maintenance_run(
     }
     Ok(outcome)
 }
+
+/// Deterministic insight bullets for the dashboard.
+#[tauri::command(async)]
+#[specta::specta]
+pub async fn insights(state: State<'_, AppState>) -> CmdResult<Vec<InsightDto>> {
+    let vault = state.vault()?;
+    Ok(ledger_engine::insights(&vault))
+}
+
+/// Ask a question in plain language: the model picks query fields, the engine
+/// computes the numbers, and only then does the model get to phrase an answer.
+#[tauri::command(async)]
+#[specta::specta]
+pub async fn llm_ask(state: State<'_, AppState>, question: String) -> CmdResult<AskResultDto> {
+    let question = question.trim().to_string();
+    if question.is_empty() {
+        return Err(CmdError::refused("先写一个问题"));
+    }
+    let settings = state.settings();
+    let vault = state.vault()?;
+    if vault.transactions().is_empty() {
+        return Err(CmdError::refused("账本还没有交易，先记几笔再问"));
+    }
+
+    let config = llm_config(&state);
+    if !settings.llm_enabled {
+        return Err(CmdError::new(
+            "llm.disabled",
+            "问答没有启用，先到设置里打开",
+        ));
+    }
+    if let Some(reason) = config.block_reason() {
+        return Err(CmdError::new("llm.not_configured", reason));
+    }
+
+    let catalog = crate::llm::AccountCatalog::from_names(account_context(&vault));
+    let today = chrono::Local::now().date_naive().to_string();
+    let system = crate::llm::plan_system_prompt(&today, &settings.base_commodity, &catalog);
+    let user = format!("Question: {question}");
+    let (reply, _) =
+        tauri::async_runtime::spawn_blocking(move || crate::llm::complete(&config, &system, &user))
+            .await
+            .map_err(|err| CmdError::new("llm.join", err.to_string()))?
+            .map_err(|err| CmdError::new("llm.request_failed", err))?;
+    let value =
+        crate::llm::extract_json(&reply).map_err(|err| CmdError::new("llm.bad_plan", err))?;
+    let draft =
+        crate::llm::plan_from_json(&value).map_err(|err| CmdError::new("llm.bad_plan", err))?;
+
+    // Validate every field against the real ledger before running anything.
+    let mut accounts: Vec<String> = Vec::new();
+    for wanted in &draft.accounts {
+        let resolved = catalog
+            .resolve(wanted)
+            .or_else(|| {
+                let (name, _) = vault.resolve_account(wanted);
+                if name.is_empty() {
+                    None
+                } else {
+                    Some(name)
+                }
+            })
+            .unwrap_or_else(|| wanted.clone());
+        if !accounts.contains(&resolved) {
+            accounts.push(resolved);
+        }
+    }
+    let clean_date = |raw: &Option<String>| -> Option<String> {
+        let text = raw.as_ref()?.trim().to_string();
+        let ok = if text.len() == 7 {
+            chrono::NaiveDate::parse_from_str(&format!("{text}-01"), "%Y-%m-%d").is_ok()
+        } else {
+            chrono::NaiveDate::parse_from_str(&text, "%Y-%m-%d").is_ok()
+        };
+        if ok {
+            Some(text)
+        } else {
+            None
+        }
+    };
+
+    let plan = ledger_engine::QueryPlan {
+        metric: draft.metric.clone(),
+        accounts,
+        tags: draft.tags.clone(),
+        date_from: clean_date(&draft.date_from),
+        date_to: clean_date(&draft.date_to),
+        group_by: draft.group_by.clone(),
+        limit: draft.limit.unwrap_or(12).clamp(1, 50),
+        min_amount: draft.min_amount.as_deref().and_then(|raw| {
+            let cleaned: String = raw
+                .chars()
+                .filter(|c| c.is_ascii_digit() || *c == '.' || *c == ',')
+                .collect();
+            cleaned
+                .replace(',', ".")
+                .parse::<rust_decimal::Decimal>()
+                .ok()
+        }),
+    };
+    let result = ledger_engine::run_plan(&vault, &plan);
+    let markdown = ledger_engine::plan_markdown(&question, &result);
+
+    // Phrasing is optional: if this second call fails, the facts still answer it.
+    let answer = {
+        let config = llm_config(&state);
+        let prompt = crate::llm::answer_prompt(&question, &markdown);
+        let system = format!(
+            "You are a careful bookkeeping assistant. Base commodity: {}.",
+            settings.base_commodity
+        );
+        tauri::async_runtime::spawn_blocking(move || {
+            crate::llm::complete(&config, &system, &prompt)
+        })
+        .await
+        .ok()
+        .and_then(|outcome| outcome.ok())
+        .map(|(text, _)| text.trim().to_string())
+        .filter(|text| !text.is_empty())
+    };
+
+    Ok(AskResultDto {
+        question,
+        plan: ledger_engine::insights::plan_dto(&plan, &result),
+        result,
+        answer,
+        error: None,
+    })
+}

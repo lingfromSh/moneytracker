@@ -15,10 +15,30 @@ vi.mock("../lib/ipc", () => ({
     saveSettings: vi.fn(),
     showCapture: vi.fn(),
     reload: reloadMock,
+    planOverview: () => Promise.resolve(null),
+    insights: () =>
+      Promise.resolve([
+        {
+          kind: "spend_up",
+          tone: "warn",
+          title: "expenses:food 比上月多了 22%",
+          detail: "本月 1,220.00 CNY，上月 1,000.00 CNY",
+          amount: null,
+        },
+        {
+          kind: "net_worth_high",
+          tone: "good",
+          title: "净资产创新高",
+          detail: "当前 2,384,394.00 CNY",
+          amount: null,
+        },
+      ]),
   },
   queryKeys: {
     dashboard: (months: number) => ["dashboard", months],
     settings: ["settings"],
+    plan: ["plan"],
+    insights: ["insights"],
   },
 }));
 
@@ -142,6 +162,12 @@ function renderDashboard() {
 }
 
 describe("Dashboard", () => {
+  it("lists the rule-based insights", async () => {
+    renderDashboard();
+    expect(await screen.findByText("expenses:food 比上月多了 22%")).toBeInTheDocument();
+    expect(screen.getByText("净资产创新高")).toBeInTheDocument();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     dashboardMock.mockResolvedValue(fixture);
