@@ -28,7 +28,7 @@ if [ ! -x "$BUILD_TOOLS/apksigner" ]; then
   exit 1
 fi
 if [ ! -f "$KEYSTORE" ]; then
-  echo "==> 生成签名密钥 $KEYSTORE（请备份，升级必须用同一把）"
+  echo "==> 生成签名密钥 ${KEYSTORE}（请备份，升级必须用同一把）"
   mkdir -p "$(dirname "$KEYSTORE")"
   keytool -genkeypair -v \
     -keystore "$KEYSTORE" -alias "$KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 10000 \
@@ -36,8 +36,8 @@ if [ ! -f "$KEYSTORE" ]; then
     -dname "CN=MoneyTracker, OU=Personal, O=Personal, L=Shanghai, ST=Shanghai, C=CN" >/dev/null
 fi
 
-echo "==> 编译（release / $TARGET）"
-ANDROID_HOME=$ANDROID_HOME NDK_HOME=$NDK_HOME pnpm tauri android build --apk --target "$TARGET"
+echo "==> 编译（release / ${ARCH}）"
+ANDROID_HOME=$ANDROID_HOME NDK_HOME=$NDK_HOME pnpm tauri android build --apk --target "$ARCH"
 
 UNSIGNED="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
 if [ ! -f "$UNSIGNED" ]; then
