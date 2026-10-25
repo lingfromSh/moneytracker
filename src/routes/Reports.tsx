@@ -127,7 +127,8 @@ function Section({ section }: { section: SectionDto_Serialize }) {
   return (
     <Card className="p-4">
       <CardHeader title={section.title} hint={`${section.rows.length} 个账户`} />
-      <table className="mt-2 w-full text-xs">
+      <div className="-mx-1 mt-2 overflow-x-auto px-1">
+      <table className="w-full min-w-[520px] text-xs">
         <tbody>
           {section.rows.map((row) => (
             <tr key={row.account} className="border-t border-[var(--color-line)]/60">
@@ -144,6 +145,7 @@ function Section({ section }: { section: SectionDto_Serialize }) {
           </tr>
         </tbody>
       </table>
+      </div>
     </Card>
   );
 }
@@ -217,7 +219,8 @@ function BridgeView({ bridge, loading }: { bridge?: BridgeDto; loading: boolean 
         title="净值变动"
         hint={bridge.reconciled ? "已对齐" : "存在未解释差额，检查缺失汇率"}
       />
-      <table className="mt-2 w-full text-xs">
+      <div className="-mx-1 mt-2 overflow-x-auto px-1">
+      <table className="w-full min-w-[520px] text-xs">
         <tbody>
           {rows.map(([label, value, hint], index) => (
             <tr
@@ -236,6 +239,7 @@ function BridgeView({ bridge, loading }: { bridge?: BridgeDto; loading: boolean 
           ))}
         </tbody>
       </table>
+      </div>
     </Card>
   );
 }

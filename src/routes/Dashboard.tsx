@@ -402,15 +402,15 @@ function Header({
   const shows = (id: string) => !hiddenCards.includes(id);
   return (
     <div className="space-y-3 px-4 pb-3 pt-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-lg font-semibold">看板</div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="hidden text-lg font-semibold sm:block">看板</div>
           <div className="text-xs text-[var(--color-muted)]">
             {kpi.month ? monthLabel(kpi.month) : "尚无交易"}
             {(kpi.missing_fx_count ?? 0) > 0 ? ` · ${kpi.missing_fx_count} 笔缺少汇率` : ""}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {reloadError ? (
             <span className="max-w-[22rem] truncate text-xs text-[var(--color-danger)]" title={reloadError}>
               刷新失败：{reloadError}
@@ -438,9 +438,12 @@ function Header({
           <Button variant="ghost" onClick={() => setCustomize(true)} title="选择卡片与指标">
             自定义
           </Button>
-          <Button variant="subtle" onClick={() => startCapture()}>
-            记一笔
-          </Button>
+          {/* 手机上顶栏已经有“记一笔”，这里不重复 */}
+          {isMobile ? null : (
+            <Button variant="subtle" onClick={() => startCapture()}>
+              记一笔
+            </Button>
+          )}
         </div>
       </div>
 

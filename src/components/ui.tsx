@@ -21,7 +21,7 @@ export function Button({
     <button
       {...props}
       className={cn(
-        "inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition",
+        "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition",
         "min-h-10 sm:min-h-0",
         "disabled:cursor-not-allowed disabled:opacity-50",
         BUTTON_STYLES[variant],
@@ -140,7 +140,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-medium",
         tones[tone],
         className,
       )}

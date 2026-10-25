@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **手机端自适应**: safe-area insets (`env(safe-area-inset-*)`) on the header and the tab bar, a
+  bottom tab bar (看板 / 流水 / 账户 / 报表 + 更多) instead of the sidebar, and modals that rise from
+  the bottom as a full-width sheet under 640px. "记一笔" is a page on a phone (`startCapture()`
+  navigates instead of opening the second window). Two-column forms no longer break out of their
+  card at 390px, wide tables (报表 / 日程 / 导入 / 问一句) scroll horizontally instead of squeezing
+  columns into vertical text, and the transaction list measures the real viewport with a
+  `ResizeObserver` instead of a hard-coded 800px.
+
 ## [0.1.1] - 2026-10-25
 
 ### Added

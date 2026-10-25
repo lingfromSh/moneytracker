@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/ipc";
 import { Button, Card, Field, Input } from "../components/ui";
 import { useShortcutLabel } from "../lib/shortcut";
+import { isMobile } from "../lib/platform";
 
 /**
  * First-run screen: create a vault, open an existing one, or drop in the sample
@@ -60,7 +61,7 @@ export function Welcome() {
             <Field label="目录">
               <div className="flex gap-2">
                 <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="~/Documents/ledger" />
-                <Button variant="subtle" onClick={pick}>
+                <Button variant="subtle" className="shrink-0 whitespace-nowrap" onClick={pick}>
                   选择
                 </Button>
               </div>
@@ -129,9 +130,11 @@ export function Welcome() {
         </div>
 
         {error ? <div className="text-center text-xs text-[var(--color-danger)]">{error}</div> : null}
-        <div className="text-center text-[11px] text-[var(--color-muted)]">
-          {shortcutLabel} 随时唤起快录窗口
-        </div>
+        {isMobile ? null : (
+          <div className="text-center text-[11px] text-[var(--color-muted)]">
+            {shortcutLabel} 随时唤起快录窗口
+          </div>
+        )}
       </div>
     </div>
   );

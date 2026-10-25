@@ -61,6 +61,17 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+/*
+ * 栅格默认 `min-width: auto`，一个两列表单在 390px 的屏幕上会把卡片撑破（输入框
+ * 的固有宽度 ~170px 成了轨道下限）。让栅格项和输入框都可以收缩，窄屏才不会横向溢出。
+ */
+.grid > *,
+input,
+select,
+textarea {
+  min-width: 0;
+}
+
 .no-scrollbar {
   scrollbar-width: none;
 }

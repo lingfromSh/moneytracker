@@ -150,16 +150,16 @@ export function Schedule() {
 
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <div className="flex items-center justify-between px-4 pb-3 pt-4">
-        <div>
-          <div className="text-lg font-semibold">日程</div>
+      <div className="flex flex-col gap-2 px-4 pb-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="hidden text-lg font-semibold sm:block">日程</div>
           <div className="text-xs text-[var(--color-muted)]">
             来自 <code>{data.file}</code> · {data.templates.length} 条固定收支
             {waiting > 0 ? ` · ${waiting} 笔待记` : ""}
             {data.auto_commit ? " · 自动记入已开启" : " · 只提醒，不写入"}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <Select
             value={String(months)}
             onChange={(event) => setMonths(Number(event.target.value))}
@@ -243,7 +243,7 @@ export function Schedule() {
                     </span>
                   }
                   hint={
-                    <span className="flex items-center gap-3 font-mono text-[11px]">
+                    <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[11px]">
                       <span className="text-[var(--color-accent)]">
                         收 {money(totals?.income.value, totals?.income.display)}
                       </span>
@@ -259,19 +259,19 @@ export function Schedule() {
                     {rows.map((occurrence) => (
                       <li
                         key={`${occurrence.id}@${occurrence.month}`}
-                        className="flex items-center gap-2 px-3 py-1.5 text-xs"
+                        className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1.5 text-xs"
                       >
                         <CalendarClock className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted)]" />
-                        <span className="w-24 shrink-0 font-mono text-[11px] text-[var(--color-muted)]">
+                        <span className="shrink-0 font-mono text-[11px] text-[var(--color-muted)]">
                           {dayLabel(occurrence.date)}
                         </span>
                         <span className="min-w-0 flex-1 truncate">{occurrence.label}</span>
                         <Badge tone={kindTone(occurrence.kind)}>{kindText(occurrence.kind)}</Badge>
                         <OccurrenceStatus occurrence={occurrence} />
-                        <span className="w-28 shrink-0 text-right font-mono tabular-nums">
+                        <span className="ml-auto shrink-0 text-right font-mono tabular-nums">
                           {cashOf(occurrence)}
                         </span>
-                        <span className="flex w-24 justify-end gap-1">
+                        <span className="flex shrink-0 justify-end gap-1">
                           {!occurrence.recorded && !occurrence.skipped ? (
                             <>
                               <Button
@@ -371,7 +371,7 @@ function Templates({
     <Card>
       <CardHeader title="固定收支模板" hint={`${data.templates.length} 条 · 点击“记入”写入当月账单`} />
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full min-w-[640px] text-xs">
           <thead className="text-[11px] text-[var(--color-muted)]">
             <tr className="border-b border-[var(--color-line)]">
               <th className="px-3 py-1.5 text-left font-medium">名称</th>

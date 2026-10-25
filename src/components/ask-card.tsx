@@ -99,7 +99,8 @@ export function AskCard() {
             <span>共 {result.result.matched} 笔，合计 {result.result.total.display}</span>
           </div>
           {result.result.facts.length > 0 ? (
-            <table className="w-full text-xs">
+            <div className="-mx-1 overflow-x-auto px-1">
+            <table className="w-full min-w-[420px] text-xs">
               <thead>
                 <tr className="text-left text-[var(--color-muted)]">
                   <th className="py-1 font-normal">分组</th>
@@ -115,6 +116,7 @@ export function AskCard() {
                 ))}
               </tbody>
             </table>
+            </div>
           ) : null}
         </div>
       ) : null}
