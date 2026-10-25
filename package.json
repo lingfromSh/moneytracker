@@ -1,7 +1,7 @@
 {
   "name": "moneytracker",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Plain-text double-entry bookkeeping for macOS: a hledger-compatible ledger with a fast capture window, rules, multi-currency and a rich dashboard.",
   "license": "MIT",
   "type": "module",
