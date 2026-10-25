@@ -185,31 +185,48 @@ export function BudgetBars({ rows }: { rows: BudgetRowDto[] }) {
   if (rows.length === 0) {
     return (
       <div className="grid h-full place-items-center px-4 text-center text-xs text-[var(--color-muted)]">
-        还没有预算。在 budgets.ledger 里加一条 <code>~ monthly</code> 交易即可。
+        <p>
+          还没有预算。在 <code>budgets.ledger</code> 里加一段 <code>~ monthly</code> 交易：支出账户是花钱预算，
+          <code>assets:</code> 账户是存钱目标。
+        </p>
       </div>
     );
   }
   return (
     <div className="space-y-2 overflow-auto p-3">
-      {rows.map((row) => (
-        <div key={row.account} className="space-y-1">
-          <div className="flex justify-between text-xs">
-            <span className="truncate">{row.label}</span>
-            <span className={cn((row.ratio ?? 0) > 1 ? "text-[var(--color-danger)]" : "text-[var(--color-muted)]")}>
-              {row.actual_display} / {row.budget_display}
-            </span>
+      {rows.map((row) => {
+        const saving = row.kind === "A" || row.kind === "L";
+        const over = (row.ratio ?? 0) > 1;
+        return (
+          <div key={row.account} className="space-y-1">
+            <div className="flex items-baseline justify-between gap-2 text-xs">
+              <span className="truncate">
+                {row.label}
+                {saving ? (
+                  <span className="ml-1 rounded px-1 text-[10px] text-[var(--color-muted)] ring-1 ring-[var(--color-line)]">
+                    储蓄
+                  </span>
+                ) : null}
+              </span>
+              <span className={cn(over ? "text-[var(--color-danger)]" : "text-[var(--color-muted)]")}>
+                {row.actual_display} / {row.budget_display}
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-line)]">
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${Math.min(100, (row.ratio ?? 0) * 100)}%`,
+                  background: over ? "var(--color-danger)" : "var(--color-accent)",
+                }}
+              />
+            </div>
+            <div className="text-[10px] text-[var(--color-muted)]">
+              {saving ? "已存" : "已花"} {row.actual_display}，{saving ? "还差" : "剩余"} {row.remaining_display}
+            </div>
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-line)]">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${Math.min(100, (row.ratio ?? 0) * 100)}%`,
-                background: (row.ratio ?? 0) > 1 ? "var(--color-danger)" : "var(--color-accent)",
-              }}
-            />
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

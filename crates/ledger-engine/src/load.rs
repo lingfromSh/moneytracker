@@ -346,6 +346,25 @@ impl Vault {
     }
 
     /// Resolve `微信` to `assets:wallet:wechat` when that is the only match.
+    /// Account kind for a name that may not exist in the ledger yet (budget
+    /// envelopes are often planned before their first transaction). Falls back to
+    /// the nearest known parent, then to the configured top-level name map.
+    pub fn kind_for(&self, name: &str) -> char {
+        let name = normalize_account(name);
+        if let Some(info) = self.accounts.get(&name) {
+            return info.kind;
+        }
+        let mut current = name.as_str();
+        while let Some((parent, _)) = current.rsplit_once(':') {
+            if let Some(info) = self.accounts.get(parent) {
+                return info.kind;
+            }
+            current = parent;
+        }
+        let decls = HashMap::new();
+        kind_of(&name, &decls, self.opts.account_type_map.as_slice())
+    }
+
     pub fn resolve_account(&self, name: &str) -> (String, Vec<String>) {
         let name = normalize_account(name);
         if self.accounts.contains_key(&name) {

@@ -204,6 +204,8 @@ pub struct KpiDto {
 pub struct BudgetRowDto {
     pub account: String,
     pub label: String,
+    /// `X` for a spending envelope, `A`/`L` for a savings envelope.
+    pub kind: String,
     pub budget: f64,
     pub actual: f64,
     pub budget_display: String,
@@ -337,6 +339,8 @@ pub struct RuleRecomputeDto {
 pub struct BudgetDto {
     pub period: String,
     pub account: String,
+    /// `X` for a spending envelope, `A`/`L` for a savings envelope.
+    pub kind: String,
     pub amount: AmountDto,
     pub raw: String,
 }

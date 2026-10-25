@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-130_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-135_passing-brightgreen.svg)](#测试)
 [![Front-end tests](https://img.shields.io/badge/vitest-37_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
@@ -196,6 +196,26 @@ pnpm tauri dev                   # Vite :1420 + 带热更新的 Tauri 外壳
 **为什么 `rules.ledger` 不被 include。** 规则在**写入时**展开，结果以普通分录落盘，并用
 `; rule:<id> query:<原始输入>` 记录来源。若把它 include 进来，`hledger --auto` 会再应用一次，
 数字就不一样了。
+
+**预算与存钱目标。** `budgets.ledger` 里放 `~ monthly` 周期交易，**正数那一笔**就是信封：
+`expenses:`（或任何 `X` 类）账户是花钱预算，`assets:` / `liabilities:` 账户是存钱目标，
+“实际”取本月真正转进该账户的金额。负数那一笔只是为了让这个周期块平账。
+
+```ledger
+; 每月 500 的餐饮预算
+~ monthly from 2026-01-01
+    expenses:food        500.00 CNY
+    assets:cash
+
+; 每月存 500 养老
+~ monthly from 2026-01-01
+    assets:投资:个人养老金   500.00 CNY
+    assets:cash
+```
+
+读取时是宽松的：`~`（以及 `=`）块下的分录如果丢了缩进，依然会被接受，并给一条
+`core.parse.unindented_posting` 警告 —— hledger 本身要求缩进，所以这条警告是在提醒你文件
+还不能直接交给 hledger。
 
 ## 写入安全
 

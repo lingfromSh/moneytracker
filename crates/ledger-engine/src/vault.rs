@@ -124,9 +124,14 @@ fn render_prices() -> String {
 
 fn render_budgets() -> String {
     "; Periodic transactions / budgets (consumed only for budgets & forecasts).
+; The positive leg is the envelope — an `expenses:` account is a spending budget,
+; an `assets:` / `liabilities:` account is a savings goal.
 ; Example:
 ; ~ monthly
-;     expenses:food    1500.00 CNY
+;     expenses:food               1500.00 CNY
+;     assets:cash
+; ~ monthly
+;     assets:invest:retirement     500.00 CNY
 ;     assets:cash
 "
     .to_string()

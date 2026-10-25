@@ -134,3 +134,14 @@ fn account_tree_totals_match_their_children() {
     let vault = Vault::load(&sample(), &VaultOptions::default()).unwrap();
     assert_tree_totals(&vault.account_tree());
 }
+
+#[test]
+fn sample_vault_budgets_come_from_budgets_ledger() {
+    let vault = Vault::load(&sample(), &VaultOptions::default()).expect("sample vault loads");
+    let budgets = ledger_engine::report::budgets(&vault);
+    let accounts: Vec<&str> = budgets.iter().map(|b| b.account.as_str()).collect();
+    assert!(
+        accounts.contains(&"expenses:home:rent"),
+        "budgets parsed from budgets.ledger: {accounts:?}"
+    );
+}

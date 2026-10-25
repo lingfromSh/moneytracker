@@ -416,17 +416,20 @@ pub fn budgets(vault: &Vault) -> Vec<BudgetDto> {
             let Item::Periodic(pt) = item else { continue };
             for p in &pt.postings {
                 let Some(amount) = &p.amount else { continue };
-                let kind = vault
-                    .accounts
-                    .get(&p.account)
-                    .map(|a| a.kind)
-                    .unwrap_or('U');
-                if kind != 'X' {
+                // Envelopes are the positive legs; the negative leg is the funding
+                // account and only exists to make the periodic block balance.
+                if amount.quantity.is_sign_negative() || amount.quantity.is_zero() {
+                    continue;
+                }
+                let kind = vault.kind_for(&p.account);
+                // X = spend envelope, A/L = savings envelope (money set aside).
+                if !matches!(kind, 'X' | 'A' | 'L') {
                     continue;
                 }
                 out.push(BudgetDto {
                     period: pt.period.clone(),
                     account: p.account.clone(),
+                    kind: kind.to_string(),
                     amount: crate::amounts::to_dto(amount),
                     raw: format!("~ {} {}", pt.period, p.account),
                 });
@@ -457,7 +460,7 @@ fn budget_rows(vault: &Vault, month: &str) -> Vec<BudgetRowDto> {
             continue;
         }
         for v in &rec.values {
-            if v.kind == 'X' {
+            if matches!(v.kind, 'X' | 'A' | 'L') {
                 if let Some(base) = v.base {
                     *actual.entry(v.account.clone()).or_insert(Decimal::ZERO) += base;
                 }
@@ -483,6 +486,7 @@ fn budget_rows(vault: &Vault, month: &str) -> Vec<BudgetRowDto> {
             let spent = actual.get(&b.account).copied().unwrap_or_default();
             BudgetRowDto {
                 account: b.account.clone(),
+                kind: b.kind.clone(),
                 label: b
                     .account
                     .split(':')
@@ -722,6 +726,64 @@ mod tests {
         .unwrap();
         let vault = Vault::load(dir.path(), &VaultOptions::default()).unwrap();
         (dir, vault)
+    }
+
+    fn vault_with_budgets(budgets: &str) -> (tempfile::TempDir, Vault) {
+        let (dir, _) = vault();
+        std::fs::write(dir.path().join("budgets.ledger"), budgets).unwrap();
+        let vault = Vault::load(dir.path(), &VaultOptions::default()).unwrap();
+        (dir, vault)
+    }
+
+    #[test]
+    fn spend_and_savings_envelopes_both_show_up() {
+        let (_dir, vault) = vault_with_budgets(
+            "~ monthly from 2026-01-01\n    expenses:food   500.00 CNY\n    assets:cash\n\n~ monthly from 2026-01-01\n    assets:invest   200.00 CNY\n    assets:cash\n",
+        );
+        let rows = budget_rows(&vault, "2026-10");
+        let food = rows
+            .iter()
+            .find(|r| r.account == "expenses:food")
+            .expect("spending envelope present");
+        assert_eq!(food.kind, "X");
+        assert_eq!(food.budget, 500.0);
+        assert_eq!(food.actual, 20.0);
+        let saving = rows
+            .iter()
+            .find(|r| r.account == "assets:invest")
+            .expect("savings envelope present");
+        assert_eq!(saving.kind, "A");
+        assert_eq!(saving.budget, 200.0);
+        assert_eq!(saving.actual, 0.0);
+    }
+
+    #[test]
+    fn savings_envelopes_measure_the_money_set_aside() {
+        let (dir, _) = vault();
+        std::fs::write(
+            dir.path().join("2026/2026-10-06.ledger"),
+            "2026-10-06 transfer to invest\n    assets:invest   150.00 CNY\n    assets:cash   -150.00 CNY\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("2026/2026-10.ledger"),
+            "include 2026-10-05.ledger\ninclude 2026-10-06.ledger\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("budgets.ledger"),
+            "~ monthly from 2026-01-01\n    assets:invest   200.00 CNY\n    assets:cash\n",
+        )
+        .unwrap();
+        let vault = Vault::load(dir.path(), &VaultOptions::default()).unwrap();
+        let rows = budget_rows(&vault, "2026-10");
+        let saving = rows.iter().find(|r| r.account == "assets:invest").unwrap();
+        assert_eq!(
+            saving.actual, 150.0,
+            "money moved into the envelope counts as progress"
+        );
+        assert_eq!(saving.remaining_display, "50.00 CNY");
+        assert!((saving.ratio - 0.75).abs() < 1e-9);
     }
 
     #[test]

@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-130_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-135_passing-brightgreen.svg)](#testing)
 [![Front-end tests](https://img.shields.io/badge/vitest-37_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
@@ -205,6 +205,27 @@ never silently drops a line it does not understand. Details: [`docs/vault-format
 result is stored as ordinary postings, with `; rule:<id> query:<original input>` recording the
 provenance. Including the rule file would make `hledger --auto` apply them a second time and
 produce different numbers.
+
+**Budgets and savings goals.** `budgets.ledger` holds `~ monthly` periodic blocks. The positive leg
+is the envelope: an `expenses:` (or any `X`) account is a spending budget, an `assets:` /
+`liabilities:` account is a savings goal measured by how much money actually moved in this month.
+The negative leg only exists to keep the block balanced.
+
+```ledger
+; 500 a month of eating out
+~ monthly from 2026-01-01
+    expenses:food        500.00 CNY
+    assets:cash
+
+; put 500 aside every month for retirement
+~ monthly from 2026-01-01
+    assets:invest:retirement   500.00 CNY
+    assets:cash
+```
+
+MoneyTracker reads these files leniently: postings under `~` (and `=`) blocks that lost their
+leading indentation are still accepted, with a `core.parse.unindented_posting` warning — hledger
+itself requires the indentation, so the warning tells you the file is not portable yet.
 
 ## Safety guarantees
 

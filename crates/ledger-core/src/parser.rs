@@ -374,7 +374,7 @@ impl<'a> Parser<'a> {
         let query = code.trim().to_string();
         let tags = comment.map(parse_tags).unwrap_or_default();
         self.idx += 1;
-        let postings = self.collect_postings();
+        let postings = self.collect_postings_lenient();
         let end = postings
             .last()
             .map(|p| p.span.end)
@@ -394,7 +394,7 @@ impl<'a> Parser<'a> {
         let (code, comment) = split_comment(rest);
         let period = code.trim().to_string();
         self.idx += 1;
-        let postings = self.collect_postings();
+        let postings = self.collect_postings_lenient();
         let end = postings
             .last()
             .map(|p| p.span.end)
@@ -539,16 +539,39 @@ impl<'a> Parser<'a> {
 
     /// Consume indented posting lines until a blank or non-indented line.
     fn collect_postings(&mut self) -> Vec<Posting> {
+        self.collect_postings_with(false)
+    }
+
+    /// Budget (`~`) and rule (`=`) blocks are collected leniently: an unindented line
+    /// that still looks like a posting (`assets:cash   500.00 CNY`) is accepted with a
+    /// warning, because de-indenting a hand-edited block is an easy mistake and failing
+    /// the whole block is unhelpful.
+    fn collect_postings_lenient(&mut self) -> Vec<Posting> {
+        self.collect_postings_with(true)
+    }
+
+    fn collect_postings_with(&mut self, lenient: bool) -> Vec<Posting> {
         let mut out = Vec::new();
         while self.idx < self.lines.len() {
             let line = &self.lines[self.idx];
             let text = line.text;
-            if text.trim().is_empty() || !(text.starts_with(' ') || text.starts_with('\t')) {
+            if text.trim().is_empty() {
+                break;
+            }
+            let indented = text.starts_with(' ') || text.starts_with('\t');
+            if !(indented || (lenient && looks_like_posting(text))) {
                 break;
             }
             let start = line.start;
             let body = text.trim_end().to_string();
             let span = Span::new(start, start + body.len());
+            if !indented {
+                self.warn(
+                    "core.parse.unindented_posting",
+                    "postings should be indented under their `~`/`=` block; MoneyTracker accepted this line but hledger will not",
+                    span,
+                );
+            }
             let lead = body.len() - body.trim_start().len();
             if let Some(p) = self.parse_posting(body.trim_start(), span, start + lead) {
                 out.push(p);
@@ -743,6 +766,53 @@ impl<'a> Parser<'a> {
         self.diags
             .push(Diagnostic::error(code, message, self.path, span).with_position(self.src));
     }
+
+    fn warn(&mut self, code: &str, message: impl Into<String>, span: Span) {
+        self.diags
+            .push(Diagnostic::warning(code, message, self.path, span).with_position(self.src));
+    }
+}
+
+/// True when a line that is not indented could still be a posting: it has an
+/// account/amount separator, or it is a bare `account:name` with an elided amount.
+fn looks_like_posting(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() {
+        return false;
+    }
+    let first = t.chars().next().unwrap_or(' ');
+    if matches!(first, ';' | '#' | '%' | '|' | '*' | '~' | '=' | '@' | '\'') {
+        return false;
+    }
+    let lower = t.to_ascii_lowercase();
+    const DIRECTIVES: [&str; 12] = [
+        "include",
+        "!include",
+        "comment",
+        "end comment",
+        "account",
+        "commodity",
+        "payee",
+        "tag",
+        "alias",
+        "decimal-mark",
+        "apply",
+        "bucket",
+    ];
+    for word in DIRECTIVES {
+        if lower == word
+            || lower.starts_with(&format!("{word} "))
+            || lower.starts_with(&format!("{word}\t"))
+        {
+            return false;
+        }
+    }
+    if let Some(i) = find_account_separator(t) {
+        let account = t[..i].trim_end();
+        return !account.is_empty() && account.contains(':');
+    }
+    // A bare account with an elided amount, e.g. `assets:现金`.
+    !t.contains(char::is_whitespace) && t.contains(':') && !t.starts_with(':')
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -888,6 +958,56 @@ mod tests {
 
     fn parse(src: &str) -> ParseOutput {
         parse_journal("test.ledger", src)
+    }
+
+    #[test]
+    fn accepts_unindented_postings_in_periodic_blocks() {
+        let src = "~ monthly from 2026-01-01\nassets:invest:retirement   500.00 CNY\nassets:cash\n";
+        let out = parse(src);
+        assert!(
+            !out.has_errors(),
+            "unindented periodic postings must not fail: {:?}",
+            out.diagnostics
+        );
+        assert!(
+            out.diagnostics
+                .iter()
+                .any(|d| d.code == "core.parse.unindented_posting"),
+            "a warning points at the missing indentation: {:?}",
+            out.diagnostics
+        );
+        let periodic = out
+            .journal
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Periodic(p) => Some(p),
+                _ => None,
+            })
+            .expect("periodic transaction parsed");
+        assert_eq!(periodic.postings.len(), 2);
+        assert_eq!(periodic.postings[0].account, "assets:invest:retirement");
+        assert_eq!(
+            periodic.postings[0]
+                .amount
+                .as_ref()
+                .unwrap()
+                .quantity
+                .to_string(),
+            "500.00"
+        );
+        assert!(periodic.postings[1].amount.is_none());
+    }
+
+    #[test]
+    fn keeps_strict_indentation_for_transactions() {
+        let src = "2026-10-25 星巴克\nexpenses:food   4.50 CNY\nassets:cash  -4.50 CNY\n";
+        let out = parse(src);
+        let txn = out.journal.transactions().next().unwrap();
+        assert!(
+            txn.postings.is_empty(),
+            "transaction postings still require indentation"
+        );
     }
 
     #[test]

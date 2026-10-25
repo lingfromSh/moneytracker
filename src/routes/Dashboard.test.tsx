@@ -81,6 +81,7 @@ const fixture: DashboardDto_Serialize = {
     {
       account: "expenses:food",
       label: "food",
+      kind: "X",
       budget: 500,
       actual: 200,
       budget_display: "500.00 CNY",

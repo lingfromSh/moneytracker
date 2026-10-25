@@ -84,6 +84,31 @@ Rejected with `file:line:col: error[code]: message`:
 | `core.parse.bad_date`, `bad_amount`, `amount_no_digits` | malformed date/amount |
 | `core.parse.unknown_directive` | anything else at top level |
 
+Warnings (loading continues): `core.parse.unindented_posting` for de-indented `~`/`=` postings,
+`balance.not_zero` for an unbalanced transaction from an external file.
+
+### Periodic blocks and budgets
+
+`budgets.ledger` holds `~ <period>` blocks. Only the **positive** leg is an envelope; the negative
+leg exists to balance the block.
+
+- an `X` (expense) account is a **spending envelope**: `actual` is what was spent this month,
+  `remaining` is budget minus spend, `ratio` is spend / budget;
+- an `A`/`L` account is a **savings goal**: `actual` is the net base-currency amount that moved
+  into the account this month (deposits positive, withdrawals negative), `remaining` is how much
+  is still missing, `ratio` is progress.
+
+Envelope accounts do not have to exist in the ledger yet; the kind is resolved from the nearest
+known parent, then from the configured top-level name map (`assets:` → A, `expenses:` → X, …), so a
+planned `assets:invest:retirement` envelope works before its first transaction. Periods are scaled
+to a month: `yearly` ÷ 12, `quarterly` ÷ 3, `weekly` × 52/12, anything else counts as monthly.
+Forecasts use the monthly envelope total (see `docs/architecture.md`).
+
+Postings under `~` and `=` blocks that lost their indentation are still accepted, but each one
+raises `core.parse.unindented_posting` as a **warning** — hledger requires the indentation, so the
+file is not portable until the block is re-indented. Transactions themselves stay strict:
+unindented lines under a transaction header are not postings.
+
 Each transaction is balance-checked per commodity while loading. A transaction in a file the app
 wrote must balance exactly (one elided amount is filled in from the others); an unbalanced
 transaction in an externally written file is reported as a warning and marked read-only rather than

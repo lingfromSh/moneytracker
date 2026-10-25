@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Budget envelopes in `budgets.ledger` now cover **savings goals**, not just spending budgets: the
+  positive leg of a `~ monthly` block is the envelope, an `assets:` / `liabilities:` account is
+  measured by the money that actually moved into it this month, and the dashboard labels those rows
+  储蓄 / 已存. Envelope accounts no longer have to exist in the ledger yet — the kind is resolved from
+  the nearest known parent, then from the top-level name map.
 - Multi-posting captures: any `@account` may carry its own amount (`火锅 168 @微信 100 @现金 68`) or a
   percentage of the line total (`@餐饮 70%`), so one expense can come from several wallets or be
   split across several categories in a single line. The side of each posting still follows the
@@ -54,6 +59,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `~` / `=` blocks whose postings lost their indentation are accepted with a
+  `core.parse.unindented_posting` warning instead of failing the whole block with
+  `unknown_directive`, which is what made hand-edited `budgets.ledger` files silently do nothing.
 - Every leaf account in **账户** reported twice its balance (and the `assets`/`income` parent rows
   looked half of their children) while the kind totals were correct. `account_tree()` credited a
   leaf's `total` both on the way down and in its own base case; a leaf now adds only its `own`

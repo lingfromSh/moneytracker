@@ -117,6 +117,8 @@ export type BalanceRowDto = {
 export type BudgetDto = {
 	period: string,
 	account: string,
+	/**  `X` for a spending envelope, `A`/`L` for a savings envelope. */
+	kind: string,
 	amount: AmountDto,
 	raw: string,
 };
@@ -124,6 +126,8 @@ export type BudgetDto = {
 export type BudgetRowDto = {
 	account: string,
 	label: string,
+	/**  `X` for a spending envelope, `A`/`L` for a savings envelope. */
+	kind: string,
 	budget: number | null,
 	actual: number | null,
 	budget_display: string,
