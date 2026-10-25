@@ -170,8 +170,26 @@ impl LlmConfig {
         None
     }
 
+    /// The configured endpoint minus any trailing slash and minus a full
+    /// `…/chat/completions` or `…/messages` suffix (people paste those), with `/v1`
+    /// added when only a host was given — `http://box:1234` is virtually always
+    /// `http://box:1234/v1` for the OpenAI-compatible servers.
     fn base(&self) -> String {
-        self.base_url.trim_end_matches('/').to_string()
+        let mut base = self.base_url.trim().trim_end_matches('/').to_string();
+        for suffix in ["/chat/completions", "/messages"] {
+            if let Some(stripped) = base.strip_suffix(suffix) {
+                base = stripped.trim_end_matches('/').to_string();
+                break;
+            }
+        }
+        let without_scheme = base
+            .split_once("://")
+            .map(|(_, rest)| rest)
+            .unwrap_or(&base);
+        if !without_scheme.contains('/') {
+            base.push_str("/v1");
+        }
+        base
     }
 
     pub fn endpoint(&self) -> String {
@@ -543,6 +561,28 @@ mod tests {
         assert_eq!(custom.protocol, Protocol::Anthropic);
         assert_eq!(custom.endpoint(), "http://box:8080/v1/messages");
         assert!(custom.is_ready(), "custom endpoints do not require a key");
+    }
+
+    #[test]
+    fn normalises_pasted_endpoints() {
+        let host_only =
+            LlmConfig::resolve("custom", "openai", "http://192.168.110.82:1234", "m", "");
+        assert_eq!(
+            host_only.endpoint(),
+            "http://192.168.110.82:1234/v1/chat/completions"
+        );
+
+        let full = LlmConfig::resolve(
+            "custom",
+            "openai",
+            "http://box:1234/v1/chat/completions",
+            "m",
+            "",
+        );
+        assert_eq!(full.endpoint(), "http://box:1234/v1/chat/completions");
+
+        let anthropic = LlmConfig::resolve("custom", "anthropic", "http://box:8080/v1/", "m", "");
+        assert_eq!(anthropic.endpoint(), "http://box:8080/v1/messages");
     }
 
     #[test]

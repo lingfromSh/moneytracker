@@ -70,9 +70,21 @@ export function SettingsView() {
   if (settings.isLoading || !draft) return <EmptyState title="正在读取设置…" />;
 
   const update = <K extends keyof Settings_Serialize>(key: K, value: Settings_Serialize[K]) => {
-    setDraft({ ...draft, [key]: value });
+    // Functional update: several fields often change in one event (switching the
+    // LLM provider resets protocol/base URL/model), and a spread of the render-time
+    // draft would let the last call overwrite the earlier ones.
+    setDraft((current) => (current ? { ...current, [key]: value } : current));
     setMessage(null);
   };
+
+  // Plain functions on purpose: they sit after the loading early-return below, so
+  // they must not be hooks (React error #310 otherwise).
+  const patch = (partial: Partial<Settings_Serialize>) => {
+    setDraft((current) => (current ? { ...current, ...partial } : current));
+    setMessage(null);
+  };
+
+  const saveNow = () => save.mutateAsync(draft);
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-y-auto overflow-x-hidden">
@@ -258,7 +270,15 @@ export function SettingsView() {
             title="AI 记一笔"
             hint="可选：用一句自然语言记账，模型只挑字段，写入仍由本地引擎校验"
           />
-          <LlmSettings draft={draft} update={update} onMessage={setMessage} onError={setError} />
+          <LlmSettings
+            draft={draft}
+            persisted={settings.data}
+            update={update}
+            patch={patch}
+            onSave={saveNow}
+            onMessage={setMessage}
+            onError={setError}
+          />
         </Card>
 
         <Card>

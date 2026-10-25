@@ -60,14 +60,22 @@ const preset = (id: string) => PRESETS.find((p) => p.id === id) ?? PRESETS[0];
  * The key is not part of `Settings` — it is stored by its own backend command so
  * it never travels through the settings document and never comes back to the UI.
  */
+const LLM_FIELDS = ["llm_enabled", "llm_provider", "llm_protocol", "llm_base_url", "llm_model"] as const;
+
 export function LlmSettings({
   draft,
+  persisted,
   update,
+  patch,
+  onSave,
   onMessage,
   onError,
 }: {
   draft: Settings_Serialize;
+  persisted?: Settings_Serialize;
   update: <K extends keyof Settings_Serialize>(key: K, value: Settings_Serialize[K]) => void;
+  patch: (partial: Partial<Settings_Serialize>) => void;
+  onSave: () => Promise<unknown>;
   onMessage: (message: string) => void;
   onError: (message: string) => void;
 }) {
@@ -84,6 +92,15 @@ export function LlmSettings({
 
   const current = preset(draft.llm_provider);
   const hasKey = status.data?.has_key ?? false;
+  const dirty =
+    persisted !== undefined && LLM_FIELDS.some((key) => draft[key] !== persisted[key]);
+
+  /** Persist the field edits before anything is tested, so what you see is what runs. */
+  const persist = async () => {
+    if (!dirty) return;
+    await onSave();
+    await queryClient.invalidateQueries({ queryKey: queryKeys.llmStatus });
+  };
 
   const saveKey = async (value: string) => {
     setWorking("key");
@@ -105,6 +122,7 @@ export function LlmSettings({
     setWorking("test");
     setTestResult(null);
     try {
+      await persist();
       const result = await api.llmTest();
       setTestResult(`${result.model} 回应「${result.message}」· ${Math.round(result.elapsed_ms ?? 0)} ms`);
       onMessage("连接成功");
@@ -141,11 +159,13 @@ export function LlmSettings({
             value={draft.llm_provider}
             onChange={(e) => {
               const next = preset(e.target.value);
-              update("llm_provider", next.id);
               // Blank means “use the preset default”, so switching clears overrides.
-              update("llm_protocol", next.id === "custom" ? next.protocol : "");
-              update("llm_base_url", "");
-              update("llm_model", "");
+              patch({
+                llm_provider: next.id,
+                llm_protocol: next.id === "custom" ? next.protocol : "",
+                llm_base_url: "",
+                llm_model: "",
+              });
               setTestResult(null);
             }}
             aria-label="服务商"
@@ -265,14 +285,26 @@ export function LlmSettings({
         <Button aria-label="测试连接" onClick={() => void runTest()} disabled={working === "test"}>
           {working === "test" ? "测试中…" : "测试连接"}
         </Button>
-        <Badge tone={status.data?.ready ? "accent" : "warn"}>
-          {status.data?.ready ? "已就绪" : "未就绪"}
+        <Badge tone={status.data?.ready && !dirty ? "accent" : "warn"}>
+          {dirty ? "未保存" : status.data?.ready ? "已就绪" : "未就绪"}
         </Badge>
         <span className="text-[11px] text-[var(--color-muted)]">
           {status.data?.protocol === "anthropic" ? "Anthropic 协议" : "OpenAI 协议"} ·{" "}
           {status.data?.model || current.model || "未指定模型"}
         </span>
-        {status.data?.reason ? (
+        {dirty ? (
+          <Button
+            aria-label="保存 AI 设置"
+            onClick={() => {
+              void persist()
+                .then(() => onMessage("已保存 AI 设置"))
+                .catch((err: unknown) => onError(err instanceof Error ? err.message : String(err)));
+            }}
+          >
+            保存 AI 设置
+          </Button>
+        ) : null}
+        {!dirty && status.data?.reason ? (
           <span className="text-[11px] text-amber-600 dark:text-amber-400">{status.data.reason}</span>
         ) : null}
       </div>

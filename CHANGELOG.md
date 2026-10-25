@@ -59,6 +59,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Switching the LLM provider in 设置 → AI 记一笔 silently snapped back to the previous provider:
+  the select emitted four `update()` calls in one event and each one spread the render-time draft, so
+  only the last change survived. `update()` is now a functional state update and the provider switch
+  travels as a single `patch()`.
+- The AI card now says what it is doing: editing any `llm_*` field shows a **未保存** badge with a
+  保存 AI 设置 button, and 测试连接 persists those edits before it tests them, so the readiness line
+  and the request always describe the values on screen (this is what made “填写好了，无效” happen —
+  the fields were never saved).
+- LLM endpoints are normalised: a host-only Base URL gets `/v1` appended and a pasted
+  `…/chat/completions` (or `…/messages`) suffix is stripped, so `http://192.168.110.82:1234` works
+  the way every OpenAI-compatible local server expects.
+- The 设置 page could throw React error #310 (rendering more hooks than the previous render) because
+  two `useCallback`s sat after the loading early-return; they are plain functions again.
 - `~` / `=` blocks whose postings lost their indentation are accepted with a
   `core.parse.unindented_posting` warning instead of failing the whole block with
   `unknown_directive`, which is what made hand-edited `budgets.ledger` files silently do nothing.

@@ -1,3 +1,4 @@
+import * as React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -53,22 +54,41 @@ function settings(overrides: Partial<Settings_Serialize> = {}): Settings_Seriali
   };
 }
 
-function renderSettings(draft: Settings_Serialize) {
+function renderSettings(initial: Settings_Serialize) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: 0 } } });
   const updates: Array<[string, unknown]> = [];
+  const patchCalls: Array<Partial<Settings_Serialize>> = [];
   const onMessage = vi.fn();
   const onError = vi.fn();
-  render(
-    <QueryClientProvider client={client}>
+  const onSave = vi.fn(async () => undefined);
+
+  function Harness() {
+    const [draft, setDraft] = React.useState(initial);
+    return (
       <LlmSettings
         draft={draft}
-        update={(key, value) => updates.push([String(key), value])}
+        persisted={initial}
+        update={(key, value) => {
+          updates.push([String(key), value]);
+          setDraft((current) => ({ ...current, [key]: value }));
+        }}
+        patch={(partial) => {
+          patchCalls.push(partial);
+          setDraft((current) => ({ ...current, ...partial }));
+        }}
+        onSave={onSave}
         onMessage={onMessage}
         onError={onError}
       />
+    );
+  }
+
+  render(
+    <QueryClientProvider client={client}>
+      <Harness />
     </QueryClientProvider>,
   );
-  return { updates, onMessage, onError };
+  return { updates, patchCalls, onMessage, onError, onSave };
 }
 
 describe("LlmSettings", () => {
@@ -103,17 +123,36 @@ describe("LlmSettings", () => {
     expect(onMessage).toHaveBeenLastCalledWith("凭证已清除");
   });
 
-  it("resets overrides when the provider changes so presets apply", async () => {
-    const { updates } = renderSettings(
+  it("switches the provider and clears its overrides in one edit", async () => {
+    const { patchCalls } = renderSettings(
       settings({ llm_base_url: "https://old/v1", llm_model: "old-model" }),
     );
 
     await userEvent.selectOptions(await screen.findByLabelText("服务商"), "deepseek");
 
-    expect(updates).toContainEqual(["llm_provider", "deepseek"]);
-    expect(updates).toContainEqual(["llm_base_url", ""]);
-    expect(updates).toContainEqual(["llm_model", ""]);
-    expect(updates).toContainEqual(["llm_protocol", ""]);
+    // All four fields travel as one patch: four separate updates would each be
+    // spread from the same render-time draft and only the last one would survive.
+    expect(patchCalls).toContainEqual({
+      llm_provider: "deepseek",
+      llm_protocol: "",
+      llm_base_url: "",
+      llm_model: "",
+    });
+    expect(await screen.findByLabelText("服务商")).toHaveValue("deepseek");
+  });
+
+  it("saves unsaved edits before testing the connection", async () => {
+    testMock.mockResolvedValue({ model: "liquid/lfm2.5-1.2b", message: "OK", elapsed_ms: 12 });
+    const { onSave } = renderSettings(settings({ llm_model: "gpt-4o-mini" }));
+
+    await userEvent.clear(await screen.findByLabelText("模型"));
+    await userEvent.type(screen.getByLabelText("模型"), "liquid/lfm2.5-1.2b");
+    expect(screen.getByText("未保存")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "测试连接" }));
+
+    expect(onSave).toHaveBeenCalled();
+    expect(await screen.findByText(/liquid\/lfm2.5-1.2b 回应「OK」/)).toBeInTheDocument();
   });
 
   it("reports the result of a connection test", async () => {
