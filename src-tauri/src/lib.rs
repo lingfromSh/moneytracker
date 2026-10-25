@@ -190,7 +190,7 @@ fn ensure_mobile_vault(app: &AppHandle) {
     };
     let root = dir.join("ledger");
     if !root.join("index.ledger").exists() {
-        let opts = ledger_engine::VaultCreateOptions::default();
+        let opts = ledger_engine::vault::VaultCreateOptions::default();
         if let Err(err) = ledger_engine::vault::create_vault(&root, &opts) {
             eprintln!("moneytracker: 无法创建手机账本: {err:?}");
             return;

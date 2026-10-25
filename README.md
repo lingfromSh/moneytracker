@@ -39,6 +39,7 @@ rich dashboard — with **zero proprietary storage**. Delete the app and you sti
 - [Recurring entries & automation](#recurring-entries--automation)
 - [Declared schedules](#declared-schedules)
 - [Multi-device sync](#multi-device-sync)
+- [Android](#android)
 - [Insights & questions](#insights--questions)
 - [Personalising](#personalising)
 - [Planning & reports](#planning--reports)
@@ -318,6 +319,32 @@ what a run would do without writing anything, **立即同步** does it.
 The `auto` switch pulls once at launch (and reports through `sync-finished`) so a phone edit is
 there before you start typing.
 
+## Android
+
+The phone build is not a port: it is the same `ledger-core` / `ledger-engine` / `ledger-sync` crates
+with the desktop-only layers compiled out (tray icon, menu-bar positioning, global hotkey, the
+always-on-top capture palette).
+
+| on the phone | behaviour |
+| --- | --- |
+| first launch | creates a vault in the app's private storage (`/data/data/dev.moneytracker.app/files/ledger`) and opens it — no folder picker |
+| capture | a full-page route inside the main window; the sidebar becomes a bottom tab bar |
+| dashboard | cards stack in one column in the order you arranged them on the desktop; dragging is off so scrolling wins |
+| sync | identical: fill in endpoint / bucket / keys under 设置 → 同步 |
+| tray, global hotkey | not available — those concepts do not exist on a phone |
+
+Build an installable APK:
+
+```bash
+scripts/android-apk.sh          # release, arm64, signed
+adb install -r dist/moneytracker-*.apk
+```
+
+It needs the Android SDK (`platform-tools`, `platforms;android-35`, `build-tools;35.0.0`,
+`ndk;27.2.12479018`), a JDK 17+ and `rustup target add aarch64-linux-android`. The signing key lives
+at `~/.moneytracker-android/moneytracker.jks`  — **keep it**: a new version
+only upgrades an installed app when both are signed with the same key.
+
 ## Insights & questions
 
 The dashboard's 洞察 panel is computed by rules, not by a model: budget envelopes above 90 %, the two
@@ -518,7 +545,8 @@ capture state machine.
 - The supported dialect is the subset above; everything else fails loudly instead of being
   approximated.
 - `hledger` is not bundled — cross-checks run only when it is on `PATH`.
-- macOS only for now; the Rust core is portable, the window/tray layer is not.
+- macOS and Android are the tested targets; Windows/Linux build from the same code but the
+tray/menu-bar behaviour is only exercised on macOS.
 - `specta` 2.0.0-rc.26 is vendored in `vendor/specta` with a two-line patch, because stable Rust
   lacks the `fmt::from_fn` helper it uses and `tauri-specta` pins that exact version.
 

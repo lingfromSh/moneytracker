@@ -38,6 +38,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 - [定期交易与自动化](#定期交易与自动化)
 - [固定收支日程](#固定收支日程)
 - [多端同步](#多端同步)
+- [安卓](#安卓)
 - [洞察与提问](#洞察与提问)
 - [个性化](#个性化)
 - [规划与报表](#规划与报表)
@@ -294,6 +295,27 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 
 打开「启动时自动拉取」后，启动会先合并云端改动（并通过 `sync-finished` 事件告诉界面），
 手机上的改动在你开始记账之前就已经在了。
+
+## 安卓
+
+手机版不是复刻：还是同一份 `ledger-core` / `ledger-engine` / `ledger-sync`，只是把桌面专属的层（托盘图标、菜单栏定位、全局快捷键、置顶记账小窗）在编译期摘掉。
+
+| 手机上 | 行为 |
+| --- | --- |
+| 首次启动 | 在 App 私有目录（`/data/data/dev.moneytracker.app/files/ledger`）自动建账本并打开，不需要选文件夹 |
+| 记账 | 变成主窗口里的整页路由；侧边栏变底部标签栏 |
+| 看板 | 卡片按你在桌面上排好的顺序堆成一列，并且禁用拖拽，让滚动优先 |
+| 同步 | 完全一样：设置 → 同步 里填 endpoint / bucket / 密钥 |
+| 托盘、全局快捷键 | 不可用 —— 手机上不存在这两个概念 |
+
+打安装包：
+
+```bash
+scripts/android-apk.sh          # release / arm64 / 已签名
+adb install -r dist/moneytracker-*.apk
+```
+
+需要 Android SDK（`platform-tools`、`platforms;android-35`、`build-tools;35.0.0`、`ndk;27.2.12479018`）、JDK 17+ 和 `rustup target add aarch64-linux-android`。签名密钥在 `~/.moneytracker-android/moneytracker.jks`(口令见本机)，**务必备份**：只有同一把钥匙签出来的新版本才能覆盖安装。
 
 ## 洞察与提问
 

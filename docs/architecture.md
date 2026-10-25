@@ -357,6 +357,28 @@ specta = { path = "vendor/specta" }
 
 Drop the patch once a `tauri-specta` release depends on `specta >= 2.0.0-rc.27`.
 
+## Mobile shells
+
+The engine crates have no Tauri dependency, so Android is the same code with the desktop layer
+excluded at compile time rather than a second implementation:
+
+| concern | desktop | mobile |
+| --- | --- | --- |
+| `tauri` features | `tray-icon`, `macos-private-api`, `image-png` | `image-png` only |
+| plugins | `global-shortcut`, `positioner`, `dialog`, `opener` | `dialog`, `opener` |
+| capture | always-on-top `WebviewWindow`, shown by a global hotkey | `#/capture` route inside the main window |
+| navigation | fixed sidebar, `⌘1…⌘0` | header + scrolling bottom tab bar |
+| dashboard grid | `react-grid-layout`, 12 columns, draggable | one column, `static: true`, drag/resize disabled |
+| vault location | user-picked folder | `app_data_dir()/ledger`, created on first launch |
+
+Two `cfg` aliases come from `tauri-build` (`desktop` / `mobile`) and are what the code branches on:
+`src-tauri/src/window.rs` (capture window + no-op stubs), `src-tauri/src/shortcut.rs` (global hotkey),
+and the tray/plugin wiring in `src-tauri/src/lib.rs`. `src/lib/platform.ts` is the frontend
+counterpart — it reads the user agent because Tauri injects `__TAURI_INTERNALS__` on every platform.
+The only place a mobile device differs in behaviour rather than presentation is
+`ensure_mobile_vault` in `src-tauri/src/lib.rs`: phones have no folder picker, so the app provisions
+its own vault and remembers it as the current one.
+
 ## Frontend
 
 - TanStack Query for server state (keys mirror command arguments, invalidated wholesale on

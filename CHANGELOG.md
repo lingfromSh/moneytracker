@@ -6,30 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Changed
-
-- `recurring.ledger` is now included by `index.ledger`, so `hledger -f index.ledger reg --forecast`
-  shows the declared salary, rent and loans next to the transactions that already happened. To keep the
-  two readings apart, the budget envelope scan, the cash-flow forecast and the payoff estimate skip the
-  file by name (`schedule::is_schedule_file`), and `budgets.ledger` in the showcase vault gained elided
-  legs so its templates balance for `--forecast` too.
-- Schedules express the billing day through the `from` date (`~ monthly from 2026-11-15`) instead of an
-  app-only `day:15`, because hledger rejects that token once the file is part of the ledger. `day:` is
-  still parsed for older files, with a `core.schedule.day_token` warning that points at the fix.
-
-### Fixed
-
-- A dashboard panel added by a newer version no longer stays invisible for anyone who already saved a
-  layout: missing panels (e.g. 固定收支) are appended below the existing arrangement instead of being
-  dropped, so a saved layout keeps working across upgrades.
-
-- Natural-language capture no longer invents accounts or the wrong wallet: the prompt now lists every
-  account in the open ledger (grouped by kind, including accounts only named by `rules.ledger`) with
-  worked examples written in those exact names, the payment method in the note overrides the model's
-  guess (`用微信付的` → your WeChat account, or the wallet parent), unknown paths collapse onto the
-  closest account that exists, and placeholder commodities such as `NONE` are dropped.
-
 ### Added
+
+- **Android**: the app builds and runs on a phone from the same crates — `scripts/android-apk.sh`
+  produces a signed release APK. Desktop-only layers (tray icon, menu-bar positioning, global
+  hotkey, the always-on-top capture palette) are compiled out on mobile; capture becomes a page in
+  the main window, the sidebar becomes a bottom tab bar and the dashboard stacks into one column.
+  The first launch creates a vault in the app's private storage, so no folder picker is needed.
 
 - Multi-device sync over any S3-compatible bucket (MinIO, R2, S3, B2). New crate `crates/ledger-sync`:
   hand-rolled SigV4 (verified against an independent HMAC computation), an `ObjectStore` trait with an
@@ -126,6 +109,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `recurring.ledger` is now included by `index.ledger`, so `hledger -f index.ledger reg --forecast`
+  shows the declared salary, rent and loans next to the transactions that already happened. To keep the
+  two readings apart, the budget envelope scan, the cash-flow forecast and the payoff estimate skip the
+  file by name (`schedule::is_schedule_file`), and `budgets.ledger` in the showcase vault gained elided
+  legs so its templates balance for `--forecast` too.
+- Schedules express the billing day through the `from` date (`~ monthly from 2026-11-15`) instead of an
+  app-only `day:15`, because hledger rejects that token once the file is part of the ledger. `day:` is
+  still parsed for older files, with a `core.schedule.day_token` warning that points at the fix.
+
 - New app icon drawn from `src-tauri/icons/icon.svg` (green squircle, ledger page, committed
   checkmark) instead of the generated green square, and a proper monochrome template glyph for the
   menu bar — the tray used to show the full-colour window icon, which reads as a smudge in dark mode.
@@ -135,6 +127,16 @@ All notable changes to this project are documented here. The format follows
   so editing a transaction can never drop its identity.
 
 ### Fixed
+
+- A dashboard panel added by a newer version no longer stays invisible for anyone who already saved a
+  layout: missing panels (e.g. 固定收支) are appended below the existing arrangement instead of being
+  dropped, so a saved layout keeps working across upgrades.
+
+- Natural-language capture no longer invents accounts or the wrong wallet: the prompt now lists every
+  account in the open ledger (grouped by kind, including accounts only named by `rules.ledger`) with
+  worked examples written in those exact names, the payment method in the note overrides the model's
+  guess (`用微信付的` → your WeChat account, or the wallet parent), unknown paths collapse onto the
+  closest account that exists, and placeholder commodities such as `NONE` are dropped.
 
 - Budgets on a parent account now measure the whole subtree: an `expenses:food` envelope counts
   `expenses:food:groceries` instead of showing 0 spent.

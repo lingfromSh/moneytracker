@@ -8,6 +8,7 @@ use tauri::{AppHandle, Manager};
 #[cfg(desktop)]
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 
+#[cfg_attr(not(desktop), allow(dead_code))]
 pub const MAIN: &str = "main";
 pub const CAPTURE: &str = "capture";
 
@@ -64,6 +65,7 @@ pub fn create_capture_window(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg_attr(not(desktop), allow(dead_code))]
 pub fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN) {
         let _ = window.show();
@@ -71,16 +73,22 @@ pub fn show_main(app: &AppHandle) {
     }
 }
 
+// The mobile shells keep the same command surface, so these exist only to make
+// the desktop calls compile — nothing on a phone ever invokes them.
 #[cfg(not(desktop))]
+#[allow(dead_code)]
 pub fn show_capture(_app: &AppHandle) {}
 
 #[cfg(not(desktop))]
+#[allow(dead_code)]
 pub fn hide_capture(_app: &AppHandle) {}
 
 #[cfg(not(desktop))]
+#[allow(dead_code)]
 pub fn toggle_capture(_app: &AppHandle) {}
 
 #[cfg(not(desktop))]
+#[allow(dead_code)]
 pub fn create_capture_window(_app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
