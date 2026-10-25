@@ -23,14 +23,20 @@ All notable changes to this project are documented here. The format follows
   path-style, keys in `sync.json` (`0600`), 测试连接, 预览差异 (writes nothing), 立即同步, a per-file
   conflict picker, and an optional pull at launch (`sync-finished` event). Only `*.ledger` travels.
 - Declared schedules (日程): `recurring.ledger` holds hand-editable `~ monthly` templates for money that
-  happens every month — 工资 with its 五险二金 split (应发 and the employer side both booked), the
+  happens every month — 工资 with its 五险一金 split (应发 and the employer side both booked), the
   mortgage payment split into interest and principal, rent income, subscriptions. The 日程 view lists
   the next 6/12/24 months with 记入 / 跳过 per occurrence, the dashboard gains a 固定收支 card, and
-  工资模板 generates a complete salary block from one gross figure (个人 8%+2%+0.5%+7%+4%,
-  公司 16%+8%+0.5%+0.5%+1%+7%+8%; 公积金按上海口径各付 7%). Occurrences are only written when asked; the 自动化 switch makes the
+  工资模板 generates a complete salary block from one gross figure (个人 8%+2%+0.5%+7%,
+  公司 16%+8%+0.5%+0.5%+1%+7%; 公积金按上海口径各付 7%). Occurrences are only written when asked; the 自动化 switch makes the
   monthly maintenance run book what is due. New engine module `crates/ledger-engine/src/schedule.rs` and
   commands `schedule_overview`, `schedule_commit`, `schedule_commit_due`, `schedule_skip`,
   `schedule_save`, `schedule_salary_preview`.
+- **Income tax on the salary schedule**: templates carry `gross:` / `personal:` / `deduct:` / `tax:`
+  metadata, and 记入 estimates 个税 with the 累计预扣法 (seven brackets up to 45%, 5,000 threshold,
+  专项附加扣除, minus what the same year already withheld). A confirm dialog pre-fills the estimate
+  (562.50 for 18,750.00 of monthly taxable income) and takes the payslip figure instead; the booked
+  number is what the next month's cumulative total reads back. 企业年金 is no longer generated — it
+  needs an employer plan, so it is left to hand-written postings.
 
 - Personalisation: dashboard card and KPI pickers (看板 → 自定义), density (舒适/紧凑) and week-start
   settings, and named transaction views saved from 流水. New settings `hidden_cards`, `kpi_cards`,

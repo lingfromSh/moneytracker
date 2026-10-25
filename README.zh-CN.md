@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-220_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-229_passing-brightgreen.svg)](#测试)
 [![Front-end tests](https://img.shields.io/badge/vitest-77_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
@@ -236,17 +236,16 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 房贷、房租、订阅。这些写进 `recurring.ledger`，语法就是 hledger 的周期块：
 
 ```ledger
-~ monthly from 2025-08-05  ; id:salary-main label:工资 kind:salary
+~ monthly from 2025-08-05  ; id:salary-main label:工资 kind:salary gross:30000.00 personal:5250.00 deduct:1000.00 tax:expenses:个税
     income:salary                        -30,000.00 CNY
-    income:benefit                       -12,300.00 CNY  ; 公司缴纳侧
+    income:benefit                       -9,900.00 CNY  ; 公司缴纳侧
     assets:cn:fund                         4,200.00 CNY  ; 公积金 个人 2,100 + 公司 2,100
     assets:cn:pension                      7,200.00 CNY  ; 养老 个人 2,400 + 公司 4,800
-    assets:cn:annuity                      3,600.00 CNY  ; 年金 个人 1,200 + 公司 2,400
     expenses:insurance:medical             3,000.00 CNY  ; 医疗 个人 714 + 公司 2,400
     expenses:insurance:unemployment          300.00 CNY
     expenses:insurance:injury                150.00 CNY
     expenses:insurance:maternity             300.00 CNY
-    assets:bank:cmb                       23,550.00 CNY  ; 到手（现金腿）
+    assets:bank:cmb                       24,750.00 CNY  ; 到手（税前，现金腿）
 ```
 
 几条约定：
@@ -255,14 +254,20 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
   「每月几号」由 `from` 后面的日期决定（`from 2026-01-31` 遇到小月自动收到月末），hledger 也是
   这么读的，所以文件在 App 外面同样有效。
 - **最后一条 posting 是现金腿**，卡片上的「现金流」就取它；金额可以省略，由引擎补平。
-- 五险二金的归属按「能不能取出来」分：公积金、个人养老账户、企业年金是 `assets:cn:*`
-  （钱还是你的），医疗、失业、工伤、生育是 `expenses:insurance:*`（统筹掉了）。公司缴纳的部分
-  也一起入账，所以收入是 42,300，而不是 30,000。公积金按上海口径各付 7%，换城市就改
-  `crates/ledger-engine/src/schedule.rs` 里那两个 `bps`。
+- 五险一金的归属按「能不能取出来」分：公积金、个人养老账户是 `assets:cn:*`（钱还是你的），
+  医疗、失业、工伤、生育是 `expenses:insurance:*`（统筹掉了）。公司缴纳的部分也一起入账，
+  所以收入是 39,900，而不是 30,000。公积金按上海口径各付 7%，换城市就改
+  `crates/ledger-engine/src/schedule.rs` 里那两个 `bps`。**企业年金不生成**：它只有公司建了
+  年金计划才有，有的话自己加两条 `assets:cn:annuity` / `expenses:annuity`。
+- **个税是估出来的，但记入前会让你确认。** 表头里的 `gross:` / `personal:` / `deduct:` /
+  `tax:` 让「记入」能按累计预扣法算个税（3%–45% 七级税率、5,000 起征点、`deduct:` 里的专项附加
+  扣除、再减去同一年前面几个月已经预缴的）。确认框里预填的就是估算值（月度应纳税所得额
+  18,750.00 → 562.50），照工资条改成 562.50 之类也可以，改完写进 `expenses:个税`，下个月的
+  「已预缴」就从账本里读回来。
 - 只是写模板不会产生任何交易。「记入」才按普通交易写进日文件并打 `sched:<id>` 标签；打开
   设置 → 自动化 的「自动记入固定收支」后，每月维护任务会把当月的到期项补上。
 - 不想自己算比例就用 **日程 → 工资模板**：输入应发工资和到手账户，它会按
-  个人 8%/2%/0.5%/7%/4%、公司 16%/8%/0.5%/0.5%/1%/7%/8% 生成整段，预览后写入文件。
+  个人 8%/2%/0.5%/7%、公司 16%/8%/0.5%/0.5%/1%/7% 生成整段，预览后写入文件。
 
 `recurring.ledger` 和 `rules.ledger`、`goals.ledger` 一样 **不被 `index.ledger` 包含**：它是计划，
 不是已经发生的钱。否则 hledger、预算和现金流预测都会把同一个月算两遍。
@@ -446,10 +451,10 @@ pnpm bindings                    # 由 Rust 命令重新生成 src/lib/bindings.
 ## 测试
 
 ```bash
-cargo test --workspace                        # 220 个 Rust 测试，15 个 suite
+cargo test --workspace                        # 229 个 Rust 测试，15 个 suite
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 77 个 Vitest 测试
+pnpm test                                     # 86 个 Vitest 测试
 pnpm build                                    # tsc --noEmit && vite build
 ```
 

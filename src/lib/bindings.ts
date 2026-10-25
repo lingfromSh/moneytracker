@@ -58,7 +58,7 @@ export const commands = {
 	 */
 	scheduleOverview: (months: number | null) => typedError<ScheduleOverviewDto_Serialize, CmdError>(__TAURI_INVOKE("schedule_overview", { months })),
 	/**  Book one occurrence (salary, mortgage, bill) into its day file. */
-	scheduleCommit: (id: string, month: string | null) => typedError<ScheduleCommitDto, CmdError>(__TAURI_INVOKE("schedule_commit", { id, month })),
+	scheduleCommit: (id: string, month: string | null, tax: number | null) => typedError<ScheduleCommitDto, CmdError>(__TAURI_INVOKE("schedule_commit", { id, month, tax })),
 	/**  Book every occurrence that is due this month, in one click. */
 	scheduleCommitDue: () => typedError<ScheduleCommitDto, CmdError>(__TAURI_INVOKE("schedule_commit_due")),
 	/**  Remember "not this month" for one template. */
@@ -1336,10 +1336,16 @@ export type SalaryTemplateDto_Deserialize = {
 	start?: string | null,
 	/**  Account that receives take-home pay. */
 	net_account: string,
+	/**  Income account for gross pay (`income:salary`). */
+	salary_account?: string | null,
+	/**  Income account for the employer's share (`income:benefit`). */
+	benefit_account?: string | null,
 	/**  Account prefix for the sub-accounts (`assets:cn` → `assets:cn:fund`). */
 	prefix: string,
 	/**  Also book the employer contribution (company side) as income. */
 	employer: boolean,
+	/**  专项附加扣除 (房贷利息 1000 / 子女教育 2000 …), per month. */
+	deduct?: string | null,
 };
 
 /**  Parameters for the 五险二金 salary skeleton. */
@@ -1351,10 +1357,16 @@ export type SalaryTemplateDto_Serialize = {
 	start: string | null,
 	/**  Account that receives take-home pay. */
 	net_account: string,
+	/**  Income account for gross pay (`income:salary`). */
+	salary_account: string | null,
+	/**  Income account for the employer's share (`income:benefit`). */
+	benefit_account: string | null,
 	/**  Account prefix for the sub-accounts (`assets:cn` → `assets:cn:fund`). */
 	prefix: string,
 	/**  Also book the employer contribution (company side) as income. */
 	employer: boolean,
+	/**  专项附加扣除 (房贷利息 1000 / 子女教育 2000 …), per month. */
+	deduct: string | null,
 };
 
 export type SankeyDto = {
@@ -1440,6 +1452,10 @@ export type ScheduleOccurrenceDto_Deserialize = {
 	expense: AmountDto,
 	assets: AmountDto,
 	debt: AmountDto,
+	/**  应纳税所得额: 应发 − 5,000 − 个人代扣 − 专项附加扣除. */
+	tax_base: AmountDto,
+	/**  本月应预扣个税 (累计预扣法，记入时可以改). */
+	tax: AmountDto,
 	legs: ScheduleLegDto[],
 	txn_id?: string | null,
 };
@@ -1459,6 +1475,10 @@ export type ScheduleOccurrenceDto_Serialize = {
 	expense: AmountDto,
 	assets: AmountDto,
 	debt: AmountDto,
+	/**  应纳税所得额: 应发 − 5,000 − 个人代扣 − 专项附加扣除. */
+	tax_base: AmountDto,
+	/**  本月应预扣个税 (累计预扣法，记入时可以改). */
+	tax: AmountDto,
 	legs: ScheduleLegDto[],
 	txn_id: string | null,
 };
@@ -1518,6 +1538,12 @@ export type ScheduleTemplateDto_Deserialize = {
 	/**  Liability legs: debt repaid (positive = debt went down). */
 	debt: AmountDto,
 	next_date?: string | null,
+	/**  Where withheld income tax is booked (`expenses:个税`), when declared. */
+	tax_account?: string | null,
+	/**  专项附加扣除 per month, from `deduct:`. */
+	deduct: AmountDto,
+	/**  Income tax the next occurrence would withhold, at today's figures. */
+	tax: AmountDto,
 	line: number | null,
 	legs: ScheduleLegDto[],
 };
@@ -1545,6 +1571,12 @@ export type ScheduleTemplateDto_Serialize = {
 	/**  Liability legs: debt repaid (positive = debt went down). */
 	debt: AmountDto,
 	next_date: string | null,
+	/**  Where withheld income tax is booked (`expenses:个税`), when declared. */
+	tax_account: string | null,
+	/**  专项附加扣除 per month, from `deduct:`. */
+	deduct: AmountDto,
+	/**  Income tax the next occurrence would withhold, at today's figures. */
+	tax: AmountDto,
 	line: number | null,
 	legs: ScheduleLegDto[],
 };

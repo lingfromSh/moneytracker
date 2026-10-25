@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-220_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-229_passing-brightgreen.svg)](#testing)
 [![Front-end tests](https://img.shields.io/badge/vitest-77_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
@@ -252,17 +252,16 @@ happens every month": salary, mortgage, rent, subscriptions. Write those into `r
 plain hledger periodic syntax:
 
 ```ledger
-~ monthly from 2025-08-05  ; id:salary-main label:工资 kind:salary
+~ monthly from 2025-08-05  ; id:salary-main label:工资 kind:salary gross:30000.00 personal:5250.00 deduct:1000.00 tax:expenses:个税
     income:salary                        -30,000.00 CNY
-    income:benefit                       -12,300.00 CNY  ; employer contributions
+    income:benefit                       -9,900.00 CNY  ; employer contributions
     assets:cn:fund                         4,200.00 CNY  ; housing fund: 2,100 you + 2,100 employer
     assets:cn:pension                      7,200.00 CNY  ; pension: 2,400 you + 4,800 employer
-    assets:cn:annuity                      3,600.00 CNY  ; annuity: 1,200 you + 2,400 employer
     expenses:insurance:medical             3,000.00 CNY  ; 714 you + 2,400 employer
     expenses:insurance:unemployment          300.00 CNY
     expenses:insurance:injury                150.00 CNY
     expenses:insurance:maternity             300.00 CNY
-    assets:bank:cmb                       23,550.00 CNY  ; take-home (the cash leg)
+    assets:bank:cmb                       24,750.00 CNY  ; take-home before tax (the cash leg)
 ```
 
 - The header comment carries the metadata: `id:`, `label:`, `kind:` (salary / loan / income / expense),
@@ -270,16 +269,24 @@ plain hledger periodic syntax:
   short months), which is exactly how hledger reads it.
 - **The last posting is the cash leg**: it is what the card shows as 现金流, and its amount may be
   left out for the engine to balance.
-- 五险二金 is split by *withdrawability*: the housing fund, the personal pension account and the
-  annuity stay `assets:cn:*` (still your money), while medical, unemployment, injury and maternity are
-  `expenses:insurance:*` (pooled away). The employer side is booked too, so income is 42,300 — not
+- 五险一金 is split by *withdrawability*: the housing fund and the personal pension account stay
+  `assets:cn:*` (still your money), while medical, unemployment, injury and maternity are
+  `expenses:insurance:*` (pooled away). The employer side is booked too, so income is 39,900 — not
   30,000. The housing fund is 7% + 7% (Shanghai); change the two `bps` values in
-  `crates/ledger-engine/src/schedule.rs` for another city.
+  `crates/ledger-engine/src/schedule.rs` for another city. 企业年金 is **not** generated: it only
+  exists if the employer set up a plan, in which case add `assets:cn:annuity` /
+  `expenses:annuity` postings by hand.
+- **Income tax is estimated, then confirmed.** The header metadata `gross:` / `personal:` /
+  `deduct:` / `tax:` lets 记入 compute 个税 with the 累计预扣法 (3%–45% brackets, 5,000 threshold,
+  专项附加扣除 from `deduct:`, minus what earlier months of the same year already withheld). The
+  confirm dialog pre-fills the estimate — 562.50 for 18,750.00 of monthly taxable income — and lets
+  you type the figure from the payslip (562.50, say), which is what gets booked to `expenses:个税`
+  and what the next month's cumulative total reads back.
 - Declaring a template books nothing. 记入 writes one ordinary transaction into the day file tagged
   `sched:<id>`; 设置 → 自动化 → 自动记入固定收支 makes the monthly maintenance pass fill in whatever is
   due that month.
 - 日程 → 工资模板 does the arithmetic for you: give it the gross figure and the account that receives
-  the net pay, and it generates the whole block (个人 8%/2%/0.5%/7%/4%, 公司 16%/8%/0.5%/0.5%/1%/7%/8%),
+  the net pay, and it generates the whole block (个人 8%/2%/0.5%/7%, 公司 16%/8%/0.5%/0.5%/1%/7%),
   previewed before it is written.
 
 `recurring.ledger` **is included by `index.ledger`**: hledger ignores `~` blocks unless you ask for
@@ -483,10 +490,10 @@ check (`brew install hledger`).
 ## Testing
 
 ```bash
-cargo test --workspace                        # 220 Rust tests, 15 suites
+cargo test --workspace                        # 229 Rust tests, 15 suites
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 77 Vitest tests
+pnpm test                                     # 86 Vitest tests
 pnpm build                                    # tsc --noEmit && vite build
 ```
 

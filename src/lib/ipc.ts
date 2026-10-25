@@ -131,8 +131,8 @@ export const api = {
 
   // declared schedules (recurring.ledger)
   scheduleOverview: (months: number | null = 12) => call(commands.scheduleOverview(months)),
-  scheduleCommit: (id: string, month: string | null = null) =>
-    call(commands.scheduleCommit(id, month)),
+  scheduleCommit: (id: string, month: string | null = null, tax: number | null = null) =>
+    call(commands.scheduleCommit(id, month, tax)),
   scheduleCommitDue: () => call(commands.scheduleCommitDue()),
   scheduleSkip: (id: string, month: string | null = null) =>
     call(commands.scheduleSkip(id, month)),

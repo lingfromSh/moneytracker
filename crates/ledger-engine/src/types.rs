@@ -853,6 +853,12 @@ pub struct ScheduleTemplateDto {
     /// Liability legs: debt repaid (positive = debt went down).
     pub debt: AmountDto,
     pub next_date: Option<String>,
+    /// Where withheld income tax is booked (`expenses:个税`), when declared.
+    pub tax_account: Option<String>,
+    /// 专项附加扣除 per month, from `deduct:`.
+    pub deduct: AmountDto,
+    /// Income tax the next occurrence would withhold, at today's figures.
+    pub tax: AmountDto,
     #[specta(type = f64)]
     pub line: u32,
     pub legs: Vec<ScheduleLegDto>,
@@ -874,6 +880,10 @@ pub struct ScheduleOccurrenceDto {
     pub expense: AmountDto,
     pub assets: AmountDto,
     pub debt: AmountDto,
+    /// 应纳税所得额: 应发 − 5,000 − 个人代扣 − 专项附加扣除.
+    pub tax_base: AmountDto,
+    /// 本月应预扣个税 (累计预扣法，记入时可以改).
+    pub tax: AmountDto,
     pub legs: Vec<ScheduleLegDto>,
     pub txn_id: Option<String>,
 }
@@ -930,10 +940,16 @@ pub struct SalaryTemplateDto {
     pub start: Option<String>,
     /// Account that receives take-home pay.
     pub net_account: String,
+    /// Income account for gross pay (`income:salary`).
+    pub salary_account: Option<String>,
+    /// Income account for the employer's share (`income:benefit`).
+    pub benefit_account: Option<String>,
     /// Account prefix for the sub-accounts (`assets:cn` → `assets:cn:fund`).
     pub prefix: String,
     /// Also book the employer contribution (company side) as income.
     pub employer: bool,
+    /// 专项附加扣除 (房贷利息 1000 / 子女教育 2000 …), per month.
+    pub deduct: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

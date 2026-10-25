@@ -39,6 +39,7 @@ export function Schedule() {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState("");
   const [salaryOpen, setSalaryOpen] = React.useState(false);
+  const [pending, setPending] = React.useState<PendingCommit | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -72,11 +73,31 @@ export function Schedule() {
 
   const data = listed.data;
 
-  const commitOne = (id: string, month: string) =>
+  const commitOne = (id: string, month: string, tax: number | null = null) =>
     run(async () => {
-      const result = await api.scheduleCommit(id, month);
+      const result = await api.scheduleCommit(id, month, tax);
       return Number(result.written ?? 0) > 0 ? "已记入账本" : "这个月已经记过了";
     });
+
+  /** 带个税的模板先问一句：个税是估的，允许按工资条改。 */
+  const askCommit = (id: string, month: string) => {
+    const template = data?.templates.find((item) => item.id === id);
+    const occurrence = data?.occurrences.find(
+      (item) => item.id === id && item.month === month && !item.recorded,
+    );
+    if (template?.tax_account && occurrence) {
+      setPending({
+        id,
+        month,
+        label: template.label,
+        base: Number(occurrence.tax_base.value ?? 0),
+        tax: Number(occurrence.tax.value ?? 0),
+        settle: Number(occurrence.settle.value ?? 0),
+      });
+      return;
+    }
+    void commitOne(id, month, null);
+  };
 
   const commitDue = () =>
     run(async () => {
@@ -125,7 +146,7 @@ export function Schedule() {
   }
   if (!data) return null;
 
-  const pending = data.month_totals.reduce((sum, month) => sum + Number(month.pending ?? 0), 0);
+  const waiting = data.month_totals.reduce((sum, month) => sum + Number(month.pending ?? 0), 0);
 
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -134,7 +155,7 @@ export function Schedule() {
           <div className="text-lg font-semibold">日程</div>
           <div className="text-xs text-[var(--color-muted)]">
             来自 <code>{data.file}</code> · {data.templates.length} 条固定收支
-            {pending > 0 ? ` · ${pending} 笔待记` : ""}
+            {waiting > 0 ? ` · ${waiting} 笔待记` : ""}
             {data.auto_commit ? " · 自动记入已开启" : " · 只提醒，不写入"}
           </div>
         </div>
@@ -156,7 +177,7 @@ export function Schedule() {
             <Pencil className="mr-1 h-3.5 w-3.5" />
             编辑文件
           </Button>
-          <Button variant="primary" onClick={() => void commitDue()} disabled={busy || pending === 0}>
+          <Button variant="primary" onClick={() => void commitDue()} disabled={busy || waiting === 0}>
             <Play className="mr-1 h-3.5 w-3.5" />
             记入本月待办
           </Button>
@@ -203,7 +224,7 @@ export function Schedule() {
         ) : null}
 
         {data.templates.length > 0 ? (
-          <Templates data={data} busy={busy} onCommit={commitOne} onSkip={skip} />
+          <Templates data={data} busy={busy} onCommit={askCommit} onSkip={skip} />
         ) : null}
 
         <div className="space-y-2">
@@ -257,7 +278,7 @@ export function Schedule() {
                                 variant="subtle"
                                 className="px-2 py-0.5 text-[11px]"
                                 disabled={busy}
-                                onClick={() => void commitOne(occurrence.id, occurrence.month)}
+                                onClick={() => askCommit(occurrence.id, occurrence.month)}
                               >
                                 记入
                               </Button>
@@ -306,6 +327,18 @@ export function Schedule() {
           </div>
         </div>
       </Modal>
+
+      {pending ? (
+        <TaxModal
+          pending={pending}
+          busy={busy}
+          onCancel={() => setPending(null)}
+          onConfirm={(tax) => {
+            setPending(null);
+            void commitOne(pending.id, pending.month, tax);
+          }}
+        />
+      ) : null}
 
       <SalaryModal
         open={salaryOpen}
@@ -414,12 +447,95 @@ function Templates({
 const SALARY_DEFAULTS: SalaryTemplateDto_Serialize = {
   label: "工资",
   gross: "30000.00",
+  deduct: "1000.00",
   day: 5,
   start: null,
   net_account: "assets:bank:cmb",
+  salary_account: "income:salary",
+  benefit_account: "income:benefit",
   prefix: "assets:cn",
   employer: true,
 };
+
+type PendingCommit = {
+  id: string;
+  month: string;
+  label: string;
+  /** 本月应纳税所得额（应发 − 5,000 − 个人代扣 − 专项附加扣除）。 */
+  base: number;
+  /** 估算的本月个税。 */
+  tax: number;
+  /** 模板的现金流（税前到手）。 */
+  settle: number;
+};
+
+/** 记入前确认个税：累计预扣法只是估算，工资条上的数字才是真的。 */
+function TaxModal({
+  pending,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  pending: PendingCommit;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (tax: number) => void;
+}) {
+  const [tax, setTax] = React.useState(pending.tax.toFixed(2));
+
+  React.useEffect(() => {
+    setTax(pending.tax.toFixed(2));
+  }, [pending]);
+
+  const value = Number(tax);
+  const safe = Number.isFinite(value) ? value : 0;
+  const fixed = (number: number) =>
+    number.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return (
+    <Modal
+      open
+      onClose={onCancel}
+      title={`记入 ${pending.label} · ${pending.month}`}
+      width="max-w-md"
+    >
+      <div className="space-y-3">
+        <div className="space-y-1 rounded-lg border border-[var(--color-line)] px-3 py-2 text-xs">
+          <div className="flex justify-between">
+            <span className="text-[var(--color-muted)]">本月应纳税所得额</span>
+            <span className="font-mono tabular-nums">{fixed(pending.base)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[var(--color-muted)]">现金流（税前到手）</span>
+            <span className="font-mono tabular-nums">{fixed(pending.settle)}</span>
+          </div>
+          <div className="flex justify-between border-t border-[var(--color-line)] pt-1 font-medium">
+            <span>记入后到手</span>
+            <span className="font-mono tabular-nums">{fixed(pending.settle - safe)}</span>
+          </div>
+        </div>
+
+        <Field label="本月个税" hint="按累计预扣法估算，可以改成工资条上的数字">
+          <Input
+            value={tax}
+            onChange={(event) => setTax(event.target.value)}
+            className="font-mono"
+            inputMode="decimal"
+          />
+        </Field>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="ghost" onClick={onCancel}>
+            取消
+          </Button>
+          <Button variant="primary" onClick={() => onConfirm(safe)} disabled={busy}>
+            记入
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 function nextMonthStart(): string {
   const now = new Date();
@@ -429,8 +545,9 @@ function nextMonthStart(): string {
 }
 
 /**
- * 应发工资 + 五险二金 的骨架生成器：个人部分从工资里扣，公司部分再记一笔收益，
- * 一半进资产（可提取），一半进支出（不可提取）。生成的是文本，用户看过再保存。
+ * 应发工资 + 五险一金的骨架生成器：个人部分从工资里扣，公司部分再记一笔收益，
+ * 一半进资产（可提取），一半进支出（不可提取）。个税由 App 在记入时按累计预扣法
+ * 估算并记到 `expenses:个税`。生成的是文本，用户看过再保存。
  */
 function SalaryModal({
   open,
@@ -503,6 +620,13 @@ function SalaryModal({
               className="font-mono"
             />
           </Field>
+          <Field label="专项附加扣除" hint="房贷利息 1000、子女教育 2000…按月，影响个税估算">
+            <Input
+              value={form.deduct ?? ""}
+              onChange={(event) => update("deduct", event.target.value)}
+              className="font-mono"
+            />
+          </Field>
           <Field label="发薪日">
             <Input
               type="number"
@@ -524,6 +648,20 @@ function SalaryModal({
             <Input
               value={form.net_account}
               onChange={(event) => update("net_account", event.target.value)}
+              className="font-mono"
+            />
+          </Field>
+          <Field label="工资收入账户" hint="应发工资记到这里">
+            <Input
+              value={form.salary_account ?? ""}
+              onChange={(event) => update("salary_account", event.target.value)}
+              className="font-mono"
+            />
+          </Field>
+          <Field label="公司缴纳账户" hint="公司缴的那部分记成收入">
+            <Input
+              value={form.benefit_account ?? ""}
+              onChange={(event) => update("benefit_account", event.target.value)}
               className="font-mono"
             />
           </Field>

@@ -2,7 +2,7 @@
 //!
 //! [`crate::recur`] guesses patterns from the transactions that already exist.
 //! This module is the opposite: the user states once what happens every month —
-//! salary with its 五险二金 split, the mortgage payment, subscriptions — and the
+//! salary with its 五险一金 split, the mortgage payment, subscriptions — and the
 //! app can then show it as a calendar instead of a surprise.
 //!
 //! The file is plain hledger periodic syntax (`~ monthly ...` plus postings), so
@@ -180,8 +180,27 @@ pub struct ScheduleTemplate {
     pub until: Option<NaiveDate>,
     pub enabled: bool,
     pub postings: Vec<Posting>,
+    /// `tax:<account>` — where withheld income tax goes (`expenses:个税`).
+    /// Absent means the app books no tax for this template.
+    pub tax_account: Option<String>,
+    /// `gross:` — 应发工资, without the employer's share.
+    pub gross: Option<Decimal>,
+    /// `personal:` — 个人代扣的五险一金合计 (the part that lowers the tax base).
+    pub personal: Option<Decimal>,
+    /// `deduct:` — 专项附加扣除 (房贷利息 1000 / 子女教育 2000 …), per month.
+    pub deduct: Decimal,
     pub span: Span,
     pub line: u32,
+}
+
+/// What the app needs to estimate income tax for one template.
+#[derive(Debug, Clone, Copy)]
+pub struct TaxSetup {
+    pub gross: Decimal,
+    /// 个人代扣 → 税前扣除.
+    pub personal: Decimal,
+    /// 专项附加扣除 + 其他免税项.
+    pub deduct: Decimal,
 }
 
 /// A resolved posting: amounts filled in, account type attached.
@@ -379,6 +398,10 @@ pub fn parse(src: &str) -> ScheduleSet {
             .clamp(1, 31);
         let line = line_of(src, pt.span);
 
+        let tax_account = meta
+            .get("tax")
+            .map(|value| value.trim().to_string())
+            .filter(|value| value.contains(':'));
         templates.push(ScheduleTemplate {
             id,
             label,
@@ -390,6 +413,13 @@ pub fn parse(src: &str) -> ScheduleSet {
             until,
             enabled,
             postings: pt.postings.clone(),
+            tax_account,
+            gross: meta.get("gross").and_then(|value| money(value)),
+            personal: meta.get("personal").and_then(|value| money(value)),
+            deduct: meta
+                .get("deduct")
+                .and_then(|value| money(value))
+                .unwrap_or(Decimal::ZERO),
             span: pt.span,
             line,
         });
@@ -478,6 +508,19 @@ impl ScheduleTemplate {
         out
     }
 
+    /// The figures the tax estimate needs, or `None` when the template does not
+    /// declare `tax:` + `gross:`. Hand-written blocks stay tax-free on purpose:
+    /// guessing 应发 from the legs would silently book a wrong number.
+    pub fn tax_setup(&self) -> Option<TaxSetup> {
+        let gross = self.gross?;
+        self.tax_account.as_ref()?;
+        Some(TaxSetup {
+            gross,
+            personal: self.personal.unwrap_or(Decimal::ZERO),
+            deduct: self.deduct,
+        })
+    }
+
     /// Fill elided amounts and attach account types.
     pub fn legs(&self, kind_of: impl Fn(&str) -> char, precision: u32) -> Vec<Leg> {
         let mut total = Decimal::ZERO;
@@ -537,10 +580,12 @@ struct Rate {
     kind: char,
 }
 
-/// 个人部分: 养老 8% · 医疗 2% · 失业 0.5% · 公积金 7% · 年金 4%.
+/// 个人部分: 养老 8% · 医疗 2% · 失业 0.5% · 公积金 7%.
 ///
 /// 公积金按上海口径 7% + 7%；其他城市常在 5%–12% 之间，改这两个 `bps` 即可。
-const PERSONAL_RATES: [Rate; 5] = [
+/// **企业年金不在里面**：它和五险一金不同，只有公司建立了年金计划才有，
+/// 有了再手动加两条 `assets:年金` / `expenses:年金` posting。
+const PERSONAL_RATES: [Rate; 4] = [
     Rate {
         key: "pension",
         bps: 800,
@@ -561,15 +606,10 @@ const PERSONAL_RATES: [Rate; 5] = [
         bps: 700,
         kind: 'A',
     },
-    Rate {
-        key: "annuity",
-        bps: 400,
-        kind: 'A',
-    },
 ];
 
-/// 公司部分: 养老 16% · 医疗 8% · 失业 0.5% · 工伤 0.5% · 生育 1% · 公积金 7% · 年金 8%.
-const EMPLOYER_RATES: [Rate; 7] = [
+/// 公司部分: 养老 16% · 医疗 8% · 失业 0.5% · 工伤 0.5% · 生育 1% · 公积金 7%.
+const EMPLOYER_RATES: [Rate; 6] = [
     Rate {
         key: "pension",
         bps: 1600,
@@ -600,12 +640,46 @@ const EMPLOYER_RATES: [Rate; 7] = [
         bps: 700,
         kind: 'A',
     },
-    Rate {
-        key: "annuity",
-        bps: 800,
-        kind: 'A',
-    },
 ];
+
+/// 工资薪金预扣率表（居民个人，累计预扣法）：
+/// `(累计应纳税所得额上限, 税率万分比, 速算扣除数)`。
+const BRACKETS: [(i64, u32, i64); 7] = [
+    (36_000, 300, 0),
+    (144_000, 1_000, 2_520),
+    (300_000, 2_000, 16_920),
+    (420_000, 2_500, 31_920),
+    (660_000, 3_000, 52_920),
+    (960_000, 3_500, 85_920),
+    (i64::MAX, 4_500, 181_920),
+];
+
+/// 个税起征点（元/月）。
+const THRESHOLD: i64 = 5_000;
+
+/// 累计应纳税额：按累计应纳税所得额查表，减速算扣除数。
+pub fn income_tax(cumulative_taxable: Decimal) -> Decimal {
+    if cumulative_taxable <= Decimal::ZERO {
+        return Decimal::ZERO;
+    }
+    for (cap, bps, quick) in BRACKETS {
+        if cap == i64::MAX || cumulative_taxable <= Decimal::from(cap) {
+            let tax = cumulative_taxable * Decimal::from(bps) / Decimal::from(10_000)
+                - Decimal::from(quick);
+            return tax.round_dp(2).max(Decimal::ZERO);
+        }
+    }
+    Decimal::ZERO
+}
+
+/// `30,000.00` / `¥30,000` / `30000` → 一个金额。
+fn money(text: &str) -> Option<Decimal> {
+    let cleaned: String = text
+        .chars()
+        .filter(|ch| ch.is_ascii_digit() || *ch == '.' || *ch == '-')
+        .collect();
+    cleaned.parse().ok()
+}
 
 /// `assets:cn` + `fund` → `assets:cn:fund`; `expenses` + `medical` for X kinds.
 fn sub_account(prefix: &str, key: &str, kind: char) -> String {
@@ -620,10 +694,13 @@ fn sub_account(prefix: &str, key: &str, kind: char) -> String {
 fn fmt_amount(quantity: Decimal, commodity: &str, precision: u32) -> String {
     let negative = quantity.is_sign_negative();
     let text = quantity.abs().round_dp(precision).to_string();
-    let (int_part, frac_part) = match text.split_once('.') {
+    let (int_part, mut frac_part) = match text.split_once('.') {
         Some((int_part, frac_part)) => (int_part.to_string(), frac_part.to_string()),
         None => (text.clone(), String::new()),
     };
+    while frac_part.len() < precision as usize {
+        frac_part.push('0');
+    }
     let mut grouped = String::new();
     let chars: Vec<char> = int_part.chars().collect();
     for (index, ch) in chars.iter().enumerate() {
@@ -640,6 +717,33 @@ fn fmt_amount(quantity: Decimal, commodity: &str, precision: u32) -> String {
     format!("{}{} {}", if negative { "-" } else { "" }, body, commodity)
 }
 
+/// Plain `30,000.00` (no commodity) for the metadata comment.
+fn fmt_plain(quantity: Decimal, precision: u32) -> String {
+    let negative = quantity.is_sign_negative();
+    let text = quantity.abs().round_dp(precision).to_string();
+    let (int_part, mut frac_part) = match text.split_once('.') {
+        Some((int_part, frac_part)) => (int_part.to_string(), frac_part.to_string()),
+        None => (text, String::new()),
+    };
+    while frac_part.len() < precision as usize {
+        frac_part.push('0');
+    }
+    let mut grouped = String::new();
+    let chars: Vec<char> = int_part.chars().collect();
+    for (index, ch) in chars.iter().enumerate() {
+        if index > 0 && (chars.len() - index).is_multiple_of(3) {
+            grouped.push(',');
+        }
+        grouped.push(*ch);
+    }
+    let body = if frac_part.is_empty() {
+        grouped
+    } else {
+        format!("{grouped}.{frac_part}")
+    };
+    format!("{}{}", if negative { "-" } else { "" }, body)
+}
+
 fn posting_line(account: &str, amount: Option<(Decimal, &str, u32)>) -> String {
     let body = match amount {
         Some((quantity, commodity, precision)) => fmt_amount(quantity, commodity, precision),
@@ -654,7 +758,7 @@ pub fn salary_id(label: &str) -> String {
     format!("{}-{}", slug(label), short_hash(label))
 }
 
-/// Render a `~` block that books gross pay, both sides of 五险二金, and the
+/// Render a `~` block that books gross pay, both sides of 五险一金, and the
 /// take-home cash leg. The cash leg is **derived** so the block always balances
 /// to the cent.
 pub fn render_salary(
@@ -729,32 +833,58 @@ pub fn render_salary(
         }
     }
 
+    let salary_account = request
+        .salary_account
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("income:salary");
+    let benefit_account = request
+        .benefit_account
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("income:benefit");
+
     let income_total = gross + employer_total;
     let legs_total: Decimal = buckets.values().map(|(_, amount)| *amount).sum();
     let take_home = income_total - legs_total;
 
+    let deduct = request
+        .deduct
+        .as_deref()
+        .and_then(money)
+        .unwrap_or(Decimal::ZERO)
+        .max(Decimal::ZERO)
+        .round_dp(precision);
+
     let mut out = String::new();
-    out.push_str("; 工资与五险二金 — 应发 / 公司缴纳 / 个人代扣 / 到手\n");
-    out.push_str("; 个人: 养老8% 医疗2% 失业0.5% 公积金7% 年金4%\n");
+    out.push_str("; 工资 — 应发 / 五险一金(个人+公司) / 个税 / 到手\n");
+    out.push_str("; 个人: 养老8% 医疗2% 失业0.5% 公积金7%\n");
     if request.employer {
-        out.push_str("; 公司: 养老16% 医疗8% 失业0.5% 工伤0.5% 生育1% 公积金7% 年金8%\n");
+        out.push_str("; 公司: 养老16% 医疗8% 失业0.5% 工伤0.5% 生育1% 公积金7%\n");
     }
+    out.push_str("; 表头里的 gross(应发) personal(个人代扣) deduct(专项附加扣除) tax(个税科目)\n");
+    out.push_str("; 决定记入时的个税推算; 算出来和工资条不一样, 记入时改一下就行。\n");
     out.push_str("; 比例写死在生成器里,直接改下面的数字即可;改完记得保存。\n");
     out.push_str("; 每月几号由 from 后面的日期决定 —— hledger 也是这么解读的。\n");
     out.push_str(&format!(
-        "~ monthly from {}  ; id:{} label:{} kind:salary\n",
+        "~ monthly from {}  ; id:{} label:{} kind:salary gross:{} personal:{} deduct:{} tax:expenses:个税\n",
         start.format("%Y-%m-%d"),
         id,
         label,
+        fmt_plain(gross, precision),
+        fmt_plain(personal_total, precision),
+        fmt_plain(deduct, precision),
     ));
     out.push_str(&posting_line(
-        "income:salary",
+        salary_account,
         Some((-gross, base_commodity, precision)),
     ));
     out.push('\n');
     if request.employer && employer_total > Decimal::ZERO {
         out.push_str(&posting_line(
-            "income:benefit",
+            benefit_account,
             Some((-employer_total, base_commodity, precision)),
         ));
         out.push('\n');
@@ -904,12 +1034,86 @@ fn skipped(root: &Path) -> BTreeSet<(String, String)> {
         .collect()
 }
 
+/// Tax already booked per `(template, month)`, read back from the ledger — so a
+/// figure the user overrode at commit time keeps counting for the next month.
+fn booked_taxes(vault: &Vault, set: &ScheduleSet) -> BTreeMap<(String, String), Decimal> {
+    let mut out: BTreeMap<(String, String), Decimal> = BTreeMap::new();
+    for template in &set.templates {
+        let Some(account) = template.tax_account.as_deref() else {
+            continue;
+        };
+        for record in vault.transactions() {
+            let Some(tag) = record.txn.tags.iter().find(|tag| tag.key == TAG_KEY) else {
+                continue;
+            };
+            let Some(value) = &tag.value else { continue };
+            let (id, month) = match value.split_once('@') {
+                Some((id, month)) => (id.to_string(), month.trim().to_string()),
+                None => (value.clone(), month_key(record.txn.date)),
+            };
+            if id != template.id {
+                continue;
+            }
+            let tax: Decimal = record
+                .txn
+                .postings
+                .iter()
+                .filter(|posting| posting.account == account)
+                .filter_map(|posting| posting.amount.as_ref().map(|amount| amount.quantity))
+                .sum();
+            if !tax.is_zero() {
+                *out.entry((id, month)).or_default() += tax;
+            }
+        }
+    }
+    out
+}
+
+/// `(本月应纳税所得额, 本月应预扣个税)` for one occurrence.
+///
+/// 累计预扣法: 本月应扣 = 累计应纳税额(累计所得) − 已预缴. The cumulative count
+/// comes from the ledger, so a year that starts mid-way (or a month you skipped)
+/// corrects itself instead of assuming twelve payments.
+fn tax_for(
+    template: &ScheduleTemplate,
+    date: NaiveDate,
+    booked: &BTreeMap<(String, String), Decimal>,
+    precision: u32,
+) -> (Decimal, Decimal) {
+    let Some(setup) = template.tax_setup() else {
+        return (Decimal::ZERO, Decimal::ZERO);
+    };
+    let base = (setup.gross - Decimal::from(THRESHOLD) - setup.personal - setup.deduct)
+        .max(Decimal::ZERO)
+        .round_dp(precision);
+    if base.is_zero() {
+        return (base, Decimal::ZERO);
+    }
+    let year = date.format("%Y").to_string();
+    let month = month_key(date);
+    let mut months = 0u32;
+    let mut paid = Decimal::ZERO;
+    for ((id, booked_month), tax) in booked {
+        if id != &template.id || !booked_month.starts_with(&year) || booked_month >= &month {
+            continue;
+        }
+        months += 1;
+        paid += *tax;
+    }
+    let cumulative = base * Decimal::from(months + 1);
+    let due = (income_tax(cumulative) - paid)
+        .max(Decimal::ZERO)
+        .round_dp(precision);
+    (base, due)
+}
+
 pub fn overview(vault: &Vault, months: usize, today: NaiveDate) -> ScheduleOverviewDto {
     let base = vault.base_commodity().0.to_string();
     let precision = vault.base_commodity().1;
     let set = load(vault.root());
     let done = recorded(vault);
     let muted = skipped(vault.root());
+    let booked = booked_taxes(vault, &set);
 
     let count = months.clamp(1, MAX_MONTHS);
     let first = month_start(today);
@@ -936,6 +1140,7 @@ pub fn overview(vault: &Vault, months: usize, today: NaiveDate) -> ScheduleOverv
                 let txn_id = done.get(&(template.id.clone(), month.clone())).cloned();
                 let is_skipped = muted.contains(&(template.id.clone(), month.clone()));
                 let is_recorded = txn_id.is_some();
+                let (tax_base, tax_due) = tax_for(template, date, &booked, precision);
                 ScheduleOccurrenceDto {
                     id: template.id.clone(),
                     label: template.label.clone(),
@@ -950,6 +1155,8 @@ pub fn overview(vault: &Vault, months: usize, today: NaiveDate) -> ScheduleOverv
                     expense: component_dto(&vault.commodities, totals.expense, &base),
                     assets: component_dto(&vault.commodities, totals.assets, &base),
                     debt: component_dto(&vault.commodities, totals.debt, &base),
+                    tax_base: component_dto(&vault.commodities, tax_base, &base),
+                    tax: component_dto(&vault.commodities, tax_due, &base),
                     legs: legs
                         .iter()
                         .map(|leg| leg_dto(&vault.commodities, leg, &base))
@@ -959,10 +1166,14 @@ pub fn overview(vault: &Vault, months: usize, today: NaiveDate) -> ScheduleOverv
             })
             .collect::<Vec<_>>();
 
-        let next_date = template
+        let next = template
             .dates(today, shift_months(today, 24))
-            .first()
-            .map(|date| date.format("%Y-%m-%d").to_string());
+            .into_iter()
+            .next();
+        let next_date = next.map(|date| date.format("%Y-%m-%d").to_string());
+        let tax = next.map_or(Decimal::ZERO, |date| {
+            tax_for(template, date, &booked, precision).1
+        });
         templates.push(ScheduleTemplateDto {
             id: template.id.clone(),
             label: template.label.clone(),
@@ -979,6 +1190,9 @@ pub fn overview(vault: &Vault, months: usize, today: NaiveDate) -> ScheduleOverv
             assets: component_dto(&vault.commodities, totals.assets, &base),
             debt: component_dto(&vault.commodities, totals.debt, &base),
             next_date,
+            tax_account: template.tax_account.clone(),
+            deduct: component_dto(&vault.commodities, template.deduct, &base),
+            tax: component_dto(&vault.commodities, tax, &base),
             line: template.line,
             legs: legs
                 .iter()
@@ -1044,6 +1258,7 @@ pub fn commit(
     vault: &Vault,
     id: &str,
     month: Option<&str>,
+    tax: Option<Decimal>,
     opts: &VaultOptions,
 ) -> Result<ScheduleCommitDto> {
     let today = chrono::Local::now().date_naive();
@@ -1077,6 +1292,12 @@ pub fn commit(
 
     let legs = template.legs(|account| vault.kind_for(account), precision);
     let totals = template.totals(&legs);
+    let commodity = vault.base_commodity().0.to_string();
+    let booked = booked_taxes(vault, &set);
+    let tax = tax
+        .unwrap_or_else(|| tax_for(template, date, &booked, precision).1)
+        .round_dp(precision)
+        .max(Decimal::ZERO);
     let direction = if totals.income > Decimal::ZERO {
         Direction::Income
     } else {
@@ -1086,6 +1307,23 @@ pub fn commit(
     let mut txn = Transaction::new(date, template.label.clone());
     txn.status = Some(Status::Cleared);
     txn.postings = template.postings.clone();
+    // 个税夹在最后一条（现金腿）之前，并从现金里扣掉：既保持「最后一条 = 到手」
+    // 的约定，也不用手写金额去对平。
+    if let Some(account) = template.tax_account.as_ref() {
+        if !tax.is_zero() {
+            let last = txn.postings.len().saturating_sub(1);
+            if let Some(amount) = txn.postings[last].amount.as_mut() {
+                amount.quantity -= tax;
+            }
+            txn.postings.insert(
+                last,
+                Posting::new(
+                    account.clone(),
+                    Some(Amount::canonical(tax, &commodity, precision)),
+                ),
+            );
+        }
+    }
     txn.tags = vec![Tag::kv(TAG_KEY, format!("{id}@{month}"))];
 
     let expanded = crate::capture::ExpandedCapture {
@@ -1131,7 +1369,7 @@ pub fn commit_due(vault: &Vault, opts: &VaultOptions) -> Result<ScheduleCommitDt
         errors: Vec::new(),
     };
     for id in due {
-        match commit(vault, &id, Some(&month), opts) {
+        match commit(vault, &id, Some(&month), None, opts) {
             Ok(result) => {
                 out.written += result.written;
                 out.already += result.already;
@@ -1293,8 +1531,11 @@ mod tests {
             day: 5,
             start: Some("2026-11-01".into()),
             net_account: "assets:bank:icbc".into(),
+            salary_account: None,
+            benefit_account: None,
             prefix: "cn".into(),
             employer: true,
+            deduct: Some("1000".into()),
         };
         let text = render_salary(&request, "CNY", 2).expect("render");
         let set = parse(&text);
@@ -1305,13 +1546,26 @@ mod tests {
         let legs = template.legs(kinds, 2);
         let sum: Decimal = legs.iter().map(|leg| leg.amount).sum();
         assert_eq!(sum, Decimal::ZERO, "salary block must balance:\n{text}");
+        // 应发 30,000 + 公司缴 9,900 = 39,900；个人代扣 5,250.00 (养老8 医疗2 失业0.5
+        // 公积金7，没有年金) → 到手 24,750.00.
         let totals = template.totals(&legs);
-        assert_eq!(totals.income, Decimal::from(50337));
+        assert_eq!(totals.income, Decimal::from(39900));
         assert_eq!(totals.expense, Decimal::from(4462) + Decimal::new(50, 2));
-        assert_eq!(totals.assets, Decimal::from(45874) + Decimal::new(50, 2));
-        assert_eq!(totals.settle, Decimal::from(28024) + Decimal::new(50, 2));
+        assert_eq!(totals.assets, Decimal::from(43018) + Decimal::new(50, 2));
+        assert_eq!(totals.settle, Decimal::from(29452) + Decimal::new(50, 2));
         assert!(text.contains("assets:cn:fund"), "{text}");
         assert!(text.contains("expenses:cn:medical"), "{text}");
+        // 企业年金是自愿的，默认不生成。
+        assert!(!text.contains("annuity"), "{text}");
+        // 税务元数据: 应发 / 个人代扣 / 专项附加扣除 / 个税科目.
+        assert!(text.contains("gross:30,000.00"), "{text}");
+        assert!(text.contains("personal:5,250.00"), "{text}");
+        assert!(text.contains("deduct:1,000.00"), "{text}");
+        assert!(text.contains("tax:expenses:个税"), "{text}");
+        assert_eq!(
+            template.tax_setup().map(|s| s.gross),
+            Some(Decimal::from(30000))
+        );
         // hledger ignores an app-specific `day:` token, and the file is included
         // by index.ledger now, so the day has to live in the anchor date.
         assert!(!text.contains("day:"), "{text}");
@@ -1372,7 +1626,7 @@ mod tests {
     fn commit_books_one_occurrence_and_is_idempotent() {
         let (dir, vault) = vault();
         let opts = VaultOptions::default();
-        let first = commit(&vault, "loan-home", Some("2026-11"), &opts).expect("commit");
+        let first = commit(&vault, "loan-home", Some("2026-11"), None, &opts).expect("commit");
         assert_eq!(first.written, 1);
         assert_eq!(first.months, vec!["2026-11".to_string()]);
         assert!(!first.files.is_empty());
@@ -1390,7 +1644,8 @@ mod tests {
         assert_eq!(booked.txn.payee, "房贷");
         assert_eq!(booked.txn.tag(TAG_KEY), Some("loan-home@2026-11"));
 
-        let again = commit(&reloaded, "loan-home", Some("2026-11"), &opts).expect("commit again");
+        let again =
+            commit(&reloaded, "loan-home", Some("2026-11"), None, &opts).expect("commit again");
         assert_eq!(again.written, 0);
         assert_eq!(again.already, 1);
         let booked = Vault::load(dir.path(), &opts)
@@ -1406,7 +1661,7 @@ mod tests {
     fn overview_marks_recorded_and_totals_the_month() {
         let (dir, vault) = vault();
         let opts = VaultOptions::default();
-        commit(&vault, "loan-home", Some("2026-11"), &opts).expect("commit");
+        commit(&vault, "loan-home", Some("2026-11"), None, &opts).expect("commit");
         let reloaded = Vault::load(dir.path(), &opts).expect("reload");
         let today = NaiveDate::from_ymd_opt(2026, 11, 28).unwrap();
         let over = overview(&reloaded, 3, today);
@@ -1474,5 +1729,161 @@ mod tests {
         assert!(!set.exists);
         assert!(set.templates.is_empty());
         assert!(!set.has_errors());
+    }
+
+    // -- 个税 -------------------------------------------------------------
+
+    fn salary_vault() -> (tempfile::TempDir, Vault) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let opts = VaultOptions::default();
+        crate::vault::create_vault(dir.path(), &VaultCreateOptions::default()).expect("vault");
+        let request = SalaryTemplateDto {
+            label: "工资".into(),
+            gross: "30000".into(),
+            day: 15,
+            start: Some("2026-10-01".into()),
+            net_account: "assets:bank:cmb".into(),
+            salary_account: None,
+            benefit_account: None,
+            prefix: "cn".into(),
+            employer: true,
+            deduct: Some("1000".into()),
+        };
+        let text = render_salary(&request, "CNY", 2).expect("render");
+        std::fs::write(dir.path().join(SCHEDULE_FILE), text).expect("write schedule");
+        let vault = Vault::load(dir.path(), &opts).expect("load");
+        (dir, vault)
+    }
+
+    fn tax_paid(vault: &Vault, account: &str) -> Decimal {
+        vault
+            .transactions()
+            .iter()
+            .flat_map(|record| record.txn.postings.iter())
+            .filter(|posting| posting.account == account)
+            .filter_map(|posting| posting.amount.as_ref().map(|amount| amount.quantity))
+            .sum()
+    }
+
+    #[test]
+    fn income_tax_follows_the_cumulative_brackets() {
+        assert_eq!(income_tax(Decimal::ZERO), Decimal::ZERO);
+        assert_eq!(income_tax(Decimal::new(-5, 0)), Decimal::ZERO);
+        // 36,000 × 3%
+        assert_eq!(income_tax(Decimal::from(36_000)), Decimal::from(1_080));
+        // 37,500 × 10% − 2,520
+        assert_eq!(income_tax(Decimal::from(37_500)), Decimal::new(123_000, 2));
+        // 144,000 × 10% − 2,520
+        assert_eq!(income_tax(Decimal::from(144_000)), Decimal::from(11_880));
+    }
+
+    #[test]
+    fn the_tax_base_uses_personal_withholdings_and_deductions() {
+        let (_dir, vault) = salary_vault();
+        let set = load(vault.root());
+        let template = set
+            .get("工资-6279cb")
+            .or_else(|| set.templates.first())
+            .expect("template");
+        // 30,000 − 5,000 − 5,250.00 − 1,000
+        let setup = template.tax_setup().expect("tax setup");
+        assert_eq!(setup.gross, Decimal::from(30_000));
+        assert_eq!(setup.personal, Decimal::new(525_000, 2));
+        assert_eq!(setup.deduct, Decimal::from(1_000));
+        let (base, due) = tax_for(
+            template,
+            NaiveDate::from_ymd_opt(2026, 10, 15).unwrap(),
+            &BTreeMap::new(),
+            2,
+        );
+        assert_eq!(base, Decimal::new(1_875_000, 2));
+        // 第一笔：18,750.00 × 3% = 562.50
+        assert_eq!(due, Decimal::new(56_250, 2));
+    }
+
+    #[test]
+    fn committing_books_the_tax_and_shrinks_the_cash_leg() {
+        let (dir, vault) = salary_vault();
+        let opts = VaultOptions::default();
+        commit(&vault, "工资-6279cb", Some("2026-10"), None, &opts).expect("commit");
+        let reloaded = Vault::load(dir.path(), &opts).expect("reload");
+        let record = reloaded
+            .transactions()
+            .iter()
+            .find(|record| record.txn.tag(TAG_KEY).is_some())
+            .expect("booked");
+        assert_eq!(record.txn.tag(TAG_KEY), Some("工资-6279cb@2026-10"));
+        // 个税夹在现金腿之前，最后一条仍然是到手。
+        let accounts: Vec<&str> = record
+            .txn
+            .postings
+            .iter()
+            .map(|posting| posting.account.as_str())
+            .collect();
+        assert_eq!(accounts[accounts.len() - 2], "expenses:个税");
+        assert_eq!(accounts[accounts.len() - 1], "assets:bank:cmb");
+        assert_eq!(
+            tax_paid(&reloaded, "expenses:个税"),
+            Decimal::new(56_250, 2)
+        );
+        let cash = record
+            .txn
+            .postings
+            .last()
+            .unwrap()
+            .amount
+            .as_ref()
+            .unwrap()
+            .quantity;
+        // 24,750.00 − 562.50
+        assert_eq!(cash, Decimal::new(2_418_750, 2));
+    }
+
+    #[test]
+    fn the_second_month_withholds_the_bracket_jump() {
+        let (dir, vault) = salary_vault();
+        let opts = VaultOptions::default();
+        commit(&vault, "工资-6279cb", Some("2026-10"), None, &opts).expect("october");
+        let reloaded = Vault::load(dir.path(), &opts).expect("reload");
+        commit(&reloaded, "工资-6279cb", Some("2026-11"), None, &opts).expect("november");
+        let reloaded = Vault::load(dir.path(), &opts).expect("reload");
+        // 累计 37,500 → 10% − 2,520 = 1,230.00；已预缴 562.50 → 本月 667.50
+        assert_eq!(
+            tax_paid(&reloaded, "expenses:个税"),
+            Decimal::new(123_000, 2)
+        );
+    }
+
+    #[test]
+    fn a_manual_tax_override_sticks_and_feeds_the_next_month() {
+        let (dir, vault) = salary_vault();
+        let opts = VaultOptions::default();
+        commit(
+            &vault,
+            "工资-6279cb",
+            Some("2026-10"),
+            Some(Decimal::from(640)),
+            &opts,
+        )
+        .expect("commit with override");
+        let reloaded = Vault::load(dir.path(), &opts).expect("reload");
+        assert_eq!(tax_paid(&reloaded, "expenses:个税"), Decimal::from(640));
+        // 下一笔按「累计 37,500 − 已缴 640」算，所以会补回来。
+        let over = overview(&reloaded, 2, NaiveDate::from_ymd_opt(2026, 10, 20).unwrap());
+        let november = over
+            .occurrences
+            .iter()
+            .find(|occurrence| occurrence.month == "2026-11")
+            .expect("november");
+        assert_eq!(quantity_of(&november.tax), Decimal::new(59_000, 2));
+    }
+
+    #[test]
+    fn a_block_without_tax_metadata_books_no_tax() {
+        let (dir, vault) = vault();
+        let opts = VaultOptions::default();
+        commit(&vault, "loan-home", Some("2026-11"), None, &opts).expect("commit");
+        let reloaded = Vault::load(dir.path(), &opts).expect("reload");
+        assert!(tax_paid(&reloaded, "expenses:个税").is_zero());
     }
 }

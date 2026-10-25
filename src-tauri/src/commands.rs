@@ -1404,11 +1404,13 @@ pub fn schedule_commit(
     state: State<'_, AppState>,
     id: String,
     month: Option<String>,
+    tax: Option<f64>,
 ) -> CmdResult<ScheduleCommitDto> {
     let opts = state.settings().vault_options();
     let audit = state.audit_path();
     let vault = state.vault()?;
-    let result = ledger_engine::schedule::commit(&vault, &id, month.as_deref(), &opts)?;
+    let tax = tax.and_then(rust_decimal::Decimal::from_f64_retain);
+    let result = ledger_engine::schedule::commit(&vault, &id, month.as_deref(), tax, &opts)?;
     for file in &result.files {
         let _ = writer::append_audit(
             &audit,
@@ -1419,7 +1421,14 @@ pub fn schedule_commit(
                 span_start: 0,
                 span_end: 0,
                 before: String::new(),
-                after: format!("定期模板 {id} · {}", result.months.join(",")),
+                after: format!(
+                    "定期模板 {id} · {}{}",
+                    result.months.join(","),
+                    match tax {
+                        Some(tax) => format!(" · 个税 {tax}"),
+                        None => String::new(),
+                    }
+                ),
             },
         );
     }
