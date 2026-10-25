@@ -142,7 +142,7 @@ impl LlmConfig {
             model,
             api_key: api_key.trim().to_string(),
             timeout: Duration::from_secs(120),
-            max_tokens: 2000,
+            max_tokens: 128_000,
         }
     }
 
@@ -768,12 +768,17 @@ pub fn user_prompt(text: &str) -> String {
 }
 
 /// Request body for the configured protocol.
+#[cfg(test)]
 pub fn request_body(config: &LlmConfig, system: &str, user: &str) -> Value {
+    request_body_with(config, system, user, config.max_tokens)
+}
+
+fn request_body_with(config: &LlmConfig, system: &str, user: &str, max_tokens: u32) -> Value {
     match config.protocol {
         Protocol::OpenAi => json!({
             "model": config.model,
             "temperature": 0,
-            "max_tokens": config.max_tokens,
+            "max_tokens": max_tokens,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -781,7 +786,7 @@ pub fn request_body(config: &LlmConfig, system: &str, user: &str) -> Value {
         }),
         Protocol::Anthropic => json!({
             "model": config.model,
-            "max_tokens": config.max_tokens,
+            "max_tokens": max_tokens,
             "temperature": 0,
             "system": system,
             "messages": [{"role": "user", "content": user}],
@@ -1070,66 +1075,98 @@ pub fn test_prompt() -> (&'static str, &'static str) {
 
 /// POST the request and return the assistant text plus how long it took.
 pub fn complete(config: &LlmConfig, system: &str, user: &str) -> Result<(String, u128), String> {
-    let body = request_body(config, system, user);
     let client = reqwest::blocking::Client::builder()
         .timeout(config.timeout)
         .build()
         .map_err(|e| format!("无法创建 HTTP 客户端：{e}"))?;
-    let build = || {
-        let mut request = client.post(config.endpoint()).json(&body);
-        request = match config.protocol {
-            Protocol::OpenAi => {
-                if config.api_key.is_empty() {
-                    request
-                } else {
-                    request.bearer_auth(&config.api_key)
+    let started = Instant::now();
+
+    // 默认向模型要满上下文（128k）。也有服务端会因为「max_tokens + 输入超过窗口」直接拒绝，
+    // 这时候按阶梯退让一次，而不是把整次对话判死。
+    let mut caps = vec![config.max_tokens];
+    for fallback in [8192, 2048] {
+        if fallback < config.max_tokens {
+            caps.push(fallback);
+        }
+    }
+
+    let mut last: Option<String> = None;
+    for cap in caps {
+        let body = request_body_with(config, system, user, cap);
+        let build = || {
+            let mut request = client.post(config.endpoint()).json(&body);
+            request = match config.protocol {
+                Protocol::OpenAi => {
+                    if config.api_key.is_empty() {
+                        request
+                    } else {
+                        request.bearer_auth(&config.api_key)
+                    }
                 }
-            }
-            Protocol::Anthropic => {
-                let request = request
-                    .header("anthropic-version", ANTHROPIC_VERSION)
-                    .header("content-type", "application/json");
-                if config.api_key.is_empty() {
-                    request
-                } else {
-                    request.header("x-api-key", &config.api_key)
+                Protocol::Anthropic => {
+                    let request = request
+                        .header("anthropic-version", ANTHROPIC_VERSION)
+                        .header("content-type", "application/json");
+                    if config.api_key.is_empty() {
+                        request
+                    } else {
+                        request.header("x-api-key", &config.api_key)
+                    }
+                }
+            };
+            request
+        };
+        // 本地推理服务（LM Studio / Ollama）在模型还没热的时候，第一次请求经常直接超时；
+        // 重试一次比让用户以为「根本没发请求」要好。
+        let response = match build().send() {
+            Ok(response) => response,
+            Err(first) => {
+                std::thread::sleep(Duration::from_millis(800));
+                match build().send() {
+                    Ok(response) => response,
+                    Err(second) => {
+                        return Err(format!(
+                            "请求失败：{second}（第一次是：{first}。检查网络、Base URL 和代理；本地模型首次加载可能就要一两分钟）"
+                        ))
+                    }
                 }
             }
         };
-        request
-    };
-    let started = Instant::now();
-    // 本地推理服务（LM Studio / Ollama）在模型还没热的时候，第一次请求经常直接超时；
-    // 重试一次比让用户以为「根本没发请求」要好。
-    let response = match build().send() {
-        Ok(response) => response,
-        Err(first) => {
-            std::thread::sleep(Duration::from_millis(800));
-            build().send().map_err(|second| {
-                format!(
-                    "请求失败：{second}（第一次是：{first}。检查网络、Base URL 和代理；本地模型首次加载可能就要一两分钟）"
-                )
-            })?
+        let status = response.status();
+        let text = response.text().map_err(|e| format!("读取响应失败：{e}"))?;
+        let parsed: Value = serde_json::from_str(&text).map_err(|_| {
+            format!(
+                "模型服务返回了非 JSON 响应（HTTP {status}）：{}",
+                truncate(&text, 300)
+            )
+        })?;
+        if !status.is_success() {
+            let message = parsed
+                .pointer("/error/message")
+                .and_then(Value::as_str)
+                .map(|m| m.to_string())
+                .unwrap_or_else(|| truncate(&text, 300));
+            let complaint = format!("HTTP {}：{message}", status.as_u16());
+            let window_clash = message.to_lowercase().contains("max_tokens")
+                || message.to_lowercase().contains("context length")
+                || message.to_lowercase().contains("n_ctx")
+                || message.to_lowercase().contains("too long");
+            if window_clash {
+                last = Some(complaint);
+                continue;
+            }
+            return Err(complaint);
         }
-    };
-    let status = response.status();
-    let text = response.text().map_err(|e| format!("读取响应失败：{e}"))?;
-    let elapsed = started.elapsed().as_millis();
-    let parsed: Value = serde_json::from_str(&text).map_err(|_| {
-        format!(
-            "模型服务返回了非 JSON 响应（HTTP {status}）：{}",
-            truncate(&text, 300)
-        )
-    })?;
-    if !status.is_success() {
-        let message = parsed
-            .pointer("/error/message")
-            .and_then(Value::as_str)
-            .map(|m| m.to_string())
-            .unwrap_or_else(|| truncate(&text, 300));
-        return Err(format!("HTTP {}：{message}", status.as_u16()));
+        return Ok((
+            extract_text(config.protocol, &parsed)?,
+            started.elapsed().as_millis(),
+        ));
     }
-    Ok((extract_text(config.protocol, &parsed)?, elapsed))
+    Err(format!(
+        "模型拒绝了这次请求（max_tokens 从 {} 一路降到 2048 都不行）：{}",
+        config.max_tokens,
+        last.unwrap_or_default()
+    ))
 }
 
 fn truncate(text: &str, max: usize) -> String {

@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-26
+
+### Changed
+
+- `max_tokens` 默认直接给满 **128,000**，不再替用户猜一个上限。服务端如果因为
+  「max_tokens + 输入超过上下文」拒绝，会自动按 8192 → 2048 退让重试，而不是把整次
+  对话判死。
+
 ## [0.1.5] - 2026-10-26
 
 ### Fixed
@@ -311,6 +319,7 @@ First complete release: the ledger format, the engine and every view are in plac
 - The app targets macOS 13+; the Rust core is portable but the window/tray layer is not.
 
 [Unreleased]: https://github.com/lingfromSh/moneytracker/compare/v0.1.3...HEAD
+[0.1.6]: https://github.com/lingfromSh/moneytracker/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/lingfromSh/moneytracker/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/lingfromSh/moneytracker/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/lingfromSh/moneytracker/compare/v0.1.2...v0.1.3

@@ -2256,7 +2256,7 @@ dependencies = [
 
 [[package]]
 name = "ledger-core"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "chrono",
  "insta",
@@ -2269,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "ledger-engine"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "blake3",
  "chrono",
@@ -2289,7 +2289,7 @@ dependencies = [
 
 [[package]]
 name = "ledger-query"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "chrono",
  "regex",
@@ -2300,7 +2300,7 @@ dependencies = [
 
 [[package]]
 name = "ledger-sync"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "blake3",
  "chrono",
@@ -2483,7 +2483,7 @@ dependencies = [
 
 [[package]]
 name = "moneytracker"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "blake3",
  "chrono",
