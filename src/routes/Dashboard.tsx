@@ -112,7 +112,10 @@ export function Dashboard() {
         // The grid is remounted on every resize, which re-emits its layout; only
         // persist when the arrangement actually changed.
         if (current.dashboard_layout === serialised) return;
-        void api.saveSettings({ ...current, dashboard_layout: serialised }).catch(() => {
+        // `Promise.resolve` keeps this safe even if a test double returns nothing.
+        void Promise.resolve(
+          api.saveSettings({ ...current, dashboard_layout: serialised }),
+        ).catch(() => {
           /* layout persistence is best effort */
         });
       }, 600);
