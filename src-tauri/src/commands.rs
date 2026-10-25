@@ -1560,7 +1560,7 @@ pub fn advisor_load(state: State<'_, AppState>) -> CmdResult<crate::advisor::Adv
 
 #[tauri::command(async)]
 #[specta::specta]
-pub fn advisor_ask(
+pub async fn advisor_ask(
     state: State<'_, AppState>,
     question: String,
     history: Vec<crate::advisor::AdvisorTurnDto>,
@@ -1582,8 +1582,16 @@ pub fn advisor_ask(
     }
     let vault = state.vault()?;
 
-    let reply = crate::advisor::chat(&vault, &config, &history, &question)
-        .map_err(|message| CmdError::new("llm.failed", message))?;
+    // reqwest::blocking 建自己的 runtime，在 tokio 线程里直接调会 panic
+    // （现象就是「模型服务端一个请求都没收到」），所以必须扔到阻塞线程池。
+    let asked = question.clone();
+    let past = history.clone();
+    let reply = tauri::async_runtime::spawn_blocking(move || {
+        crate::advisor::chat(&vault, &config, &past, &asked)
+    })
+    .await
+    .map_err(|err| CmdError::new("llm.join", err.to_string()))?
+    .map_err(|message| CmdError::new("llm.failed", message))?;
 
     let mut turns = history;
     turns.push(crate::advisor::AdvisorTurnDto {

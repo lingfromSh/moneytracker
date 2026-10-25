@@ -18,7 +18,9 @@ android {
     compileSdk = 37
     namespace = "dev.moneytracker.app"
     defaultConfig {
-        manifestPlaceholders["usesCleartextTraffic"] = "false"
+        // 本地推理服务（LM Studio / Ollama）通常是 http://192.168.x.x:1234，
+        // 安卓 9 以后默认禁止明文 HTTP，release 也放开，否则手机上发不出请求。
+        manifestPlaceholders["usesCleartextTraffic"] = "true"
         applicationId = "dev.moneytracker.app"
         minSdk = 24
         targetSdk = 37

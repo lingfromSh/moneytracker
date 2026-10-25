@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-26
+
+### Fixed
+
+- 顾问 / 问一句 在本地模型上「一个请求都发不出去」：HTTP 超时从 30 秒放宽到 120 秒，并在
+  传输失败时自动重试一次 —— LM Studio 首次加载模型常常就要一两分钟，旧超时会提前断开。
+- 安卓 release 包默认禁止明文 HTTP（`usesCleartextTraffic=false`），指向局域网
+  `http://192.168.x.x:1234` 的模型请求在客户端就被拦掉，服务端看不到任何请求。release 也放开。
+- `advisor_ask` 显式跑在阻塞线程池里，避免在异步运行时里做阻塞 IO。
+
+### Changed
+
+- `max_tokens` 默认 1200 → 2000，并在响应被截断（`finish_reason: length`）时给出明确错误，
+  而不是「模型没有回答」。
+- 顾问提示词加一条：事实里已经算好的数字直接照抄，不要自己再做除法。
+
 ## [0.1.4] - 2026-10-25
 
 ### Added
@@ -295,6 +311,7 @@ First complete release: the ledger format, the engine and every view are in plac
 - The app targets macOS 13+; the Rust core is portable but the window/tray layer is not.
 
 [Unreleased]: https://github.com/lingfromSh/moneytracker/compare/v0.1.3...HEAD
+[0.1.5]: https://github.com/lingfromSh/moneytracker/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/lingfromSh/moneytracker/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/lingfromSh/moneytracker/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/lingfromSh/moneytracker/releases/tag/v0.1.2

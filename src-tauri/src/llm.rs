@@ -141,8 +141,8 @@ impl LlmConfig {
             base_url: base,
             model,
             api_key: api_key.trim().to_string(),
-            timeout: Duration::from_secs(30),
-            max_tokens: 1200,
+            timeout: Duration::from_secs(120),
+            max_tokens: 2000,
         }
     }
 
@@ -819,6 +819,23 @@ pub fn extract_text(protocol: Protocol, body: &Value) -> Result<String, String> 
             .join(""),
     };
     let text = text.trim().to_string();
+    // 推理模型（gemma / nemotron 之类）会把预算花在思考上，正文可能被截断甚至为空。
+    let truncated = match protocol {
+        Protocol::OpenAi => {
+            body.pointer("/choices/0/finish_reason")
+                .and_then(Value::as_str)
+                == Some("length")
+        }
+        Protocol::Anthropic => {
+            body.get("stop_reason").and_then(Value::as_str) == Some("max_tokens")
+        }
+    };
+    if truncated {
+        return Err(format!(
+            "模型的输出被 max_tokens 截断了。推理模型会先把预算花在思考上，把 max_tokens 调大，\n或者换一个非推理模型。截断前的内容：{}",
+            truncate(&text, 200)
+        ));
+    }
     if text.is_empty() {
         return Err("模型返回了空内容。推理模型（gemma/nemotron 之类）的思考过程不算正文，\n把 max_tokens 调大或者换一个非推理模型；顾问也要多花几轮对话，模型最好在 4B 以上。".into());
     }
@@ -1058,30 +1075,43 @@ pub fn complete(config: &LlmConfig, system: &str, user: &str) -> Result<(String,
         .timeout(config.timeout)
         .build()
         .map_err(|e| format!("无法创建 HTTP 客户端：{e}"))?;
-    let mut request = client.post(config.endpoint()).json(&body);
-    request = match config.protocol {
-        Protocol::OpenAi => {
-            if config.api_key.is_empty() {
-                request
-            } else {
-                request.bearer_auth(&config.api_key)
+    let build = || {
+        let mut request = client.post(config.endpoint()).json(&body);
+        request = match config.protocol {
+            Protocol::OpenAi => {
+                if config.api_key.is_empty() {
+                    request
+                } else {
+                    request.bearer_auth(&config.api_key)
+                }
             }
-        }
-        Protocol::Anthropic => {
-            let request = request
-                .header("anthropic-version", ANTHROPIC_VERSION)
-                .header("content-type", "application/json");
-            if config.api_key.is_empty() {
-                request
-            } else {
-                request.header("x-api-key", &config.api_key)
+            Protocol::Anthropic => {
+                let request = request
+                    .header("anthropic-version", ANTHROPIC_VERSION)
+                    .header("content-type", "application/json");
+                if config.api_key.is_empty() {
+                    request
+                } else {
+                    request.header("x-api-key", &config.api_key)
+                }
             }
-        }
+        };
+        request
     };
     let started = Instant::now();
-    let response = request
-        .send()
-        .map_err(|e| format!("请求失败：{e}（检查网络、Base URL 和代理）"))?;
+    // 本地推理服务（LM Studio / Ollama）在模型还没热的时候，第一次请求经常直接超时；
+    // 重试一次比让用户以为「根本没发请求」要好。
+    let response = match build().send() {
+        Ok(response) => response,
+        Err(first) => {
+            std::thread::sleep(Duration::from_millis(800));
+            build().send().map_err(|second| {
+                format!(
+                    "请求失败：{second}（第一次是：{first}。检查网络、Base URL 和代理；本地模型首次加载可能就要一两分钟）"
+                )
+            })?
+        }
+    };
     let status = response.status();
     let text = response.text().map_err(|e| format!("读取响应失败：{e}"))?;
     let elapsed = started.elapsed().as_millis();
