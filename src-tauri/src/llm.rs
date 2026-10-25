@@ -768,28 +768,70 @@ pub fn user_prompt(text: &str) -> String {
 }
 
 /// Request body for the configured protocol.
-#[cfg(test)]
-pub fn request_body(config: &LlmConfig, system: &str, user: &str) -> Value {
-    request_body_with(config, system, user, config.max_tokens)
+/// 一条对话消息。角色只有 `user` / `assistant`，system 单独传给接口。
+#[derive(Debug, Clone)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
 }
 
-fn request_body_with(config: &LlmConfig, system: &str, user: &str, max_tokens: u32) -> Value {
+impl ChatMessage {
+    pub fn user(content: impl Into<String>) -> Self {
+        Self {
+            role: "user".into(),
+            content: content.into(),
+        }
+    }
+
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self {
+            role: "assistant".into(),
+            content: content.into(),
+        }
+    }
+}
+
+#[cfg(test)]
+pub fn request_body(config: &LlmConfig, system: &str, user: &str) -> Value {
+    request_body_with(
+        config,
+        system,
+        &[ChatMessage::user(user)],
+        config.max_tokens,
+    )
+}
+
+fn request_body_with(
+    config: &LlmConfig,
+    system: &str,
+    messages: &[ChatMessage],
+    max_tokens: u32,
+) -> Value {
     match config.protocol {
-        Protocol::OpenAi => json!({
-            "model": config.model,
-            "temperature": 0,
-            "max_tokens": max_tokens,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        }),
+        Protocol::OpenAi => {
+            let mut thread = vec![json!({"role": "system", "content": system})];
+            for message in messages {
+                thread.push(json!({"role": message.role, "content": message.content}));
+            }
+            json!({
+                "model": config.model,
+                "temperature": 0,
+                "max_tokens": max_tokens,
+                "messages": thread,
+            })
+        }
         Protocol::Anthropic => json!({
             "model": config.model,
             "max_tokens": max_tokens,
             "temperature": 0,
             "system": system,
-            "messages": [{"role": "user", "content": user}],
+            "messages": messages
+                .iter()
+                .map(|m| json!({
+                    "role": if m.role == "assistant" { "assistant" } else { "user" },
+                    "content": m.content,
+                }))
+                .collect::<Vec<_>>(),
         }),
     }
 }
@@ -798,10 +840,23 @@ fn request_body_with(config: &LlmConfig, system: &str, user: &str, max_tokens: u
 pub fn extract_text(protocol: Protocol, body: &Value) -> Result<String, String> {
     let text = match protocol {
         Protocol::OpenAi => {
-            let content = body.pointer("/choices/0/message/content").ok_or_else(|| {
-                provider_error(body)
-                    .unwrap_or_else(|| "响应里没有 choices[0].message.content".into())
-            })?;
+            // 有的推理模型（nemotron / gemma）会把最终答案写进 reasoning_content，
+            // 正文留空。这里先取正文，空了再看思考过程。
+            let content = body
+                .pointer("/choices/0/message/content")
+                .or_else(|| body.pointer("/choices/0/message/reasoning_content"))
+                .or_else(|| body.pointer("/choices/0/message/reasoning"))
+                .ok_or_else(|| {
+                    provider_error(body)
+                        .unwrap_or_else(|| "响应里没有 choices[0].message.content".into())
+                })?;
+            let content = match content {
+                Value::String(s) if s.trim().is_empty() => body
+                    .pointer("/choices/0/message/reasoning_content")
+                    .or_else(|| body.pointer("/choices/0/message/reasoning"))
+                    .unwrap_or(content),
+                other => other,
+            };
             match content {
                 // Some gateways return content as an array of parts.
                 Value::Array(parts) => parts
@@ -842,7 +897,7 @@ pub fn extract_text(protocol: Protocol, body: &Value) -> Result<String, String> 
         ));
     }
     if text.is_empty() {
-        return Err("模型返回了空内容。推理模型（gemma/nemotron 之类）的思考过程不算正文，\n把 max_tokens 调大或者换一个非推理模型；顾问也要多花几轮对话，模型最好在 4B 以上。".into());
+        return Err("模型返回了空内容：正文和思考过程都没有可取的内容。\n推理模型用 4B 以上、或者换非推理模型；也可以把温度或 max_tokens 调整后重试。".into());
     }
     Ok(text)
 }
@@ -1075,6 +1130,17 @@ pub fn test_prompt() -> (&'static str, &'static str) {
 
 /// POST the request and return the assistant text plus how long it took.
 pub fn complete(config: &LlmConfig, system: &str, user: &str) -> Result<(String, u128), String> {
+    complete_messages(config, system, &[ChatMessage::user(user)])
+}
+
+/// 真正发请求的地方：把**完整对话**按 messages 数组发出去。
+/// 早期版本把历史拍平成一段字符串塞进单条 user 消息里，小模型的 chat template
+/// 不认这种写法，第二轮之后就答非所问、甚至返回空内容。
+pub fn complete_messages(
+    config: &LlmConfig,
+    system: &str,
+    messages: &[ChatMessage],
+) -> Result<(String, u128), String> {
     let client = reqwest::blocking::Client::builder()
         .timeout(config.timeout)
         .build()
@@ -1092,7 +1158,7 @@ pub fn complete(config: &LlmConfig, system: &str, user: &str) -> Result<(String,
 
     let mut last: Option<String> = None;
     for cap in caps {
-        let body = request_body_with(config, system, user, cap);
+        let body = request_body_with(config, system, messages, cap);
         let build = || {
             let mut request = client.post(config.endpoint()).json(&body);
             request = match config.protocol {

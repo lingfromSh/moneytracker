@@ -14,7 +14,7 @@ use specta::Type;
 use ledger_engine::types::{AmountDto, PlanOverviewDto};
 use ledger_engine::{run_plan, schedule, QueryPlan, Vault};
 
-use crate::llm::{self, LlmConfig};
+use crate::llm::{self, ChatMessage, LlmConfig};
 
 /// 会话文件的文件名，落在 App 配置目录里（`0600`），不进账本、不参与同步。
 pub const FILE: &str = "advisor.json";
@@ -24,6 +24,8 @@ pub const MAX_TURNS: usize = 24;
 pub const MAX_ROUNDS: u32 = 4;
 /// 汇总的时间窗口（月）。
 const MONTHS: usize = 12;
+/// 每条历史消息最多带给模型这么多字。
+const TURN_CHARS: usize = 2000;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct AdvisorTurnDto {
@@ -530,21 +532,26 @@ pub fn run_tool(
     }
 }
 
-/// 把历史压成一段给模型看的对话记录。
-fn transcript(history: &[AdvisorTurnDto]) -> String {
-    let mut recent: Vec<&AdvisorTurnDto> = history.iter().rev().take(MAX_TURNS).collect();
-    recent.reverse();
-    let mut out = String::new();
-    for turn in recent {
-        let text: String = turn.content.chars().take(400).collect();
-        let who = if turn.role == "assistant" {
-            "顾问"
-        } else {
-            "用户"
-        };
-        out.push_str(&format!("{who}：{text}\n"));
-    }
-    out
+/// 把已经发生过的对话变成 `messages` 数组：只留最近 `MAX_TURNS` 条，
+/// 每条截到 `TURN_CHARS` 字，空消息丢掉（assistant 的空回答会让模板报错）。
+fn thread(history: &[AdvisorTurnDto]) -> Vec<ChatMessage> {
+    history
+        .iter()
+        .rev()
+        .take(MAX_TURNS)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .filter(|turn| !turn.content.trim().is_empty())
+        .map(|turn| {
+            let text: String = turn.content.chars().take(TURN_CHARS).collect();
+            if turn.role == "assistant" {
+                ChatMessage::assistant(text)
+            } else {
+                ChatMessage::user(text)
+            }
+        })
+        .collect()
 }
 
 /// 跑一轮对话：模型可以连续调几次工具，最后必须给出一句答案。
@@ -558,20 +565,19 @@ pub fn chat(
     let brief = brief(vault, today);
     let system = system_prompt(today, &brief.full);
 
-    let mut scratch = transcript(history);
-    scratch.push_str(&format!("用户：{}\n", question.trim()));
+    // 历史按真实的 user/assistant 消息发回去，而不是拍平成一段字符串——
+    // 小模型的 chat template 只认消息数组。
+    let mut messages = thread(history);
+    messages.push(ChatMessage::user(question.trim().to_string()));
 
     let mut tools: Vec<AdvisorToolDto> = Vec::new();
     let mut rounds = 0;
+    let mut graceless = 0;
 
     while rounds < MAX_ROUNDS {
         rounds += 1;
-        let asked = format!(
-            "{scratch}\n现在轮到顾问，请回一个 JSON 对象：需要数字就调工具，能回答就直接 {{\"action\":\"answer\",\"text\":\"…\"}}。"
-        );
-        let (reply, _) = llm::complete(config, &system, &asked)?;
-        let value = llm::extract_json(&reply)?;
-        match parse_action(&value) {
+        let (reply, raw) = ask(config, &system, &messages)?;
+        match parse_action(&reply) {
             Action::Answer(text) => {
                 return Ok(AdvisorReplyDto {
                     content: text,
@@ -586,7 +592,11 @@ pub fn chat(
                     Ok(text) => text,
                     Err(message) => format!("工具调用失败：{message}"),
                 };
-                scratch.push_str(&format!("\n[工具 {tool} 输入 {}]\n{output}\n", input));
+                messages.push(ChatMessage::assistant(raw));
+                messages.push(ChatMessage::user(format!(
+                    "[工具 {tool} 输入 {} 的结果]\n{}\n\n继续：只回一个 JSON 对象。",
+                    input, output
+                )));
                 tools.push(AdvisorToolDto {
                     tool,
                     input: input.to_string(),
@@ -594,18 +604,33 @@ pub fn chat(
                 });
             }
             Action::Invalid(reason) => {
-                scratch.push_str(&format!("\n[上一轮格式不对：{reason}]\n"));
+                // 小模型聊过两轮就会忘了 JSON 约定，直接说起人话来。先说一句话提醒它，
+                // 提醒过还是人话，那就把这段话当答案——总比报「不能解析」强。
+                let prose = !raw.contains('{');
+                graceless += 1;
+                if prose && graceless > 1 {
+                    return Ok(AdvisorReplyDto {
+                        content: raw,
+                        tools,
+                        rounds,
+                        context_chars: brief.full.chars().count(),
+                        error: None,
+                    });
+                }
+                messages.push(ChatMessage::assistant(raw));
+                messages.push(ChatMessage::user(format!(
+                    "你上一条不是合法 JSON（{reason}）。只回一个 JSON 对象，不要写别的。"
+                )));
             }
         }
     }
 
     // 轮数用完了还没回答：逼它用现有结果说一句。
-    let forced = format!(
-        "{scratch}\n不要再调工具了。只回 {{\"action\":\"answer\",\"text\":\"…\"}}，用上面的数字回答。"
-    );
-    let (reply, _) = llm::complete(config, &system, &forced)?;
-    let value = llm::extract_json(&reply)?;
-    let content = match parse_action(&value) {
+    messages.push(ChatMessage::user(
+        "不要再调工具了。只用上面已经拿到的数字回一个 {\"action\":\"answer\",\"text\":\"…\"}。",
+    ));
+    let (reply, _) = ask(config, &system, &messages)?;
+    let content = match parse_action(&reply) {
         Action::Answer(text) => text,
         Action::Tool { .. } | Action::Invalid(_) => format!(
             "模型没给出结论，先把当前数字放在这里：{}。可以再问一次，或者把问题说得更具体些。",
@@ -619,6 +644,35 @@ pub fn chat(
         context_chars: brief.full.chars().count(),
         error: None,
     })
+}
+
+/// 发一轮请求；模型偶尔会返回空正文（推理模型把预算花在思考上），重试一次再报错。
+fn ask(
+    config: &LlmConfig,
+    system: &str,
+    messages: &[ChatMessage],
+) -> Result<(Value, String), String> {
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        match llm::complete_messages(config, system, messages) {
+            Ok((raw, _)) => return Ok((llm::extract_json(&raw).unwrap_or(Value::Null), raw)),
+            Err(err) if attempt < 3 && err.contains("空内容") => {
+                // 推理模型偶尔会早早停下、正文留空。补一句「别解释」比原样重发有效得多。
+                let mut nudged = messages.to_vec();
+                nudged.push(ChatMessage::user(
+                    "刚才那条没有正文。直接输出 JSON 对象本身，不要写任何解释或前后缀。",
+                ));
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                match llm::complete_messages(config, system, &nudged) {
+                    Ok((raw, _)) => return Ok((llm::extract_json(&raw)?, raw)),
+                    Err(err) if err.contains("空内容") => continue,
+                    Err(err) => return Err(err),
+                }
+            }
+            Err(err) => return Err(err),
+        }
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -760,10 +814,12 @@ mod tests {
                 at: String::new(),
             })
             .collect();
-        let text = transcript(&turns);
-        assert!(text.contains("第39条"));
-        assert!(!text.contains("第0条"));
-        assert_eq!(text.lines().count(), MAX_TURNS);
+        let thread = thread(&turns);
+        assert_eq!(thread.len(), MAX_TURNS);
+        assert!(thread.iter().any(|m| m.content == "第39条"));
+        assert!(!thread.iter().any(|m| m.content == "第0条"));
+        assert_eq!(thread[0].role, "user");
+        assert_eq!(thread[1].role, "assistant");
     }
 
     fn showcase() -> Vault {

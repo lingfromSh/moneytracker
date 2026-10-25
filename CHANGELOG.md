@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-26
+
+### Fixed
+
+- **顾问的多轮对话**：历史以前被拍平成一段字符串塞进单条 user 消息里，小模型的 chat
+  template 不认这种写法，第二轮之后就开始答非所问、甚至返回空内容。现在按真正的
+  `system` + `user`/`assistant` 消息数组发出去（`llm::complete_messages`），
+  工具结果也作为消息追加。
+- 推理模型把答案写进 `reasoning_content`、正文留空时，自动取思考过程里的 JSON。
+- 模型聊到第三轮忘了 JSON 约定时，先提醒一次；再犯就把这段话当答案，而不是报
+  「不能解析」。空正文会带「直接输出 JSON」的提醒重试，最多两次。
+
 ## [0.1.6] - 2026-10-26
 
 ### Changed
@@ -319,6 +331,7 @@ First complete release: the ledger format, the engine and every view are in plac
 - The app targets macOS 13+; the Rust core is portable but the window/tray layer is not.
 
 [Unreleased]: https://github.com/lingfromSh/moneytracker/compare/v0.1.3...HEAD
+[0.1.7]: https://github.com/lingfromSh/moneytracker/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/lingfromSh/moneytracker/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/lingfromSh/moneytracker/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/lingfromSh/moneytracker/compare/v0.1.3...v0.1.4
