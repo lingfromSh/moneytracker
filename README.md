@@ -124,6 +124,7 @@ shortcut, base commodity, default funding account, unclassified account, backups
 | `火锅 168 @微信 100 @现金 68` | one expense funded from two accounts |
 | `超市 200 @餐饮 120 @日用 80 @现金` | one expense split across two categories, funding filled in |
 | `聚餐 300 @餐饮 70% @娱乐 30% @招行` | percentages of the line total (remainder to the last) |
+| `转 500 > @招行 > @现金 200 > @支付宝 300` | one transfer reaching two accounts |
 | `"iPhone 15" 8999 @数码` | quoted description, `8999` is the amount |
 | `#昨天 咖啡 4.5` | dated yesterday (`#前天`, `#+3d`, `#2026-10-01` also work) |
 | `= desc:星巴克 -> 餐饮=70%, 咖啡豆=30% from 支付宝` | create or update a rule |

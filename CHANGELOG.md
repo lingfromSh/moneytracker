@@ -12,7 +12,8 @@ All notable changes to this project are documented here. The format follows
   percentage of the line total (`@餐饮 70%`), so one expense can come from several wallets or be
   split across several categories in a single line. The side of each posting still follows the
   account type, at most one account may stay elided (the engine fills it), and a split that does not
-  add up to the total is rejected before anything is written.
+  add up to the total is rejected before anything is written. Transfers take the same amounts
+  (`转 500 > @招行 > @现金 200 > @支付宝 300`), so one transfer can reach several accounts.
 - Optional natural-language capture (`src-tauri/src/llm.rs`): 设置 → AI 记一笔 configures a provider
   (OpenAI, Anthropic, DeepSeek, Ollama/local, or a custom endpoint), base URL, model, protocol and an
   API key stored separately in `llm.json` (mode `0600`). Pressing <kbd>Tab</kbd> in the capture

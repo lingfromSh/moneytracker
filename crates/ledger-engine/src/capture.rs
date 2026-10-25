@@ -742,8 +742,34 @@ pub fn expand(vault: &Vault, parsed: &ParsedCapture) -> ExpandedCapture {
             .get(1)
             .map(|a| prefixed(a, "assets"))
             .unwrap_or_else(|| vault.opts.default_funding.clone());
-        postings.push(posting(&src, Some(total.neg()), None));
-        postings.push(posting(&dst, Some(total.clone()), None));
+        let typed = parsed.allocations.iter().any(Allocation::is_explicit);
+        if typed || accounts.len() > 2 {
+            // `转 500 > @招行 > @现金 200 > @支付宝 300`: the first account pays,
+            // the rest receive their own amounts, and any single missing amount
+            // (usually the source) is filled by the balance check.
+            if parsed.allocations.iter().any(|a| a.percent.is_some()) {
+                errors.push("转账请写金额，不要写百分比".into());
+            }
+            for (i, acct) in accounts.iter().enumerate() {
+                let name = prefixed(acct, "assets");
+                let typed_amount = parsed
+                    .allocations
+                    .get(i)
+                    .and_then(|a| a.amount.clone())
+                    .map(|a| {
+                        if a.commodity.is_empty() {
+                            Amount::canonical(a.quantity, &total.commodity, precision)
+                        } else {
+                            a
+                        }
+                    });
+                let signed = typed_amount.map(|a| if i == 0 { a.neg() } else { a });
+                postings.push(posting(&name, signed, None));
+            }
+        } else {
+            postings.push(posting(&src, Some(total.neg()), None));
+            postings.push(posting(&dst, Some(total.clone()), None));
+        }
     } else {
         let mut category: Option<String> = None;
         let mut funding: Option<String> = None;
@@ -1352,6 +1378,25 @@ mod tests {
             "{:?}",
             expanded.errors
         );
+    }
+
+    #[test]
+    fn a_transfer_can_reach_several_destination_accounts() {
+        let (_dir, vault) = test_vault();
+        let expanded = expand(
+            &vault,
+            &parse_capture("转 500 > @assets:cash > @assets:bank 200 > @assets:wallet 300"),
+        );
+        assert!(expanded.errors.is_empty(), "{:?}", expanded.errors);
+        assert_eq!(
+            split_postings(&expanded),
+            vec![
+                ("assets:cash".to_string(), Some(Decimal::new(-500, 0))),
+                ("assets:bank".to_string(), Some(Decimal::new(200, 0))),
+                ("assets:wallet".to_string(), Some(Decimal::new(300, 0))),
+            ]
+        );
+        assert_eq!(sum_of(&expanded), Decimal::ZERO);
     }
 
     #[test]
