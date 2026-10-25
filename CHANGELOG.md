@@ -16,6 +16,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- 规划 (Planning) view driven by a plain-text `goals.ledger`: FIRE projection at SWR 3.0 / 3.5 / 4.0 %,
+  reserve-months gauge, per-account goals with target dates, debt payoff dates with extra-payment
+  scenarios, and allocation drift against `class:` tags. The dashboard gains a compact planning strip
+  and a FIRE goal line on the net-worth curve.
+- 报表 (Reports) view: balance sheet (with the `assets − liabilities = equity + cumulative net`
+  identity), income statement per month/quarter/year, and a net-worth bridge that explains the
+  closing net worth; `复制 Markdown` copies the current month.
+- `crates/ledger-engine/src/plan.rs` and `statements.rs`, plus the `plan_overview`, `goals_get`,
+  `goals_save`, `statement_*`, `report_periods`, `debt_progress`, `allocation` and `report_markdown`
+  IPC commands.
 - `fixtures/vault/full` — a 16-month, 336-entry showcase household ledger (cash, two bank accounts,
   e-wallets, a credit card, mortgage and car loans, a self-owned and a rented flat, fund/stock
   positions, interest, dividends, monthly and yearly envelopes, and big one-off expenses) plus

@@ -25,6 +25,12 @@ export function percent(value: number | null | undefined, digits = 1): string {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
+/** For values already expressed in percent (4.0 → “4.0%”). */
+export function pct(value: number | null | undefined, digits = 1): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  return `${value.toFixed(digits)}%`;
+}
+
 export function monthLabel(key: string): string {
   const [year, month] = key.split("-");
   if (!month) return key;

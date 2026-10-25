@@ -22,7 +22,7 @@ fn parse_month(key: &str) -> Option<(i32, u32)> {
     Some((y.parse().ok()?, m.parse().ok()?))
 }
 
-fn month_shift(key: &str, delta: i32) -> String {
+pub fn month_shift(key: &str, delta: i32) -> String {
     let (y, m) = parse_month(key).unwrap_or((2000, 1));
     let total = y * 12 + (m as i32 - 1) + delta;
     format!(
@@ -32,7 +32,7 @@ fn month_shift(key: &str, delta: i32) -> String {
     )
 }
 
-fn month_series(end: &str, count: usize) -> Vec<String> {
+pub fn month_series(end: &str, count: usize) -> Vec<String> {
     if count == 0 {
         return Vec::new();
     }
@@ -42,7 +42,7 @@ fn month_series(end: &str, count: usize) -> Vec<String> {
         .collect()
 }
 
-fn last_month(vault: &Vault) -> String {
+pub fn last_month(vault: &Vault) -> String {
     vault
         .last_date
         .map(month_key)
@@ -123,13 +123,13 @@ pub fn query_txns(vault: &Vault, req: &QueryRequest) -> Result<TxnPageDto> {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-struct MonthTotals {
-    income: Decimal,
-    expense: Decimal,
-    net_worth: Decimal,
+pub struct MonthTotals {
+    pub income: Decimal,
+    pub expense: Decimal,
+    pub net_worth: Decimal,
 }
 
-fn monthly_totals(vault: &Vault) -> BTreeMap<String, MonthTotals> {
+pub fn monthly_totals(vault: &Vault) -> BTreeMap<String, MonthTotals> {
     let mut map: BTreeMap<String, MonthTotals> = BTreeMap::new();
     let mut running = Decimal::ZERO;
     let mut sorted: Vec<usize> = (0..vault.txns.len()).collect();

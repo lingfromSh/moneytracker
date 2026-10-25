@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-148_passing-brightgreen.svg)](#testing)
-[![Front-end tests](https://img.shields.io/badge/vitest-38_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-165_passing-brightgreen.svg)](#testing)
+[![Front-end tests](https://img.shields.io/badge/vitest-47_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
@@ -35,6 +35,7 @@ rich dashboard — with **zero proprietary storage**. Delete the app and you sti
 - [Usage](#usage)
 - [Capture syntax](#capture-syntax)
 - [Natural language (optional)](#natural-language-optional)
+- [Planning & reports](#planning--reports)
 - [Where your data lives](#where-your-data-lives)
 - [Safety guarantees](#safety-guarantees)
 - [Development](#development)
@@ -66,6 +67,8 @@ the source of truth and treats the UI as a fast editor for it:
 | **Multi-currency** | rates come only from `P` directives; missing rates are flagged, greyed out and excluded from totals — never assumed 1:1 |
 | **Dashboard** | KPI + month-over-month, income/expense bars, net-worth curve, category donut, stacked area, calendar heatmap, budget vs actual, forecast, Sankey — draggable/resizable layout persisted per user |
 | **Transactions** | windowed list, inline editor, bulk tag/account rename, saved queries (`acct:`, `desc:`, `date:`, `tag:`, `amt:` with `and`/`or`/`not`) |
+| **Planning** | `goals.ledger` drives a FIRE projection (SWR 3.0/3.5/4.0 %), a reserve-months gauge, per-account goals with target dates, debt payoff dates (plus what an extra payment saves) and allocation drift against `class:` tags |
+| **Reports** | balance sheet, income statement for any month/quarter/year, and a net-worth bridge that reconciles closing net worth to opening plus income minus expense |
 | **Accounts & categories** | account tree with own/total balances and type inference; category view by account or by tag |
 | **Bilingual UI strings** | interface is zh-CN; ledger content and code comments are language-neutral |
 | **Safety** | pre-write snapshots, atomic replace, external-change detection, JSONL write audit |
@@ -104,7 +107,7 @@ First launch shows **Welcome**: create a vault, open an existing folder, or crea
 | `⌘K` | command palette |
 | `⌘N` | capture window |
 | `⌘F` | transactions / search |
-| `⌘1` … `⌘6` | dashboard, transactions, accounts, categories, rules, settings |
+| `⌘1` … `⌘8` | dashboard, transactions, accounts, categories, rules, plan, reports, settings |
 | `Enter` / `⌘Enter` / `Esc` | capture: save and stay / save and hide / hide |
 
 The tray icon opens the capture panel next to the menu bar; `⌘,`-style settings cover theme,
@@ -187,6 +190,35 @@ what is missing. "测试连接" performs one tiny request so you can verify cred
 on it. What leaves your machine is the sentence you typed plus your account names — nothing else,
 and only when you press <kbd>Tab</kbd> into natural-language mode.
 
+## Planning & reports
+
+`goals.ledger` is a small, plain-text plan file (like `rules.ledger`, it is **not** included by
+`index.ledger` — hledger must never see it). One directive per line:
+
+```ledger
+assume  ; return:6% inflation:2.5% reserve:6          ; nominal return, inflation, emergency months
+pool    ; accounts:assets:invest,assets:cash           ; what counts as "investable"
+alloc   ; equity:60% bond:20% cash:20%                 ; target allocation by `class:` tag
+goal fire 财富自由 ; swr:4%                            ; withdrawal rate used for the headline number
+goal account 退休金 ; account:assets:invest:retirement target:1000000.00 CNY by:2040-01-01
+debt 房贷 ; account:liabilities:mortgage rate:3.15% payment:8200.00 CNY
+```
+
+- **FIRE** = annual expenses ÷ withdrawal rate. Expenses come from the trailing 12 months (or
+  `expenses:annual`), the pool is the current balance of the `pool` accounts, and the ETA uses the
+  real (after-inflation) return with a 6-month average contribution.
+- **Reserve months** = cash ÷ average monthly expenses; the target is `reserve:` in `assume`.
+- **Debt progress** amortises each `debt` line monthly: payoff date, interest paid since the ledger
+  began, and *what an extra 500 / 1000 / 2000 per month would save* — read-only, nothing is written.
+- **Allocation drift** compares the `class:` tags in `accounts.ledger` (`; class:equity`) against
+  `alloc`, flagging anything more than 5 percentage points off.
+
+The **报表 (Reports)** view builds three statements from the same ledger: a balance sheet that
+keeps the double-entry identity `assets − liabilities = equity + cumulative net` for every period, an
+income statement for a month / quarter / year, and a net-worth bridge
+(`opening + income − expense ± valuation = closing`). `复制 Markdown` puts the current month's
+statement on the clipboard for your journal.
+
 ## Where your data lives
 
 ```
@@ -195,6 +227,7 @@ and only when you press <kbd>Tab</kbd> into natural-language mode.
   accounts.ledger              # account declarations with `; type:A|L|E|R|X`
   prices.ledger                # `P` directives — the only source of exchange rates
   budgets.ledger               # `~ monthly` budget envelopes
+  goals.ledger                 # plan: assumptions, FIRE goal, pool, allocation, debts (not included)
   rules.ledger                 # MoneyTracker rules — intentionally NOT included by index.ledger
   2026/
     2026.ledger                # includes the month indexes

@@ -456,3 +456,179 @@ pub struct OpenVaultResultDto {
     pub diagnostics: Vec<DiagnosticDto>,
     pub warnings: Vec<String>,
 }
+
+// ---------------------------------------------------------------------------
+// planning (goals.ledger), statements and reports
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct AssumptionsDto {
+    /// Percent, e.g. `6.0` for 6 %.
+    pub nominal_return: f64,
+    pub inflation: f64,
+    pub reserve_months: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct FireTargetDto {
+    /// Percent, e.g. `4.0`.
+    pub swr: f64,
+    pub target: AmountDto,
+    /// Months until the pool covers the target; `null` when unreachable.
+    pub eta_months: Option<f64>,
+    pub eta_date: Option<String>,
+    pub eta_label: String,
+    pub achieved: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct FireDto {
+    pub annual_expense: AmountDto,
+    pub balance: AmountDto,
+    pub contribution: AmountDto,
+    /// Real (after-inflation) return, in percent.
+    pub real_return: f64,
+    pub primary_swr: f64,
+    pub progress: f64,
+    pub targets: Vec<FireTargetDto>,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ReserveDto {
+    pub cash: AmountDto,
+    pub monthly_expense: AmountDto,
+    pub months: f64,
+    pub target_months: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct PoolMemberDto {
+    pub account: String,
+    pub class: Option<String>,
+    pub amount: AmountDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct GoalDto {
+    pub label: String,
+    pub account: Option<String>,
+    pub target: AmountDto,
+    pub current: AmountDto,
+    pub progress: f64,
+    pub by: Option<String>,
+    pub months_left: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ExtraPaymentDto {
+    pub extra: AmountDto,
+    pub months_saved: f64,
+    pub interest_saved: AmountDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct DebtDto {
+    pub label: String,
+    pub account: String,
+    pub balance: AmountDto,
+    /// Percent, e.g. `3.15`.
+    pub rate: Option<f64>,
+    pub payment: Option<AmountDto>,
+    pub monthly_interest: Option<AmountDto>,
+    pub interest_paid: AmountDto,
+    pub payoff_months: Option<f64>,
+    pub payoff_date: Option<String>,
+    pub note: Option<String>,
+    pub extra: Vec<ExtraPaymentDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct AllocationRowDto {
+    pub class: String,
+    pub current: AmountDto,
+    pub current_share: f64,
+    pub target_share: Option<f64>,
+    /// Percentage points, current minus target.
+    pub drift: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct AllocationDto {
+    pub rows: Vec<AllocationRowDto>,
+    /// Pool accounts without a `class:` tag.
+    pub untagged: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct PlanOverviewDto {
+    pub has_goals: bool,
+    pub goals_text: String,
+    pub assumptions: AssumptionsDto,
+    pub fire: FireDto,
+    pub reserve: ReserveDto,
+    pub pool: Vec<PoolMemberDto>,
+    pub goals: Vec<GoalDto>,
+    pub debts: Vec<DebtDto>,
+    pub allocation: AllocationDto,
+    pub diagnostics: Vec<DiagnosticDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct StatementRowDto {
+    pub account: String,
+    pub label: String,
+    pub unit: AmountDto,
+    pub hint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct SectionDto {
+    pub title: String,
+    pub rows: Vec<StatementRowDto>,
+    pub total: AmountDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct BalanceSheetDto {
+    pub as_of: String,
+    pub assets: SectionDto,
+    pub liabilities: SectionDto,
+    pub equity: SectionDto,
+    pub income: SectionDto,
+    pub expense: SectionDto,
+    /// Income minus expense since the ledger began.
+    pub cumulative_net: AmountDto,
+    pub net_worth: AmountDto,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct IncomeStatementDto {
+    pub from: String,
+    pub to: String,
+    pub income: SectionDto,
+    pub expenses: SectionDto,
+    pub net: AmountDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct BridgeDto {
+    pub from: String,
+    pub to: String,
+    pub opening: AmountDto,
+    pub income: AmountDto,
+    pub expense: AmountDto,
+    pub valuation: AmountDto,
+    pub closing: AmountDto,
+    pub reconciled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct PeriodDto {
+    /// `2026-10`, `2026-Q3`, `2026`, `ytd` or `from..to`.
+    pub key: String,
+    pub from: String,
+    pub to: String,
+    pub label: String,
+}

@@ -163,6 +163,32 @@ into an `LlmConfig` only when a request is built (`state.llm_key()`). It is deli
 `Settings`, so it never travels through `settings_set`, the settings document, the IPC error paths
 or the write audit.
 
+## Planning and statements
+
+Two read-only engine modules turn the same index into the planning and reporting views. Neither
+writes to disk; `goals.ledger` is edited only through `goals_save`, which goes through the normal
+snapshot → atomic write → audit path.
+
+`crates/ledger-engine/src/plan.rs` parses `goals.ledger` (directive per line: `assume`, `pool`,
+`alloc`, `goal fire`, `goal account`, `debt`) into `PlanSet` and derives `PlanOverviewDto`:
+
+- `fire_projection()` walks months with a real (after-inflation) monthly rate, adding a contribution
+  equal to the trailing 6-month average of the pool's net inflow (capped, floored at zero), and finds
+  the first month the pool covers `annual_expense / swr` for SWR 3.0 / 3.5 / 4.0 %.
+- `reserve()` = cash accounts ÷ trailing 3-month average monthly expense, against `assume reserve:`.
+- `debt_rows()` amortises each `debt` line (`rate/12` per month, payment from the directive or the
+  trailing average payment on that account), and re-simulates with +500 / +1000 / +2000 to report
+  months and interest saved. Interest paid is read from `expenses:` accounts that mention the same
+  debt keyword, so it stays derived data.
+- `allocation_rows()` groups the pool by the `class:` tag on account declarations
+  (`; class:equity`) and compares shares with `alloc`; drift is reported in percentage points.
+
+`crates/ledger-engine/src/statements.rs` produces the three statements by folding `TxnValue`s:
+`balance_sheet(as_of)` (assets, liabilities, equity, and the cumulative net that keeps
+`assets − liabilities = equity + cumulative_net`), `income_statement(from, to)`, and
+`net_worth_bridge(from, to)` where valuation is the residual between the derived closing net worth
+and `opening + income − expense`, so multi-currency revaluation can never hide a real discrepancy.
+
 ## IPC surface
 
 Commands are declared once with `#[tauri::command]` + `#[specta::specta]`, collected by

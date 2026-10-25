@@ -114,6 +114,30 @@ wrote must balance exactly (one elided amount is filled in from the others); an 
 transaction in an externally written file is reported as a warning and marked read-only rather than
 being "fixed".
 
+## The plan file
+
+`goals.ledger` is optional and, like `rules.ledger`, is **not** included by `index.ledger` — hledger
+never sees it. One directive per line:
+
+```ledger
+assume  ; return:6% inflation:2.5% reserve:6
+pool    ; accounts:assets:invest,assets:cash
+alloc   ; equity:60% bond:20% cash:20%
+goal fire 财富自由 ; swr:4%
+goal account 退休金 ; account:assets:invest:retirement target:1000000.00 CNY by:2040-01-01
+debt 房贷 ; account:liabilities:mortgage rate:3.15% payment:8200.00 CNY
+```
+
+- `assume` — nominal return and inflation are percentages (`6%` or `6`), `reserve` is a month count.
+- `pool` — comma-separated accounts (subtrees count); defaults to `assets:invest`.
+- `alloc` — `class:share%` pairs matched against `; class:<name>` tags on account declarations.
+- `goal fire` — a label plus optional `swr:`; `goal account` — `account:`, `target:`, optional `by:`.
+- `debt` — `account:`, `rate:`, `payment:`; the balance is read from the ledger, and extra-payment
+  scenarios are simulated, never written.
+
+Unknown directives produce `plan.unknown_directive` diagnostics with line numbers and are shown in
+the 规划 view instead of failing the load.
+
 ## Editing rules
 
 - A rewrite touches one byte span (the transaction block plus one blank line) and is preceded by a

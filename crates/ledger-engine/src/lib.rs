@@ -8,8 +8,10 @@ pub mod amounts;
 pub mod capture;
 pub mod fx;
 pub mod load;
+pub mod plan;
 pub mod report;
 pub mod rules;
+pub mod statements;
 pub mod types;
 pub mod vault;
 pub mod writer;
@@ -22,7 +24,9 @@ pub use load::{
     diagnostic_dto, is_system_tag, posting_dto, split_comment, strip_system_tokens, txn_dto,
     AccountInfo, TxnRecord, Vault,
 };
+pub use plan::{fire_projection, overview as plan_overview, PlanSet, GOALS_FILE};
 pub use rules::{Direction, RuleDef, RuleSet};
+pub use statements::{balance_sheet, income_statement, net_worth_bridge};
 pub use vault::{create_vault, validate_vault, VaultOptions};
 
 #[derive(Debug, thiserror::Error)]

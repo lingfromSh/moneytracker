@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use ledger_engine::types::*;
 use ledger_engine::vault::{create_vault, year_path, VaultOptions};
 use ledger_engine::{capture, report, writer, Vault};
@@ -1035,4 +1035,177 @@ fn first_line(text: &str) -> String {
     } else {
         line.to_string()
     }
+}
+
+// ---------------------------------------------------------------- planning
+
+fn first_of_month(date: NaiveDate) -> NaiveDate {
+    NaiveDate::from_ymd_opt(date.year(), date.month(), 1).unwrap_or(date)
+}
+
+fn first_of_next_month(date: NaiveDate) -> NaiveDate {
+    let (year, month) = if date.month() == 12 {
+        (date.year() + 1, 1)
+    } else {
+        (date.year(), date.month() + 1)
+    };
+    NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(date)
+}
+
+fn end_of_month(date: NaiveDate) -> NaiveDate {
+    first_of_next_month(date).pred_opt().unwrap_or(date)
+}
+
+fn today(vault: &Vault) -> NaiveDate {
+    vault
+        .info_dto()
+        .last_date
+        .and_then(|d| ledger_core::parser::parse_date_str(&d))
+        .unwrap_or_else(|| chrono::Local::now().date_naive())
+}
+
+/// Calendar-aligned reporting periods, newest first. The UI only sends the key.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn report_periods(state: State<'_, AppState>) -> CmdResult<Vec<PeriodDto>> {
+    let vault = state.vault()?;
+    let today = today(&vault);
+    let month_start = first_of_month(today);
+    let prev_start = first_of_month(month_start.pred_opt().unwrap_or(month_start));
+    let quarter_start_month = ((today.month() - 1) / 3) * 3 + 1;
+    let quarter_start =
+        NaiveDate::from_ymd_opt(today.year(), quarter_start_month, 1).unwrap_or(today);
+    let year_start = NaiveDate::from_ymd_opt(today.year(), 1, 1).unwrap_or(today);
+    let period = |key: &str, from: NaiveDate, to: NaiveDate, label: &str| PeriodDto {
+        key: key.to_string(),
+        from: from.to_string(),
+        to: to.to_string(),
+        label: label.to_string(),
+    };
+    Ok(vec![
+        period("this-month", month_start, end_of_month(today), "本月"),
+        period("last-month", prev_start, end_of_month(prev_start), "上月"),
+        period("quarter", quarter_start, today, "本季"),
+        period("year", year_start, today, "本年"),
+        period("ytd", year_start, today, "年初至今"),
+        period(
+            "all",
+            NaiveDate::from_ymd_opt(today.year() - 10, 1, 1).unwrap_or(year_start),
+            today,
+            "全部",
+        ),
+    ])
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn plan_overview(state: State<'_, AppState>) -> CmdResult<PlanOverviewDto> {
+    Ok(ledger_engine::plan::overview(state.vault()?.as_ref()))
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn goals_get(state: State<'_, AppState>) -> CmdResult<String> {
+    Ok(ledger_engine::plan::plan_text(state.vault()?.as_ref()))
+}
+
+/// Replace `goals.ledger` wholesale — it is small, hand-edited metadata.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn goals_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    text: String,
+) -> CmdResult<PlanOverviewDto> {
+    let vault = state.vault()?;
+    let opts = state.settings().vault_options();
+    let root = vault.root().to_path_buf();
+    let file = ledger_engine::plan::GOALS_FILE;
+    let audit = state.audit_path();
+    ledger_engine::writer::write_rel(&root, std::path::Path::new(file), &text, None, &opts)?;
+    ledger_engine::writer::append_audit(
+        &audit,
+        &AuditEntryDto {
+            ts: chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            op: "goals_save".to_string(),
+            file: file.to_string(),
+            span_start: 0,
+            span_end: text.len(),
+            before: String::new(),
+            after: text.chars().take(400).collect(),
+        },
+    )?;
+    let fresh = state
+        .reload_from_disk(&opts)
+        .ok_or_else(|| CmdError::new("engine.vault", "could not reload the vault"))?;
+    emit_ledger_changed(&app, vec![file.to_string()], "goals_saved");
+    Ok(ledger_engine::plan::overview(fresh.as_ref()))
+}
+
+fn parse_date_arg(value: &str) -> CmdResult<NaiveDate> {
+    ledger_core::parser::parse_date_str(value.trim())
+        .ok_or_else(|| CmdError::new("app.bad_date", format!("`{value}` 不是日期")))
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn statement_balance(
+    state: State<'_, AppState>,
+    as_of: Option<String>,
+) -> CmdResult<BalanceSheetDto> {
+    let vault = state.vault()?;
+    let date = match as_of.as_deref().filter(|s| !s.trim().is_empty()) {
+        Some(value) => parse_date_arg(value)?,
+        None => today(&vault),
+    };
+    Ok(ledger_engine::balance_sheet(&vault, date))
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn statement_income(
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+) -> CmdResult<IncomeStatementDto> {
+    let vault = state.vault()?;
+    Ok(ledger_engine::income_statement(
+        &vault,
+        parse_date_arg(&from)?,
+        parse_date_arg(&to)?,
+    ))
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn statement_bridge(
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+) -> CmdResult<BridgeDto> {
+    let vault = state.vault()?;
+    Ok(ledger_engine::net_worth_bridge(
+        &vault,
+        parse_date_arg(&from)?,
+        parse_date_arg(&to)?,
+    ))
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn debt_progress(state: State<'_, AppState>) -> CmdResult<Vec<DebtDto>> {
+    Ok(ledger_engine::plan::overview(state.vault()?.as_ref()).debts)
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn allocation(state: State<'_, AppState>) -> CmdResult<AllocationDto> {
+    Ok(ledger_engine::plan::overview(state.vault()?.as_ref()).allocation)
+}
+
+#[tauri::command(async)]
+#[specta::specta]
+pub fn report_markdown(state: State<'_, AppState>, month: String) -> CmdResult<String> {
+    let vault = state.vault()?;
+    Ok(ledger_engine::plan::month_report(&vault, month.trim()))
 }

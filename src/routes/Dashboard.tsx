@@ -3,10 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { GridLayout } from "react-grid-layout";
 import type { Layout } from "react-grid-layout";
-import type { DashboardDto_Serialize } from "../lib/bindings";
+import type { DashboardDto_Serialize, PlanOverviewDto_Serialize } from "../lib/bindings";
 import { api, queryKeys } from "../lib/ipc";
 import { useElementWidth } from "../lib/use-element-width";
-import { cn, money, monthLabel, percent } from "../lib/format";
+import { cn, money, monthLabel, pct, percent } from "../lib/format";
 import { Badge, Button, Card, CardHeader, EmptyState } from "../components/ui";
 import {
   BudgetBars,
@@ -67,6 +67,7 @@ export function Dashboard() {
     retry: 0,
   });
   const settings = useQuery({ queryKey: queryKeys.settings, queryFn: () => api.settings() });
+  const plan = useQuery({ queryKey: queryKeys.plan, queryFn: () => api.planOverview(), retry: 0 });
 
   // Re-reads every ledger file from disk. The watcher covers external edits, but
   // a manual button is what people reach for after editing in another editor.
@@ -140,6 +141,7 @@ export function Dashboard() {
         justReloaded={reloadedAt !== null}
         reloadError={reloadError}
       />
+      {plan.data?.has_goals ? <PlanStrip plan={plan.data} /> : null}
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4">
         <div ref={gridRef} className="w-full min-w-0">
           {/*
@@ -170,7 +172,11 @@ export function Dashboard() {
             </div>
             <div key="networth">
               <Panel title="净资产曲线" hint="含所有资产与负债">
-                <NetWorthArea points={data.net_worth_series} />
+                <NetWorthArea
+                  points={data.net_worth_series}
+                  target={plan.data?.fire?.targets?.[0]?.target?.value ?? null}
+                  targetLabel={plan.data?.fire ? "自由目标" : undefined}
+                />
               </Panel>
             </div>
             <div key="budget">
@@ -207,6 +213,68 @@ export function Dashboard() {
         </div>
       </div>
     </div>
+  );
+}
+
+function PlanStrip({ plan }: { plan: PlanOverviewDto_Serialize }) {
+  const fire = plan.fire;
+  const reserve = plan.reserve;
+  const nextDebt = plan.debts.find((debt) => debt.payoff_date) ?? null;
+  const fireProgress = Math.max(0, Math.min(100, fire?.progress ?? 0));
+  const reserveProgress = Number(reserve?.target_months ?? 0) > 0
+    ? Math.max(0, Math.min(100, (Number(reserve?.months ?? 0) / Number(reserve?.target_months ?? 0)) * 100))
+    : 0;
+  return (
+    <a
+      href="#/plan"
+      className="mx-4 mb-2 grid gap-3 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-3 text-xs transition hover:border-[var(--color-accent)]/60 sm:grid-cols-3"
+    >
+      <div>
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--color-muted)]">财富自由</span>
+          <span className="font-medium tabular-nums">{pct(Number(fire?.progress ?? 0))}</span>
+        </div>
+        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-line)]">
+          <div className="h-full rounded-full bg-[var(--color-accent)]" style={{ width: `${fireProgress}%` }} />
+        </div>
+        <div className="mt-1 text-[11px] text-[var(--color-muted)]">
+          {fire?.targets?.[0]
+            ? `${money(fire.balance.value, fire.balance.display)} / ${money(fire.targets[0].target.value, fire.targets[0].target.display)} · ${fire.targets[0].eta_label}`
+            : "未设置目标"}
+        </div>
+      </div>
+      <div>
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--color-muted)]">储备月数</span>
+          <span className="font-medium tabular-nums">{Number(reserve?.months ?? 0).toFixed(1)} 个月</span>
+        </div>
+        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-line)]">
+          <div
+            className={cn(
+              "h-full rounded-full",
+              reserveProgress < 100 ? "bg-[var(--color-danger)]" : "bg-[var(--color-accent)]",
+            )}
+            style={{ width: `${reserveProgress}%` }}
+          />
+        </div>
+        <div className="mt-1 text-[11px] text-[var(--color-muted)]">
+          目标 {reserve?.target_months ?? 0} 个月 · 现金 {money(reserve?.cash?.value, reserve?.cash?.display)}
+        </div>
+      </div>
+      <div>
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--color-muted)]">{nextDebt ? "下一笔还清" : "目标"}</span>
+          <span className="font-medium tabular-nums">{nextDebt?.payoff_date ?? `${plan.goals.length} 个`}</span>
+        </div>
+        <div className="mt-1 text-[11px] text-[var(--color-muted)]">
+          {nextDebt
+            ? `${nextDebt.label} · 余额 ${money(nextDebt.balance.value, nextDebt.balance.display)}`
+            : plan.goals[0]
+              ? `${plan.goals[0].label} ${pct(Number(plan.goals[0].progress ?? 0))}`
+              : "点开规划设置目标"}
+        </div>
+      </div>
+    </a>
   );
 }
 

@@ -103,6 +103,18 @@ export const api = {
   llmTest: () => call(commands.llmTest()),
   llmDraft: (text: string) => call(commands.llmDraft(text)),
 
+  // planning and statements
+  planOverview: () => call(commands.planOverview()),
+  goalsGet: () => call(commands.goalsGet()),
+  goalsSave: (text: string) => call(commands.goalsSave(text)),
+  reportPeriods: () => call(commands.reportPeriods()),
+  statementBalance: (asOf: string | null = null) => call(commands.statementBalance(asOf)),
+  statementIncome: (from: string, to: string) => call(commands.statementIncome(from, to)),
+  statementBridge: (from: string, to: string) => call(commands.statementBridge(from, to)),
+  debtProgress: () => call(commands.debtProgress()),
+  allocation: () => call(commands.allocation()),
+  reportMarkdown: (month: string) => call(commands.reportMarkdown(month)),
+
   // capture window
   showCapture: () => call(commands.captureShow()),
   hideCapture: () => call(commands.captureHide()),
@@ -128,4 +140,10 @@ export const queryKeys = {
   shortcutStatus: ["shortcut-status"] as const,
   llmStatus: ["llm-status"] as const,
   ruleTest: (id: string) => ["rule-test", id] as const,
+  plan: ["plan"] as const,
+  goals: ["goals"] as const,
+  periods: ["report-periods"] as const,
+  balanceSheet: (asOf: string | null) => ["balance-sheet", asOf] as const,
+  incomeStatement: (from: string, to: string) => ["income-statement", from, to] as const,
+  bridge: (from: string, to: string) => ["bridge", from, to] as const,
 };

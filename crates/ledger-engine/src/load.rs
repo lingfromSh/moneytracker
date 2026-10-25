@@ -37,6 +37,8 @@ pub struct AccountInfo {
     pub name: String,
     pub kind: char,
     pub declared: bool,
+    /// `; class:equity|bond|cash|property|other` from the account declaration.
+    pub class: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -165,6 +167,13 @@ impl Vault {
                             .and_then(|t| t.value.as_deref())
                             .and_then(kind_from_tag)
                             .unwrap_or('U');
+                        let class = a
+                            .tags
+                            .iter()
+                            .find(|t| t.key == "class" || t.key == "asset-class")
+                            .and_then(|t| t.value.as_deref())
+                            .map(|v| v.trim().to_lowercase())
+                            .filter(|v| !v.is_empty());
                         if kind != 'U' {
                             decls.insert(normalize_account(&a.name), kind);
                         }
@@ -173,10 +182,14 @@ impl Vault {
                             name: name.clone(),
                             kind: 'U',
                             declared: true,
+                            class: None,
                         });
                         entry.declared = true;
                         if kind != 'U' {
                             entry.kind = kind;
+                        }
+                        if class.is_some() {
+                            entry.class = class;
                         }
                     }
                     Item::Price(p) => price_decls.push(p.clone()),
@@ -252,6 +265,7 @@ impl Vault {
                         name: acc.clone(),
                         kind: kind_of(acc, &decls, account_types.as_slice()),
                         declared: false,
+                        class: None,
                     });
                 // ancestors
                 let parts: Vec<&str> = acc.split(':').collect();
@@ -263,6 +277,7 @@ impl Vault {
                             kind: kind_of(&parent, &decls, account_types.as_slice()),
                             name: parent,
                             declared: false,
+                            class: None,
                         });
                 }
             }
@@ -392,6 +407,41 @@ impl Vault {
             ),
             _ => (name, Vec::new()),
         }
+    }
+
+    /// Asset class declared with `; class:` on the account, inherited from the
+    /// nearest tagged ancestor (`assets:invest:fund` → `assets:invest` → `assets`).
+    pub fn class_of(&self, name: &str) -> Option<&str> {
+        let name = normalize_account(name);
+        let mut current = name.as_str();
+        loop {
+            if let Some(info) = self.accounts.get(current) {
+                if let Some(class) = info.class.as_deref() {
+                    return Some(class);
+                }
+            }
+            match current.rsplit_once(':') {
+                Some((parent, _)) => current = parent,
+                None => return None,
+            }
+        }
+    }
+
+    pub fn accounts(&self) -> &BTreeMap<String, AccountInfo> {
+        &self.accounts
+    }
+
+    pub fn options(&self) -> &VaultOptions {
+        &self.opts
+    }
+
+    /// Base commodity and its precision, for formatting derived amounts.
+    pub fn base_commodity(&self) -> (&str, u32) {
+        (&self.commodities.base, self.commodities.base_precision)
+    }
+
+    pub fn root(&self) -> &Path {
+        &self.root
     }
 
     pub fn files(&self) -> &[FileEntry] {

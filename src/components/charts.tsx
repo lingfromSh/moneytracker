@@ -11,6 +11,7 @@ import {
   ComposedChart,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -61,7 +62,16 @@ export function MonthlyBars({ months }: { months: MonthPointDto[] }) {
   );
 }
 
-export function NetWorthArea({ points }: { points: PointDto[] }) {
+export function NetWorthArea({
+  points,
+  target,
+  targetLabel,
+}: {
+  points: PointDto[];
+  /** Optional goal line, e.g. the FIRE number. */
+  target?: number | null;
+  targetLabel?: string;
+}) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
@@ -75,6 +85,20 @@ export function NetWorthArea({ points }: { points: PointDto[] }) {
         <XAxis dataKey="label" tick={AXIS} axisLine={false} tickLine={false} />
         <YAxis tick={AXIS} axisLine={false} tickLine={false} width={56} />
         <Tooltip contentStyle={tooltipStyle} formatter={(v) => money(Number(v))} />
+        {target && target > 0 ? (
+          <ReferenceLine
+            y={target}
+            stroke="#d98b3f"
+            strokeDasharray="4 3"
+            strokeWidth={1.5}
+            label={{
+              value: targetLabel ?? "目标",
+              position: "insideTopRight",
+              fill: "#d98b3f",
+              fontSize: 11,
+            }}
+          />
+        ) : null}
         <Area
           type="monotone"
           dataKey="value"

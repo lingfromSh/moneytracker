@@ -31,6 +31,18 @@ export const commands = {
 	accountUpsert: (name: string, kind: string) => typedError<null, CmdError>(__TAURI_INVOKE("account_upsert", { name, kind })),
 	budgetList: () => typedError<BudgetDto[], CmdError>(__TAURI_INVOKE("budget_list")),
 	forecast: (months: number | null) => typedError<ForecastPointDto_Serialize[], CmdError>(__TAURI_INVOKE("forecast", { months })),
+	/**  Calendar-aligned reporting periods, newest first. The UI only sends the key. */
+	reportPeriods: () => typedError<PeriodDto[], CmdError>(__TAURI_INVOKE("report_periods")),
+	planOverview: () => typedError<PlanOverviewDto_Serialize, CmdError>(__TAURI_INVOKE("plan_overview")),
+	goalsGet: () => typedError<string, CmdError>(__TAURI_INVOKE("goals_get")),
+	/**  Replace `goals.ledger` wholesale — it is small, hand-edited metadata. */
+	goalsSave: (text: string) => typedError<PlanOverviewDto_Serialize, CmdError>(__TAURI_INVOKE("goals_save", { text })),
+	statementBalance: (asOf: string | null) => typedError<BalanceSheetDto_Serialize, CmdError>(__TAURI_INVOKE("statement_balance", { asOf })),
+	statementIncome: (from: string, to: string) => typedError<IncomeStatementDto_Serialize, CmdError>(__TAURI_INVOKE("statement_income", { from, to })),
+	statementBridge: (from: string, to: string) => typedError<BridgeDto, CmdError>(__TAURI_INVOKE("statement_bridge", { from, to })),
+	debtProgress: () => typedError<DebtDto_Serialize[], CmdError>(__TAURI_INVOKE("debt_progress")),
+	allocation: () => typedError<AllocationDto_Serialize, CmdError>(__TAURI_INVOKE("allocation")),
+	reportMarkdown: (month: string) => typedError<string, CmdError>(__TAURI_INVOKE("report_markdown", { month })),
 	fxMissing: () => typedError<FxMissingDto[], CmdError>(__TAURI_INVOKE("fx_missing")),
 	/**
 	 *  Append externally fetched rates as `P` directives (the frontend performs the
@@ -88,12 +100,53 @@ export type AccountNodeDto = {
 	children: AccountNodeDto[],
 };
 
+export type AllocationDto = AllocationDto_Serialize | AllocationDto_Deserialize;
+
+export type AllocationDto_Deserialize = {
+	rows: AllocationRowDto_Deserialize[],
+	/**  Pool accounts without a `class:` tag. */
+	untagged: string[],
+};
+
+export type AllocationDto_Serialize = {
+	rows: AllocationRowDto_Serialize[],
+	/**  Pool accounts without a `class:` tag. */
+	untagged: string[],
+};
+
+export type AllocationRowDto = AllocationRowDto_Serialize | AllocationRowDto_Deserialize;
+
+export type AllocationRowDto_Deserialize = {
+	class: string,
+	current: AmountDto,
+	current_share: number | null,
+	target_share?: number | null,
+	/**  Percentage points, current minus target. */
+	drift?: number | null,
+};
+
+export type AllocationRowDto_Serialize = {
+	class: string,
+	current: AmountDto,
+	current_share: number | null,
+	target_share: number | null,
+	/**  Percentage points, current minus target. */
+	drift: number | null,
+};
+
 export type AmountDto = {
 	quantity: string,
 	/**  Display-only float; never use for arithmetic in the frontend. */
 	value: number | null,
 	commodity: string,
 	display: string,
+};
+
+export type AssumptionsDto = {
+	/**  Percent, e.g. `6.0` for 6 %. */
+	nominal_return: number | null,
+	inflation: number | null,
+	reserve_months: number,
 };
 
 export type AuditEntryDto = {
@@ -112,6 +165,45 @@ export type BalanceRowDto = {
 	quantity: string,
 	value: number | null,
 	display: string,
+};
+
+export type BalanceSheetDto = BalanceSheetDto_Serialize | BalanceSheetDto_Deserialize;
+
+export type BalanceSheetDto_Deserialize = {
+	as_of: string,
+	assets: SectionDto_Deserialize,
+	liabilities: SectionDto_Deserialize,
+	equity: SectionDto_Deserialize,
+	income: SectionDto_Deserialize,
+	expense: SectionDto_Deserialize,
+	/**  Income minus expense since the ledger began. */
+	cumulative_net: AmountDto,
+	net_worth: AmountDto,
+	note?: string | null,
+};
+
+export type BalanceSheetDto_Serialize = {
+	as_of: string,
+	assets: SectionDto_Serialize,
+	liabilities: SectionDto_Serialize,
+	equity: SectionDto_Serialize,
+	income: SectionDto_Serialize,
+	expense: SectionDto_Serialize,
+	/**  Income minus expense since the ledger began. */
+	cumulative_net: AmountDto,
+	net_worth: AmountDto,
+	note: string | null,
+};
+
+export type BridgeDto = {
+	from: string,
+	to: string,
+	opening: AmountDto,
+	income: AmountDto,
+	expense: AmountDto,
+	valuation: AmountDto,
+	closing: AmountDto,
+	reconciled: boolean,
 };
 
 export type BudgetDto = {
@@ -246,6 +338,38 @@ export type DashboardDto_Serialize = {
 	fx_missing: TxnDto_Serialize[],
 };
 
+export type DebtDto = DebtDto_Serialize | DebtDto_Deserialize;
+
+export type DebtDto_Deserialize = {
+	label: string,
+	account: string,
+	balance: AmountDto,
+	/**  Percent, e.g. `3.15`. */
+	rate?: number | null,
+	payment?: AmountDto | null,
+	monthly_interest?: AmountDto | null,
+	interest_paid: AmountDto,
+	payoff_months?: number | null,
+	payoff_date?: string | null,
+	note?: string | null,
+	extra: ExtraPaymentDto[],
+};
+
+export type DebtDto_Serialize = {
+	label: string,
+	account: string,
+	balance: AmountDto,
+	/**  Percent, e.g. `3.15`. */
+	rate: number | null,
+	payment: AmountDto | null,
+	monthly_interest: AmountDto | null,
+	interest_paid: AmountDto,
+	payoff_months: number | null,
+	payoff_date: string | null,
+	note: string | null,
+	extra: ExtraPaymentDto[],
+};
+
 export type DiagnosticDto = {
 	severity: string,
 	code: string,
@@ -253,6 +377,62 @@ export type DiagnosticDto = {
 	file: string,
 	line: number,
 	col: number,
+};
+
+export type ExtraPaymentDto = {
+	extra: AmountDto,
+	months_saved: number | null,
+	interest_saved: AmountDto,
+};
+
+export type FireDto = FireDto_Serialize | FireDto_Deserialize;
+
+export type FireDto_Deserialize = {
+	annual_expense: AmountDto,
+	balance: AmountDto,
+	contribution: AmountDto,
+	/**  Real (after-inflation) return, in percent. */
+	real_return: number | null,
+	primary_swr: number | null,
+	progress: number | null,
+	targets: FireTargetDto_Deserialize[],
+	note?: string | null,
+};
+
+export type FireDto_Serialize = {
+	annual_expense: AmountDto,
+	balance: AmountDto,
+	contribution: AmountDto,
+	/**  Real (after-inflation) return, in percent. */
+	real_return: number | null,
+	primary_swr: number | null,
+	progress: number | null,
+	targets: FireTargetDto_Serialize[],
+	note: string | null,
+};
+
+export type FireTargetDto = FireTargetDto_Serialize | FireTargetDto_Deserialize;
+
+export type FireTargetDto_Deserialize = {
+	/**  Percent, e.g. `4.0`. */
+	swr: number | null,
+	target: AmountDto,
+	/**  Months until the pool covers the target; `null` when unreachable. */
+	eta_months?: number | null,
+	eta_date?: string | null,
+	eta_label: string,
+	achieved: boolean,
+};
+
+export type FireTargetDto_Serialize = {
+	/**  Percent, e.g. `4.0`. */
+	swr: number | null,
+	target: AmountDto,
+	/**  Months until the pool covers the target; `null` when unreachable. */
+	eta_months: number | null,
+	eta_date: string | null,
+	eta_label: string,
+	achieved: boolean,
 };
 
 export type ForecastPointDto = ForecastPointDto_Serialize | ForecastPointDto_Deserialize;
@@ -302,10 +482,50 @@ export type FxSyncResultDto_Serialize = {
 	skipped_reason: string | null,
 };
 
+export type GoalDto = GoalDto_Serialize | GoalDto_Deserialize;
+
+export type GoalDto_Deserialize = {
+	label: string,
+	account?: string | null,
+	target: AmountDto,
+	current: AmountDto,
+	progress: number | null,
+	by?: string | null,
+	months_left?: number | null,
+};
+
+export type GoalDto_Serialize = {
+	label: string,
+	account: string | null,
+	target: AmountDto,
+	current: AmountDto,
+	progress: number | null,
+	by: string | null,
+	months_left: number | null,
+};
+
 export type HeatPointDto = {
 	date: string,
 	value: number | null,
 	display: string,
+};
+
+export type IncomeStatementDto = IncomeStatementDto_Serialize | IncomeStatementDto_Deserialize;
+
+export type IncomeStatementDto_Deserialize = {
+	from: string,
+	to: string,
+	income: SectionDto_Deserialize,
+	expenses: SectionDto_Deserialize,
+	net: AmountDto,
+};
+
+export type IncomeStatementDto_Serialize = {
+	from: string,
+	to: string,
+	income: SectionDto_Serialize,
+	expenses: SectionDto_Serialize,
+	net: AmountDto,
 };
 
 export type KpiDto = {
@@ -424,10 +644,60 @@ export type ParseDiagnostics = {
 	count: number | null,
 };
 
+export type PeriodDto = {
+	/**  `2026-10`, `2026-Q3`, `2026`, `ytd` or `from..to`. */
+	key: string,
+	from: string,
+	to: string,
+	label: string,
+};
+
+export type PlanOverviewDto = PlanOverviewDto_Serialize | PlanOverviewDto_Deserialize;
+
+export type PlanOverviewDto_Deserialize = {
+	has_goals: boolean,
+	goals_text: string,
+	assumptions: AssumptionsDto,
+	fire: FireDto_Deserialize,
+	reserve: ReserveDto,
+	pool: PoolMemberDto_Deserialize[],
+	goals: GoalDto_Deserialize[],
+	debts: DebtDto_Deserialize[],
+	allocation: AllocationDto_Deserialize,
+	diagnostics: DiagnosticDto[],
+};
+
+export type PlanOverviewDto_Serialize = {
+	has_goals: boolean,
+	goals_text: string,
+	assumptions: AssumptionsDto,
+	fire: FireDto_Serialize,
+	reserve: ReserveDto,
+	pool: PoolMemberDto_Serialize[],
+	goals: GoalDto_Serialize[],
+	debts: DebtDto_Serialize[],
+	allocation: AllocationDto_Serialize,
+	diagnostics: DiagnosticDto[],
+};
+
 export type PointDto = {
 	label: string,
 	value: number | null,
 	display: string,
+};
+
+export type PoolMemberDto = PoolMemberDto_Serialize | PoolMemberDto_Deserialize;
+
+export type PoolMemberDto_Deserialize = {
+	account: string,
+	class?: string | null,
+	amount: AmountDto,
+};
+
+export type PoolMemberDto_Serialize = {
+	account: string,
+	class: string | null,
+	amount: AmountDto,
 };
 
 export type PostingDto = PostingDto_Serialize | PostingDto_Deserialize;
@@ -492,6 +762,13 @@ export type QueryRequest_Serialize = {
 	order: string | null,
 	date_from: string | null,
 	date_to: string | null,
+};
+
+export type ReserveDto = {
+	cash: AmountDto,
+	monthly_expense: AmountDto,
+	months: number | null,
+	target_months: number,
 };
 
 export type RuleDto = RuleDto_Serialize | RuleDto_Deserialize;
@@ -616,6 +893,20 @@ export type SaveTxnPatch_Serialize = {
 	tags: TagDto_Serialize[] | null,
 };
 
+export type SectionDto = SectionDto_Serialize | SectionDto_Deserialize;
+
+export type SectionDto_Deserialize = {
+	title: string,
+	rows: StatementRowDto_Deserialize[],
+	total: AmountDto,
+};
+
+export type SectionDto_Serialize = {
+	title: string,
+	rows: StatementRowDto_Serialize[],
+	total: AmountDto,
+};
+
 export type Settings = Settings_Serialize | Settings_Deserialize;
 
 export type Settings_Deserialize = {
@@ -715,6 +1006,22 @@ export type StackedPointDto = {
 	month: string,
 	/**  category label -> value (base commodity) */
 	values: PointDto[],
+};
+
+export type StatementRowDto = StatementRowDto_Serialize | StatementRowDto_Deserialize;
+
+export type StatementRowDto_Deserialize = {
+	account: string,
+	label: string,
+	unit: AmountDto,
+	hint?: string | null,
+};
+
+export type StatementRowDto_Serialize = {
+	account: string,
+	label: string,
+	unit: AmountDto,
+	hint: string | null,
 };
 
 export type TagDto = TagDto_Serialize | TagDto_Deserialize;

@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-148_passing-brightgreen.svg)](#测试)
-[![Front-end tests](https://img.shields.io/badge/vitest-38_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-165_passing-brightgreen.svg)](#测试)
+[![Front-end tests](https://img.shields.io/badge/vitest-47_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#环境要求)
@@ -34,6 +34,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 - [使用](#使用)
 - [快录语法](#快录语法)
 - [自然语言记一笔（可选）](#自然语言记一笔可选)
+- [规划与报表](#规划与报表)
 - [数据放在哪](#数据放在哪)
 - [写入安全](#写入安全)
 - [开发](#开发)
@@ -64,6 +65,8 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 | **多币种** | 汇率只来自 `P` 指令；缺汇率会被标记、置灰并排除在合计之外 —— 绝不按 1:1 假设 |
 | **看板** | KPI 与环比、收支柱状、净资产曲线、分类环图、堆叠面积、日历热力图、预算 vs 实际、预测、桑基图；布局可拖拽缩放并按用户持久化 |
 | **流水** | 窗口化列表、行内编辑、批量改标签/账户、保存的查询（`acct:`、`desc:`、`date:`、`tag:`、`amt:` 支持 `and`/`or`/`not`） |
+| **规划** | `goals.ledger` 驱动财富自由测算（SWR 3.0/3.5/4.0%）、储备月数、带目标日期的账户目标、负债还清日期（含“多还一点能省多少”）以及按 `class:` 标签的配置偏离 |
+| **报表** | 资产负债表、任意月/季/年的损益表，以及把期末净资产对齐到「期初 + 收入 − 支出」的净值变动表 |
 | **账户与分类** | 账户树显示自身/合计余额与类型推断；分类视图可按账户或按标签统计 |
 | **双语界面文案** | 当前界面为简体中文；账本内容与代码注释保持中立 |
 | **安全性** | 写前快照、原子替换、外部改动检测、JSONL 写入审计 |
@@ -101,7 +104,7 @@ pnpm tauri dev                   # Vite :1420 + 带热更新的 Tauri 外壳
 | `⌘K` | 命令面板 |
 | `⌘N` | 快录窗口 |
 | `⌘F` | 流水 / 搜索 |
-| `⌘1` … `⌘6` | 看板、流水、账户、分类、规则、设置 |
+| `⌘1` … `⌘8` | 看板、流水、账户、分类、规则、规划、报表、设置 |
 | `Enter` / `⌘Enter` / `Esc` | 快录：保存并留下 / 保存并隐藏 / 隐藏 |
 
 托盘图标会在菜单栏旁弹出快录面板；设置里可以调整主题、快捷键、本位币、默认资金账户、
@@ -177,6 +180,32 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 请求，方便你在依赖它之前确认凭证可用。离开你机器的只有你输入的那句话和账户名，而且只在你按
 <kbd>Tab</kbd> 切到自然语言模式时才会发生。
 
+## 规划与报表
+
+`goals.ledger` 是一个纯文本计划文件（和 `rules.ledger` 一样，**不会**被 `index.ledger` 引入，
+hledger 永远不会看到它）。一行一条指令：
+
+```ledger
+assume  ; return:6% inflation:2.5% reserve:6          ; 名义收益、通胀、应急储备月数
+pool    ; accounts:assets:invest,assets:cash           ; 什么算“可投资资产”
+alloc   ; equity:60% bond:20% cash:20%                 ; 按 `class:` 标签的目标配置
+goal fire 财富自由 ; swr:4%                            ; 标题数字使用的提取率
+goal account 退休金 ; account:assets:invest:retirement target:1000000.00 CNY by:2040-01-01
+debt 房贷 ; account:liabilities:mortgage rate:3.15% payment:8200.00 CNY
+```
+
+- **财富自由** = 年支出 ÷ 提取率。年支出取最近 12 个月（或 `expenses:annual`），资产池取
+  `pool` 账户当期余额，达成时间用实际（扣通胀）收益与 6 个月平均储蓄推算。
+- **储备月数** = 现金 ÷ 月均支出，目标来自 `assume` 的 `reserve:`。
+- **负债进度** 按月摊还每条 `debt`：还清日期、账本内已付利息，以及**每月多还 500 / 1000 / 2000
+  能省下多少**（只读，不写盘）。
+- **配置偏离** 对比 `accounts.ledger` 里的 `class:` 标签（`; class:equity`）与 `alloc`，偏离
+  超过 5 个百分点会标红。
+
+**报表** 视图用同一份账本生成三张表：资产负债表（任何区间都满足
+`资产 − 负债 = 权益 + 累计结余` 的复式恒等式）、任意月/季/年的损益表、净值变动表
+（`期初 + 收入 − 支出 ± 估值 = 期末`）。`复制 Markdown` 会把当月报表放进剪贴板。
+
 ## 数据放在哪
 
 ```
@@ -185,6 +214,7 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
   accounts.ledger              # 账户声明，带 `; type:A|L|E|R|X`
   prices.ledger                # `P` 指令 —— 汇率的唯一来源
   budgets.ledger               # `~ monthly` 预算信封
+goals.ledger                 # 规划：假设、财富自由目标、资产池、配置、负债（不被 index 引入）
   rules.ledger                 # MoneyTracker 规则 —— 故意不被 index.ledger include
   2026/
     2026.ledger                # include 各月索引

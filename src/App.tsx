@@ -9,6 +9,8 @@ import { Transactions } from "./routes/Transactions";
 import { Accounts } from "./routes/Accounts";
 import { Categories } from "./routes/Categories";
 import { Rules } from "./routes/Rules";
+import { Plan } from "./routes/Plan";
+import { Reports } from "./routes/Reports";
 import { SettingsView } from "./routes/Settings";
 import { Welcome } from "./routes/Welcome";
 import { useShortcutLabel } from "./lib/shortcut";
@@ -20,6 +22,8 @@ type Route =
   | "accounts"
   | "categories"
   | "rules"
+  | "plan"
+  | "reports"
   | "settings";
 
 const NAV: { route: Route; label: string; hint: string }[] = [
@@ -28,7 +32,9 @@ const NAV: { route: Route; label: string; hint: string }[] = [
   { route: "accounts", label: "账户", hint: "⌘3" },
   { route: "categories", label: "分类", hint: "⌘4" },
   { route: "rules", label: "规则", hint: "⌘5" },
-  { route: "settings", label: "设置", hint: "⌘6" },
+  { route: "plan", label: "规划", hint: "⌘6" },
+  { route: "reports", label: "报表", hint: "⌘7" },
+  { route: "settings", label: "设置", hint: "⌘8" },
 ];
 
 function parseHash(): Route {
@@ -186,6 +192,8 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
             {route === "accounts" && <Accounts />}
             {route === "categories" && <Categories />}
             {route === "rules" && <Rules onCapture={() => void api.showCapture()} />}
+            {route === "plan" && <Plan />}
+            {route === "reports" && <Reports />}
             {route === "settings" && <SettingsView />}
           </>
         )}
