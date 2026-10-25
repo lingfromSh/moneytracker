@@ -9,6 +9,7 @@ import { useElementWidth } from "../lib/use-element-width";
 import { CARD_KEYS, KPI_KEYS } from "../lib/views";
 import { cn, money, monthLabel, pct, percent } from "../lib/format";
 import { Badge, Button, Card, CardHeader, EmptyState, Modal } from "../components/ui";
+import { ScheduleCard } from "../components/schedule";
 import {
   BudgetBars,
   CategoryDonut,
@@ -34,6 +35,7 @@ const DEFAULT_LAYOUT: Layout = [
   { i: "heatmap", x: 8, y: 10, w: 4, h: 5, minW: 3, minH: 3 },
   { i: "sankey", x: 0, y: 10, w: 8, h: 5, minW: 4, minH: 3 },
   { i: "insights", x: 8, y: 15, w: 4, h: 4, minW: 3, minH: 3 },
+  { i: "schedule", x: 0, y: 19, w: 8, h: 4, minW: 4, minH: 3 },
 ];
 
 function Panel({
@@ -190,6 +192,11 @@ export function Dashboard() {
       stacked: (
               <Panel title="分类趋势" hint="按二级分类堆叠">
                 <StackedArea stacked={data.stacked} />
+              </Panel>
+      ),
+      schedule: (
+              <Panel title="固定收支" hint="来自 recurring.ledger">
+                <ScheduleCard onOpen={() => (window.location.hash = "#/schedule")} />
               </Panel>
       ),
       forecast: (

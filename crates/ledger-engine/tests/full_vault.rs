@@ -181,3 +181,73 @@ fn rules_match_the_showcase_payees() {
         .iter()
         .any(|rule| rule.from_account.as_deref() == Some("assets:bank:cmb")));
 }
+
+#[test]
+fn schedule_templates_describe_the_showcase_fixed_costs() {
+    let vault = vault();
+    let overview = ledger_engine::schedule::overview(
+        &vault,
+        12,
+        chrono::NaiveDate::from_ymd_opt(2026, 11, 20).unwrap(),
+    );
+    assert!(
+        overview.has_schedule,
+        "recurring.ledger is part of the showcase"
+    );
+    assert!(
+        overview.diagnostics.is_empty(),
+        "{:?}",
+        overview.diagnostics
+    );
+
+    let ids = overview
+        .templates
+        .iter()
+        .map(|template| template.id.as_str())
+        .collect::<Vec<_>>();
+    // Sorted by the next date they fall due.
+    assert_eq!(ids, ["salary-main", "loan-home", "rent-flat", "sub-cloud"]);
+
+    let salary = &overview.templates[0];
+    assert_eq!(salary.kind, "salary");
+    assert_eq!(salary.day, 5);
+    // 应发 30,000 + 公司缴 16,422 = 52,122 收入,代扣 9,460.50 到手 26,239.50。
+    assert_eq!(salary.income.display, "52,122.00 CNY");
+    assert_eq!(salary.expense.display, "3,750.00 CNY");
+    assert_eq!(salary.assets.display, "47,659.50 CNY");
+    assert_eq!(salary.settle.display, "26,239.50 CNY");
+    assert!(salary.legs.iter().all(|leg| leg.amount.value != 0.0));
+
+    // 房贷的现金腿是负数,本金那条腿算负债减少。
+    let loan = overview
+        .templates
+        .iter()
+        .find(|template| template.id == "loan-home")
+        .expect("mortgage template");
+    assert_eq!(loan.settle.display, "-8,200.00 CNY");
+    assert_eq!(loan.debt.display, "2,130.00 CNY");
+
+    // 省略金额的那条腿由引擎补平。
+    let subscription = overview
+        .templates
+        .iter()
+        .find(|template| template.id == "sub-cloud")
+        .expect("subscription template");
+    assert_eq!(subscription.settle.display, "-30.00 CNY");
+
+    // 2026-11-20:工资 5 号已到期且还没带 sched 标签入账,房贷 20 号当天到期。
+    assert_eq!(overview.month_totals[0].month, "2026-11");
+    assert_eq!(overview.month_totals[0].template_count, 4);
+    let november = |id: &str| {
+        overview
+            .occurrences
+            .iter()
+            .find(|occurrence| occurrence.id == id && occurrence.month == "2026-11")
+            .expect("November occurrence")
+    };
+    assert!(november("salary-main").due);
+    assert!(!november("salary-main").recorded);
+    assert!(november("loan-home").due);
+    assert_eq!(november("loan-home").date, "2026-11-20");
+    assert!(november("loan-home").txn_id.is_none());
+}

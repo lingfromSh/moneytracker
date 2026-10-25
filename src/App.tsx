@@ -11,6 +11,7 @@ import { Categories } from "./routes/Categories";
 import { Rules } from "./routes/Rules";
 import { Import } from "./routes/Import";
 import { Plan } from "./routes/Plan";
+import { Schedule } from "./routes/Schedule";
 import { Reports } from "./routes/Reports";
 import { SettingsView } from "./routes/Settings";
 import { Welcome } from "./routes/Welcome";
@@ -25,6 +26,7 @@ type Route =
   | "categories"
   | "rules"
   | "plan"
+  | "schedule"
   | "reports"
   | "settings";
 
@@ -36,8 +38,9 @@ const NAV: { route: Route; label: string; hint: string }[] = [
   { route: "categories", label: "分类", hint: "⌘5" },
   { route: "rules", label: "规则", hint: "⌘6" },
   { route: "plan", label: "规划", hint: "⌘7" },
-  { route: "reports", label: "报表", hint: "⌘8" },
-  { route: "settings", label: "设置", hint: "⌘9" },
+  { route: "schedule", label: "日程", hint: "⌘8" },
+  { route: "reports", label: "报表", hint: "⌘9" },
+  { route: "settings", label: "设置", hint: "⌘0" },
 ];
 
 function parseHash(): Route {
@@ -119,10 +122,12 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
         go("transactions");
         return;
       }
-      const index = Number(e.key);
-      if (index >= 1 && index <= NAV.length) {
+      // Shortcuts are declared on each nav entry, so adding a page does not
+      // silently shift every later ⌘number.
+      const target = NAV.find((item) => item.hint === `⌘${e.key}`);
+      if (target) {
         e.preventDefault();
-        go(NAV[index - 1].route);
+        go(target.route);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -197,6 +202,7 @@ function Shell({ route, go }: { route: Route; go: (r: Route) => void }) {
             {route === "categories" && <Categories />}
             {route === "rules" && <Rules onCapture={() => void api.showCapture()} />}
             {route === "plan" && <Plan />}
+            {route === "schedule" && <Schedule />}
             {route === "reports" && <Reports />}
             {route === "settings" && <SettingsView />}
           </>

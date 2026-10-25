@@ -2,6 +2,8 @@
 ; Everything a transaction needs is reachable from here: index → year → month.
 ; rules.ledger is deliberately NOT included: the app expands rules when it
 ; writes an entry, so including it would make hledger apply them a second time.
+; recurring.ledger and goals.ledger are not included either: they describe
+; plans (`~` templates, savings goals), not money that moved.
 
 commodity 1,000.00 CNY
 commodity 1,000.00 USD

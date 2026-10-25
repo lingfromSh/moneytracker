@@ -15,6 +15,7 @@ pub mod reconcile;
 pub mod recur;
 pub mod report;
 pub mod rules;
+pub mod schedule;
 pub mod statements;
 pub mod types;
 pub mod vault;
@@ -38,6 +39,10 @@ pub use reconcile::preview as reconcile_preview;
 pub use recur::{commit_due, list as recur_list, skip as recur_skip, RecurGroup};
 pub use report::budget_rows;
 pub use rules::{Direction, RuleDef, RuleSet};
+pub use schedule::{
+    commit as schedule_commit, load as schedule_load, overview as schedule_overview,
+    save as schedule_save, skip as schedule_skip, SCHEDULE_FILE,
+};
 pub use statements::{balance_sheet, income_statement, net_worth_bridge};
 pub use vault::{create_vault, validate_vault, VaultOptions};
 

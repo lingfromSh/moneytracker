@@ -11,6 +11,7 @@ import type {
   ImportProfileDto_Deserialize,
   PostingPatch_Deserialize,
   QueryRequest_Deserialize,
+  SalaryTemplateDto_Deserialize,
   SaveTxnPatch_Deserialize,
   Settings_Serialize,
   TagDto_Deserialize,
@@ -123,6 +124,17 @@ export const api = {
   reconcileClear: (ids: string[]) => call(commands.reconcileClear(ids)),
   reportMarkdown: (month: string) => call(commands.reportMarkdown(month)),
 
+  // declared schedules (recurring.ledger)
+  scheduleOverview: (months: number | null = 12) => call(commands.scheduleOverview(months)),
+  scheduleCommit: (id: string, month: string | null = null) =>
+    call(commands.scheduleCommit(id, month)),
+  scheduleCommitDue: () => call(commands.scheduleCommitDue()),
+  scheduleSkip: (id: string, month: string | null = null) =>
+    call(commands.scheduleSkip(id, month)),
+  scheduleSave: (text: string) => call(commands.scheduleSave(text)),
+  scheduleSalaryPreview: (request: SalaryTemplateDto_Deserialize) =>
+    call(commands.scheduleSalaryPreview(request)),
+
   // recurring transactions and automation
   recurList: (lookbackMonths: number | null = 12) => call(commands.recurList(lookbackMonths)),
   recurCommit: (ids: string[]) => call(commands.recurCommit(ids)),
@@ -157,6 +169,7 @@ export const queryKeys = {
   importPreview: (path: string) => ["import-preview", path],
   reconcile: (account: string, asOf: string | null) => ["reconcile", account, asOf],
   recur: (lookbackMonths: number) => ["recur", lookbackMonths] as const,
+  schedule: (months: number) => ["schedule", months] as const,
   insights: ["insights"] as const,
   audit: ["audit"] as const,
   shortcutStatus: ["shortcut-status"] as const,

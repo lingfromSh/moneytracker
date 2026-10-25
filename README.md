@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-178_passing-brightgreen.svg)](#testing)
-[![Front-end tests](https://img.shields.io/badge/vitest-64_passing-brightgreen.svg)](#testing)
+[![Rust tests](https://img.shields.io/badge/rust_tests-192_passing-brightgreen.svg)](#testing)
+[![Front-end tests](https://img.shields.io/badge/vitest-71_passing-brightgreen.svg)](#testing)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
@@ -37,6 +37,7 @@ rich dashboard — with **zero proprietary storage**. Delete the app and you sti
 - [Natural language (optional)](#natural-language-optional)
 - [Importing statements](#importing-statements)
 - [Recurring entries & automation](#recurring-entries--automation)
+- [Declared schedules](#declared-schedules)
 - [Insights & questions](#insights--questions)
 - [Personalising](#personalising)
 - [Planning & reports](#planning--reports)
@@ -72,6 +73,7 @@ the source of truth and treats the UI as a fast editor for it:
 | **Dashboard** | KPI + month-over-month, income/expense bars, net-worth curve, category donut, stacked area, calendar heatmap, budget vs actual, forecast, Sankey — draggable/resizable layout persisted per user |
 | **Transactions** | windowed list, inline editor, bulk tag/account rename, saved queries (`acct:`, `desc:`, `date:`, `tag:`, `amt:` with `and`/`or`/`not`) |
 | **Import** | Alipay / WeChat Pay / bank CSV statements: auto-detected columns, dedupe by fingerprint, preview before writing, keyword→category rules, then reconcile the account against what the bank says |
+| **Schedule** | `recurring.ledger` holds hand-written `~ monthly` templates — salary with the employer side and the 五险二金 split, mortgage interest + principal, rent, subscriptions; the 日程 page lists the next 6/12/24 months with 记入 / 跳过, and the dashboard gets a 固定收支 card |
 | **Automation** | detects monthly patterns (payee + amount + postings, ≥3 months), offers a one-click "record next month", tags what it writes with `recur:<id>@<month>`, keeps a monthly report in `reports/`, can snapshot the vault into git, and warns when a budget passes 90 % |
 | **Planning** | `goals.ledger` drives a FIRE projection (SWR 3.0/3.5/4.0 %), a reserve-months gauge, per-account goals with target dates, debt payoff dates (plus what an extra payment saves) and allocation drift against `class:` tags |
 | **Reports** | balance sheet, income statement for any month/quarter/year, and a net-worth bridge that reconciles closing net worth to opening plus income minus expense |
@@ -113,7 +115,7 @@ First launch shows **Welcome**: create a vault, open an existing folder, or crea
 | `⌘K` | command palette |
 | `⌘N` | capture window |
 | `⌘F` | transactions / search |
-| `⌘1` … `⌘9` | dashboard, transactions, import, accounts, categories, rules, plan, reports, settings |
+| `⌘1` … `⌘0` | dashboard, transactions, import, accounts, categories, rules, plan, schedule, reports, settings |
 | `Enter` / `⌘Enter` / `Esc` | capture: save and stay / save and hide / hide |
 
 The tray icon opens the capture panel next to the menu bar; `⌘,`-style settings cover theme,
@@ -223,7 +225,7 @@ the ledger balance matches the bank.
 The ledger already knows what repeats: a pattern needs the same payee, the same amount and the same
 set of postings in at least three different months with a 20–45 day spacing. Those patterns show up as
 a strip at the top of 流水 with **全部记入** (write next month's occurrence) and **本月不算** (skip this
-cycle). Nothing is written unless you confirm it — or unless 设置 → 自动化 turns on 自动记入定期交易.
+cycle). Nothing is written unless you confirm it — or unless 设置 → 自动化 turns on 自动记入定期交易与固定收支.
 
 Each written occurrence is an ordinary transaction tagged `recur:<id>@<YYYY-MM>`, so the batch is
 auditable and re-running the detection never double-writes a month.
@@ -239,6 +241,45 @@ auditable and re-running the detection never double-writes a month.
 
 Skipped cycles are stored as `; skip:<id>@<YYYY-MM>` lines in `recur.ledger`, next to `rules.ledger`
 and, like it, never included by `index.ledger`.
+
+## Declared schedules
+
+Detection (previous section) only sees what has already happened. The other half is "I know this
+happens every month": salary, mortgage, rent, subscriptions. Write those into `recurring.ledger`, using
+plain hledger periodic syntax:
+
+```ledger
+~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
+    income:salary                        -30,000.00 CNY
+    income:benefit                       -16,422.00 CNY  ; employer contributions
+    assets:cn:fund                         7,200.00 CNY  ; housing fund: 3,600 you + 3,600 employer
+    assets:cn:pension                      7,200.00 CNY  ; pension: 2,400 you + 4,800 employer
+    assets:cn:annuity                      3,600.00 CNY  ; annuity: 1,200 you + 2,400 employer
+    expenses:insurance:medical             3,000.00 CNY  ; 714 you + 2,400 employer
+    expenses:insurance:unemployment          300.00 CNY
+    expenses:insurance:injury                150.00 CNY
+    expenses:insurance:maternity             300.00 CNY
+    assets:bank:cmb                       26,239.50 CNY  ; take-home (the cash leg)
+```
+
+- The header comment carries the metadata: `id:`, `label:`, `kind:` (salary / loan / income / expense),
+  `enabled:` — and `day:31` clamps to the end of short months.
+- **The last posting is the cash leg**: it is what the card shows as 现金流, and its amount may be
+  left out for the engine to balance.
+- 五险二金 is split by *withdrawability*: the housing fund, the personal pension account and the
+  annuity stay `assets:cn:*` (still your money), while medical, unemployment, injury and maternity are
+  `expenses:insurance:*` (pooled away). The employer side is booked too, so income is 52,122 — not
+  30,000.
+- Declaring a template books nothing. 记入 writes one ordinary transaction into the day file tagged
+  `sched:<id>`; 设置 → 自动化 → 自动记入固定收支 makes the monthly maintenance pass fill in whatever is
+  due that month.
+- 日程 → 工资模板 does the arithmetic for you: give it the gross figure and the account that receives
+  the net pay, and it generates the whole block (个人 8%/2%/0.5%/12%/4%, 公司 16%/8%/0.5%/0.5%/1%/12%/8%),
+  previewed before it is written.
+
+`recurring.ledger` is **not included by `index.ledger`**, for the same reason as `rules.ledger` and
+`goals.ledger`: it describes a plan, not money that moved. Including it would make hledger, the budget
+report and the cash-flow forecast count the same month twice.
 
 ## Insights & questions
 
@@ -299,6 +340,8 @@ statement on the clipboard for your journal.
   budgets.ledger               # `~ monthly` budget envelopes
   goals.ledger                 # plan: assumptions, FIRE goal, pool, allocation, debts (not included)
   rules.ledger                 # MoneyTracker rules — intentionally NOT included by index.ledger
+  recurring.ledger             # declared schedules: salary, mortgage, rent (not included either)
+  recur.ledger                 # `; skip:<id>@<month>` decisions (not included)
   2026/
     2026.ledger                # includes the month indexes
     2026-10.ledger             # includes the day files
@@ -315,7 +358,7 @@ Anything outside that subset — amount expressions, lot prices `{}`, `C` / `N` 
 timeclock, `csv:` rules — fails loudly with `file:line:col` and a stable diagnostic code. The app
 never silently drops a line it does not understand. Details: [`docs/vault-format.md`](docs/vault-format.md).
 
-**Why `rules.ledger` is not included.** Rules are expanded when a transaction is written and the
+**Why `rules.ledger` and `recurring.ledger` are not included.** Rules are expanded when a transaction is written and the
 result is stored as ordinary postings, with `; rule:<id> query:<original input>` recording the
 provenance. Including the rule file would make `hledger --auto` apply them a second time and
 produce different numbers.
@@ -371,10 +414,10 @@ check (`brew install hledger`).
 ## Testing
 
 ```bash
-cargo test --workspace                        # 148 Rust tests, 13 suites
+cargo test --workspace                        # 192 Rust tests, 13 suites
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 38 Vitest tests
+pnpm test                                     # 71 Vitest tests
 pnpm build                                    # tsc --noEmit && vite build
 ```
 

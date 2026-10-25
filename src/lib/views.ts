@@ -51,6 +51,7 @@ export const CARD_KEYS = [
   { key: "categories", label: "本月支出结构" },
   { key: "networth", label: "净资产曲线" },
   { key: "budget", label: "预算 vs 实际" },
+  { key: "schedule", label: "固定收支" },
   { key: "stacked", label: "分类趋势" },
   { key: "forecast", label: "现金流预测" },
   { key: "sankey", label: "资金流向" },

@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml/badge.svg)](https://github.com/lingfromSh/moneytracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust tests](https://img.shields.io/badge/rust_tests-178_passing-brightgreen.svg)](#测试)
-[![Front-end tests](https://img.shields.io/badge/vitest-64_passing-brightgreen.svg)](#测试)
+[![Rust tests](https://img.shields.io/badge/rust_tests-192_passing-brightgreen.svg)](#测试)
+[![Front-end tests](https://img.shields.io/badge/vitest-71_passing-brightgreen.svg)](#测试)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-2.x-24C8DB.svg)](https://tauri.app)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#环境要求)
@@ -36,6 +36,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 - [自然语言记一笔（可选）](#自然语言记一笔可选)
 - [导入对账单](#导入对账单)
 - [定期交易与自动化](#定期交易与自动化)
+- [固定收支日程](#固定收支日程)
 - [洞察与提问](#洞察与提问)
 - [个性化](#个性化)
 - [规划与报表](#规划与报表)
@@ -70,6 +71,7 @@ MoneyTracker 是一个数据库就是 [hledger](https://hledger.org) 兼容纯�
 | **看板** | KPI 与环比、收支柱状、净资产曲线、分类环图、堆叠面积、日历热力图、预算 vs 实际、预测、桑基图；布局可拖拽缩放并按用户持久化 |
 | **流水** | 窗口化列表、行内编辑、批量改标签/账户、保存的查询（`acct:`、`desc:`、`date:`、`tag:`、`amt:` 支持 `and`/`or`/`not`） |
 | **导入** | 支付宝 / 微信支付 / 银行 CSV：自动识别列、指纹去重、先预览再写入、关键词→分类规则，并可对账户做对账 |
+| **日程** | `recurring.ledger` 里手写 `~ monthly` 模板：工资（应发+公司缴纳+五险二金）、房贷本息、房租、订阅；日程页按 6/12/24 个月列出到期项，一键记入或跳过，看板有「固定收支」卡片 |
 | **自动化** | 自动发现按月重复的收支（同摘要、同金额、同分录，≥3 个月），一键记入下个月并打 `recur:<id>@<月份>` 标签；每月生成 `reports/` 报告、可选提交 git、预算超 90% 提醒 |
 | **规划** | `goals.ledger` 驱动财富自由测算（SWR 3.0/3.5/4.0%）、储备月数、带目标日期的账户目标、负债还清日期（含“多还一点能省多少”）以及按 `class:` 标签的配置偏离 |
 | **报表** | 资产负债表、任意月/季/年的损益表，以及把期末净资产对齐到「期初 + 收入 − 支出」的净值变动表 |
@@ -110,7 +112,7 @@ pnpm tauri dev                   # Vite :1420 + 带热更新的 Tauri 外壳
 | `⌘K` | 命令面板 |
 | `⌘N` | 快录窗口 |
 | `⌘F` | 流水 / 搜索 |
-| `⌘1` … `⌘9` | 看板、流水、导入、账户、分类、规则、规划、报表、设置 |
+| `⌘1` … `⌘0` | 看板、流水、导入、账户、分类、规则、规划、日程、报表、设置 |
 | `Enter` / `⌘Enter` / `Esc` | 快录：保存并留下 / 保存并隐藏 / 隐藏 |
 
 托盘图标会在菜单栏旁弹出快录面板；设置里可以调整主题、快捷键、本位币、默认资金账户、
@@ -208,7 +210,7 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 
 账本本身就知道哪些是重复的：同一摘要、同一金额、同一组分录，在至少三个不同月份出现，间隔
 20–45 天。这些模式会显示在流水页顶部，可以 **全部记入**（写入下个月的那一笔）或 **本月不算**
-（跳过这一期）。除非你在 设置 → 自动化 打开「自动记入定期交易」，否则不会自动写入。
+（跳过这一期）。除非你在 设置 → 自动化 打开「自动记入定期交易与固定收支」，否则不会自动写入。
 
 写入的每一笔都是普通交易，只多一个 `recur:<id>@<YYYY-MM>` 标签，批次可追溯，重复检测也不会
 把同一个月记两遍。
@@ -224,6 +226,41 @@ JSON（日期、摘要、金额、币种、分类、资金来源、标签、置�
 
 跳过的期数记录为 `recur.ledger` 中的 `; skip:<id>@<YYYY-MM>` 行——和 `rules.ledger` 一样，
 `index.ledger` 不会 include 它。
+
+## 固定收支日程
+
+检测出来的重复（上一节）只能看见 **已经发生** 的事。还有一半是「我知道每月一定会发生」：工资、
+房贷、房租、订阅。这些写进 `recurring.ledger`，语法就是 hledger 的周期块：
+
+```ledger
+~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
+    income:salary                        -30,000.00 CNY
+    income:benefit                       -16,422.00 CNY  ; 公司缴纳侧
+    assets:cn:fund                         7,200.00 CNY  ; 公积金 个人 3,600 + 公司 3,600
+    assets:cn:pension                      7,200.00 CNY  ; 养老 个人 2,400 + 公司 4,800
+    assets:cn:annuity                      3,600.00 CNY  ; 年金 个人 1,200 + 公司 2,400
+    expenses:insurance:medical             3,000.00 CNY  ; 医疗 个人 714 + 公司 2,400
+    expenses:insurance:unemployment          300.00 CNY
+    expenses:insurance:injury                150.00 CNY
+    expenses:insurance:maternity             300.00 CNY
+    assets:bank:cmb                       26,239.50 CNY  ; 到手（现金腿）
+```
+
+几条约定：
+
+- 头部注释里的 `id:` / `label:` / `kind:`（工资 / 还款 / 收入 / 支出）/ `enabled:` 就是元数据；
+  `day:31` 遇到小月会自动收到月末。
+- **最后一条 posting 是现金腿**，卡片上的「现金流」就取它；金额可以省略，由引擎补平。
+- 五险二金的归属按「能不能取出来」分：公积金、个人养老账户、企业年金是 `assets:cn:*`
+  （钱还是你的），医疗、失业、工伤、生育是 `expenses:insurance:*`（统筹掉了）。公司缴纳的部分
+  也一起入账，所以收入是 52,122，而不是 30,000。
+- 只是写模板不会产生任何交易。「记入」才按普通交易写进日文件并打 `sched:<id>` 标签；打开
+  设置 → 自动化 的「自动记入固定收支」后，每月维护任务会把当月的到期项补上。
+- 不想自己算比例就用 **日程 → 工资模板**：输入应发工资和到手账户，它会按
+  个人 8%/2%/0.5%/12%/4%、公司 16%/8%/0.5%/0.5%/1%/12%/8% 生成整段，预览后写入文件。
+
+`recurring.ledger` 和 `rules.ledger`、`goals.ledger` 一样 **不被 `index.ledger` 包含**：它是计划，
+不是已经发生的钱。否则 hledger、预算和现金流预测都会把同一个月算两遍。
 
 ## 洞察与提问
 
@@ -275,8 +312,10 @@ debt 房贷 ; account:liabilities:mortgage rate:3.15% payment:8200.00 CNY
   accounts.ledger              # 账户声明，带 `; type:A|L|E|R|X`
   prices.ledger                # `P` 指令 —— 汇率的唯一来源
   budgets.ledger               # `~ monthly` 预算信封
-goals.ledger                 # 规划：假设、财富自由目标、资产池、配置、负债（不被 index 引入）
+  goals.ledger                 # 规划：假设、财富自由目标、资产池、配置、负债（不被 index 引入）
   rules.ledger                 # MoneyTracker 规则 —— 故意不被 index.ledger include
+  recurring.ledger             # 固定收支模板：工资、房贷、房租（同样不 include）
+  recur.ledger                 # `; skip:<id>@<月份>` 跳过记录（不 include）
   2026/
     2026.ledger                # include 各月索引
     2026-10.ledger             # include 各日文件
@@ -296,6 +335,10 @@ goals.ledger                 # 规划：假设、财富自由目标、资产池�
 **为什么 `rules.ledger` 不被 include。** 规则在**写入时**展开，结果以普通分录落盘，并用
 `; rule:<id> query:<原始输入>` 记录来源。若把它 include 进来，`hledger --auto` 会再应用一次，
 数字就不一样了。
+
+**为什么 `recurring.ledger` 也不被 include。** 它是**计划**（`~` 模板），不是已经发生的钱。
+include 进来以后，`hledger`、预算报表和现金流预测都会把同一个月算两遍，而且每一笔模板分录都会
+被当成一个预算信封。
 
 **预算与存钱目标。** `budgets.ledger` 里放 `~ monthly` 周期交易，**正数那一笔**就是信封：
 `expenses:`（或任何 `X` 类）账户是花钱预算，`assets:` / `liabilities:` 账户是存钱目标，
@@ -345,10 +388,10 @@ pnpm bindings                    # 由 Rust 命令重新生成 src/lib/bindings.
 ## 测试
 
 ```bash
-cargo test --workspace                        # 148 个 Rust 测试，13 个 suite
+cargo test --workspace                        # 192 个 Rust 测试，13 个 suite
 cargo clippy --workspace --all-targets -D warnings
 cargo fmt --all -- --check
-pnpm test                                     # 38 个 Vitest 测试
+pnpm test                                     # 71 个 Vitest 测试
 pnpm build                                    # tsc --noEmit && vite build
 ```
 

@@ -11,7 +11,10 @@ plain hledger syntax; the app only refuses what it cannot represent exactly.
   accounts.ledger         account declarations, `; type:` tags
   prices.ledger           `P` directives
   budgets.ledger          `~ monthly` recurring blocks
+  recurring.ledger        declared schedules: salary, loan, subscriptions (never included)
   rules.ledger            MoneyTracker rules (never included by index.ledger)
+  goals.ledger            plan / FIRE assumptions (never included)
+  recur.ledger            `; skip:<id>@<limit>` recurring decisions (never included)
   <year>/
     <year>.ledger         includes the month indexes of that year
     <year>-<MM>.ledger    includes the day files of that month
@@ -33,6 +36,11 @@ that nothing includes is ignored (this is also how `hledger` behaves).
 `index.ledger`. Capture expands a rule into real postings and writes those, together with a
 provenance comment. If the rules file were included, `hledger --auto` would apply the same rule a
 second time and the balance would differ between the app and the CLI.
+
+`recurring.ledger` is left out for the same reason from the other direction: those blocks are
+*templates*, not transactions. Including them would make `hledger`, the budget report and the cash
+flow forecast treat the planned salary as money that already moved, and the 预算 view would read
+every template leg as an envelope.
 
 ## Transaction shape
 
@@ -149,6 +157,39 @@ the 规划 view instead of failing the load.
 
 Transactions written by the automation carry `recur:<id>@<YYYY-MM>` next to their `txn:` tag; the tag
 is engine-owned metadata, so the editor hides it and every rewrite preserves it.
+
+## Declared schedules
+
+`recurring.ledger` (not included by `index.ledger`) states the money that is *supposed* to happen every
+month, so the 日程 view can show it as a calendar instead of leaving it to the pattern detector. It is
+plain periodic syntax:
+
+```
+~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
+    income:salary                        -30,000.00 CNY
+    income:benefit                       -16,422.00 CNY  ; 公司缴纳侧合计
+    assets:cn:fund                         7,200.00 CNY
+    assets:cn:pension                      7,200.00 CNY
+    assets:cn:annuity                      3,600.00 CNY
+    expenses:insurance:medical             3,000.00 CNY
+    expenses:insurance:unemployment          300.00 CNY
+    expenses:insurance:injury                150.00 CNY
+    expenses:insurance:maternity             300.00 CNY
+    assets:bank:cmb                       26,239.50 CNY  ; 到手
+```
+
+- The header comment holds whitespace-separated `key:value` metadata: `id:` (defaults to the label plus
+a hash of it), `label:`, `kind:` (`salary` / `loan` / `income` / `expense`, display only),
+`enabled:false` to keep a template but stop suggesting it, and `settle:<account>` as an override.
+- `monthly from <date> day:<1-31>` is the supported period; a day past the end of a month clamps to the
+last day (`day:31` → 2 月 28/29). `weekly from <date>`, `quarterly from`, `yearly from` and a bare
+`monthly` on the 1st also work.
+- **The last posting is the cash leg.** It decides the 现金流 figure on the card, and it may omit its
+amount — the engine fills it so the block balances, exactly like a hand-written transaction.
+- Nothing is booked by merely declaring a template. 记入 writes one occurrence through the normal
+day-file path and tags it `sched:<id>`; `设置 → 自动化 → 自动记入固定收支` (the same switch the pattern
+detector uses) makes the monthly maintenance run book whatever is due that month.
+- `; sched:<id>@<YYYY-MM>` lines in `recur.ledger` mark a month as skipped, so 跳过 survives a reload.
 
 ## Imported transactions
 

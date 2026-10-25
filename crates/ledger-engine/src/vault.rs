@@ -80,9 +80,11 @@ pub fn render_index(opts: &VaultOptions, year: i32) -> String {
     format!(
         "; MoneyTracker vault — everything hledger needs lives here.
 ;
-; rules.ledger is intentionally NOT included: MoneyTracker expands rules at
-; write time, so an external `hledger -f index.ledger ...` sees the same final
-; transactions without applying auto postings twice.
+; rules.ledger, goals.ledger and recurring.ledger are intentionally NOT
+; included: MoneyTracker expands rules at write time and treats recurring
+; templates as app metadata, so an external
+; `hledger -f index.ledger ...` sees the same final transactions — no double
+; counting and no template mistaken for a budget envelope.
 
 commodity 1,000.00 {base}
 
@@ -178,6 +180,10 @@ pub fn create_vault(root: &Path, opts: &VaultCreateOptions) -> Result<Vec<String
             (PathBuf::from(PRICES_FILE), render_prices()),
             (PathBuf::from(BUDGETS_FILE), render_budgets()),
             (PathBuf::from(RULES_FILE), render_rules()),
+            (
+                PathBuf::from(crate::schedule::SCHEDULE_FILE),
+                crate::schedule::render_starter(&options.base_commodity),
+            ),
             (
                 PathBuf::from(format!("{year}/{year}.ledger")),
                 format!("; {}\n", year),

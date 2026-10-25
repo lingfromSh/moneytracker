@@ -51,6 +51,22 @@ export const commands = {
 	recurCommit: (ids: string[]) => typedError<RecurCommitDto_Serialize, CmdError>(__TAURI_INVOKE("recur_commit", { ids })),
 	/**  Remember "not this month" for one pattern. */
 	recurSkip: (id: string, month: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("recur_skip", { id, month })),
+	/**
+	 *  Declared monthly money from `recurring.ledger`, with the calendar of the next
+	 *  `months` months. `auto_commit` mirrors the settings switch: the card only
+	 *  reminds unless the user turned 自动记入 on.
+	 */
+	scheduleOverview: (months: number | null) => typedError<ScheduleOverviewDto_Serialize, CmdError>(__TAURI_INVOKE("schedule_overview", { months })),
+	/**  Book one occurrence (salary, mortgage, bill) into its day file. */
+	scheduleCommit: (id: string, month: string | null) => typedError<ScheduleCommitDto, CmdError>(__TAURI_INVOKE("schedule_commit", { id, month })),
+	/**  Book every occurrence that is due this month, in one click. */
+	scheduleCommitDue: () => typedError<ScheduleCommitDto, CmdError>(__TAURI_INVOKE("schedule_commit_due")),
+	/**  Remember "not this month" for one template. */
+	scheduleSkip: (id: string, month: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("schedule_skip", { id, month })),
+	/**  Save the whole `recurring.ledger`. Refuses text that would not parse. */
+	scheduleSave: (text: string) => typedError<ScheduleOverviewDto_Serialize, CmdError>(__TAURI_INVOKE("schedule_save", { text })),
+	/**  Render the 五险二金 skeleton for the modal, without writing anything. */
+	scheduleSalaryPreview: (request: SalaryTemplateDto_Deserialize) => typedError<string, CmdError>(__TAURI_INVOKE("schedule_salary_preview", { request })),
 	/**  Run the automation pass: recurring entries, monthly report, git snapshot, alerts. */
 	maintenanceRun: () => typedError<MaintenanceDto_Serialize, CmdError>(__TAURI_INVOKE("maintenance_run")),
 	importCommit: (profile: ImportProfileDto_Deserialize) => typedError<ImportCommitDto, CmdError>(__TAURI_INVOKE("import_commit", { profile })),
@@ -882,6 +898,8 @@ export type MaintenanceDto_Deserialize = {
 	at: string,
 	month: string,
 	recur?: RecurCommitDto_Deserialize | null,
+	/**  Due scheduled templates (`recurring.ledger`) booked by this pass. */
+	schedule?: ScheduleCommitDto | null,
 	/**  Vault-relative path when a monthly report was written. */
 	report?: string | null,
 	/**  Short git revision when the vault was committed. */
@@ -893,6 +911,8 @@ export type MaintenanceDto_Serialize = {
 	at: string,
 	month: string,
 	recur: RecurCommitDto_Serialize | null,
+	/**  Due scheduled templates (`recurring.ledger`) booked by this pass. */
+	schedule: ScheduleCommitDto | null,
 	/**  Vault-relative path when a monthly report was written. */
 	report: string | null,
 	/**  Short git revision when the vault was committed. */
@@ -1293,6 +1313,39 @@ export type RuleTestDto_Serialize = {
 	notes: string[],
 };
 
+/**  Parameters for the 五险二金 salary skeleton. */
+export type SalaryTemplateDto = SalaryTemplateDto_Serialize | SalaryTemplateDto_Deserialize;
+
+/**  Parameters for the 五险二金 salary skeleton. */
+export type SalaryTemplateDto_Deserialize = {
+	label: string,
+	/**  Monthly gross pay, as typed by the user. */
+	gross: string,
+	day: number | null,
+	start?: string | null,
+	/**  Account that receives take-home pay. */
+	net_account: string,
+	/**  Account prefix for the sub-accounts (`assets:cn` → `assets:cn:fund`). */
+	prefix: string,
+	/**  Also book the employer contribution (company side) as income. */
+	employer: boolean,
+};
+
+/**  Parameters for the 五险二金 salary skeleton. */
+export type SalaryTemplateDto_Serialize = {
+	label: string,
+	/**  Monthly gross pay, as typed by the user. */
+	gross: string,
+	day: number | null,
+	start: string | null,
+	/**  Account that receives take-home pay. */
+	net_account: string,
+	/**  Account prefix for the sub-accounts (`assets:cn` → `assets:cn:fund`). */
+	prefix: string,
+	/**  Also book the employer contribution (company side) as income. */
+	employer: boolean,
+};
+
 export type SankeyDto = {
 	nodes: SankeyNodeDto[],
 	links: SankeyLinkDto[],
@@ -1329,6 +1382,160 @@ export type SaveTxnPatch_Serialize = {
 	status: string | null,
 	postings: PostingPatch_Serialize[] | null,
 	tags: TagDto_Serialize[] | null,
+};
+
+export type ScheduleCommitDto = {
+	written: number | null,
+	already: number | null,
+	files: string[],
+	months: string[],
+	errors: string[],
+};
+
+export type ScheduleLegDto = {
+	account: string,
+	/**  Account type: A / L / E / R / X. */
+	kind: string,
+	/**  `settle` for the cash leg (the last posting), `leg` otherwise. */
+	role: string,
+	amount: AmountDto,
+};
+
+export type ScheduleMonthDto = {
+	month: string,
+	income: AmountDto,
+	expense: AmountDto,
+	assets: AmountDto,
+	debt: AmountDto,
+	template_count: number | null,
+	recorded: number | null,
+	pending: number | null,
+};
+
+export type ScheduleOccurrenceDto = ScheduleOccurrenceDto_Serialize | ScheduleOccurrenceDto_Deserialize;
+
+export type ScheduleOccurrenceDto_Deserialize = {
+	id: string,
+	label: string,
+	kind: string,
+	month: string,
+	date: string,
+	recorded: boolean,
+	skipped: boolean,
+	/**  Due this month and still unrecorded. */
+	due: boolean,
+	settle: AmountDto,
+	income: AmountDto,
+	expense: AmountDto,
+	assets: AmountDto,
+	debt: AmountDto,
+	legs: ScheduleLegDto[],
+	txn_id?: string | null,
+};
+
+export type ScheduleOccurrenceDto_Serialize = {
+	id: string,
+	label: string,
+	kind: string,
+	month: string,
+	date: string,
+	recorded: boolean,
+	skipped: boolean,
+	/**  Due this month and still unrecorded. */
+	due: boolean,
+	settle: AmountDto,
+	income: AmountDto,
+	expense: AmountDto,
+	assets: AmountDto,
+	debt: AmountDto,
+	legs: ScheduleLegDto[],
+	txn_id: string | null,
+};
+
+export type ScheduleOverviewDto = ScheduleOverviewDto_Serialize | ScheduleOverviewDto_Deserialize;
+
+export type ScheduleOverviewDto_Deserialize = {
+	today: string,
+	has_schedule: boolean,
+	file: string,
+	templates: ScheduleTemplateDto_Deserialize[],
+	months: string[],
+	occurrences: ScheduleOccurrenceDto_Deserialize[],
+	month_totals: ScheduleMonthDto[],
+	diagnostics: DiagnosticDto[],
+	src: string,
+	/**  Settings → automation switch; the app only reminds unless this is on. */
+	auto_commit: boolean,
+};
+
+export type ScheduleOverviewDto_Serialize = {
+	today: string,
+	has_schedule: boolean,
+	file: string,
+	templates: ScheduleTemplateDto_Serialize[],
+	months: string[],
+	occurrences: ScheduleOccurrenceDto_Serialize[],
+	month_totals: ScheduleMonthDto[],
+	diagnostics: DiagnosticDto[],
+	src: string,
+	/**  Settings → automation switch; the app only reminds unless this is on. */
+	auto_commit: boolean,
+};
+
+export type ScheduleTemplateDto = ScheduleTemplateDto_Serialize | ScheduleTemplateDto_Deserialize;
+
+export type ScheduleTemplateDto_Deserialize = {
+	id: string,
+	label: string,
+	/**  `salary` | `loan` | `income` | `expense` | `other` */
+	kind: string,
+	period: string,
+	/**  `daily` | `weekly` | `monthly` | `quarterly` | `yearly` */
+	cadence: string,
+	day: number | null,
+	start?: string | null,
+	until?: string | null,
+	enabled: boolean,
+	/**  Cash moved by the last posting: salary take-home, loan payment, bill. */
+	settle: AmountDto,
+	/**  Income legs (make positive: `-sum(income)`). */
+	income: AmountDto,
+	/**  Expense legs (withholdings, interest). */
+	expense: AmountDto,
+	/**  Asset legs: money kept in assets (fund, pension, annuity, bank). */
+	assets: AmountDto,
+	/**  Liability legs: debt repaid (positive = debt went down). */
+	debt: AmountDto,
+	next_date?: string | null,
+	line: number | null,
+	legs: ScheduleLegDto[],
+};
+
+export type ScheduleTemplateDto_Serialize = {
+	id: string,
+	label: string,
+	/**  `salary` | `loan` | `income` | `expense` | `other` */
+	kind: string,
+	period: string,
+	/**  `daily` | `weekly` | `monthly` | `quarterly` | `yearly` */
+	cadence: string,
+	day: number | null,
+	start: string | null,
+	until: string | null,
+	enabled: boolean,
+	/**  Cash moved by the last posting: salary take-home, loan payment, bill. */
+	settle: AmountDto,
+	/**  Income legs (make positive: `-sum(income)`). */
+	income: AmountDto,
+	/**  Expense legs (withholdings, interest). */
+	expense: AmountDto,
+	/**  Asset legs: money kept in assets (fund, pension, annuity, bank). */
+	assets: AmountDto,
+	/**  Liability legs: debt repaid (positive = debt went down). */
+	debt: AmountDto,
+	next_date: string | null,
+	line: number | null,
+	legs: ScheduleLegDto[],
 };
 
 export type SectionDto = SectionDto_Serialize | SectionDto_Deserialize;

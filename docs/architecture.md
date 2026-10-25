@@ -205,6 +205,29 @@ auto-confirmed entry is byte-for-byte the shape a capture would have produced, p
 the monthly report once, runs `git add -A` / `git commit` when the vault has a `.git` directory, and
 collects budget rows above 90 %.
 
+## Declared schedules
+
+`crates/ledger-engine/src/schedule.rs` is the mirror image of `recur.rs`: instead of guessing patterns
+from history it reads `recurring.ledger`, a file of ordinary `~ monthly ... day:N` blocks plus postings
+that the user maintains (or that 工资模板 generates). Header metadata lives in the block comment as
+whitespace-separated `key:value`; the id defaults to the label plus a hash of it, so two 工资 templates
+cannot collide.
+
+Dates are computed on a month grid anchored at `start`: the day is clamped to the month length
+(`day:31` → 2 月 28/29), and a window that begins before `start` still resets onto the grid rather than
+sliding by 30 days. `legs()` fills the single elided posting the same way `amounts::balance` does, and
+tags the **last** posting `role: "settle"` — that leg *is* the cash flow the dashboard card prints.
+
+`overview()` merges templates with the transactions that carry `sched:<id>`, so an occurrence shows as
+recorded without a side table; skipped months reuse the `; sched:<id>@<YYYY-MM>` lines in `recur.ledger`.
+`commit()` builds a `Transaction` and hands it to `capture::commit_to_day_file`, which means an
+occurrence is byte-identical to a captured entry apart from its tag. Nothing is ever written by reading
+the file: the automation switch only makes `maintenance.rs` call `commit_due()` for the current month.
+
+The file is app metadata, never included by `index.ledger`. If it were, `report::budgets` (which turns
+every positive X/A/L leg of every included `~` block into an envelope) would read each template as a
+budget, and the forecast would treat the plan as history.
+
 ## Statement import
 
 Three steps, each a pure function over the file plus an `ImportProfileDto`:

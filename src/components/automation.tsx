@@ -28,6 +28,7 @@ export function Automation({ draft, update, onMessage, onError }: Props) {
       setLast(outcome);
       const parts: string[] = [];
       if (outcome.recur) parts.push(`定期 ${outcome.recur.written} 笔`);
+      if (outcome.schedule) parts.push(`日程 ${outcome.schedule.written} 笔`);
       if (outcome.report) parts.push(outcome.report);
       if (outcome.git) parts.push(`git ${outcome.git}`);
       onMessage(parts.length > 0 ? `维护完成：${parts.join(" · ")}` : "维护完成，没有需要处理的内容");
@@ -42,15 +43,15 @@ export function Automation({ draft, update, onMessage, onError }: Props) {
     <div className="space-y-2">
       <div className="flex items-center justify-between rounded-lg border border-[var(--color-line)] px-3 py-2">
         <div>
-          <div className="text-sm">自动记入定期交易</div>
+          <div className="text-sm">自动记入定期交易与固定收支</div>
           <div className="text-[11px] text-[var(--color-muted)]">
-            打开后，启动时会把到期的定期交易直接写入（仍可手工改）
+            打开后，启动时会把到期的定期交易和 recurring.ledger 里的固定收支直接写入（仍可手工改）
           </div>
         </div>
         <Switch
           checked={draft.auto_recur}
           onChange={(next) => update("auto_recur", next)}
-          label="自动记入定期交易"
+          label="自动记入定期交易与固定收支"
         />
       </div>
 

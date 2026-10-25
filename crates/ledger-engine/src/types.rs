@@ -815,6 +815,128 @@ pub struct RecurCommitDto {
 }
 
 // ---------------------------------------------------------------------------
+// recurring schedules (`recurring.ledger`)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ScheduleLegDto {
+    pub account: String,
+    /// Account type: A / L / E / R / X.
+    pub kind: String,
+    /// `settle` for the cash leg (the last posting), `leg` otherwise.
+    pub role: String,
+    pub amount: AmountDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ScheduleTemplateDto {
+    pub id: String,
+    pub label: String,
+    /// `salary` | `loan` | `income` | `expense` | `other`
+    pub kind: String,
+    pub period: String,
+    /// `daily` | `weekly` | `monthly` | `quarterly` | `yearly`
+    pub cadence: String,
+    #[specta(type = f64)]
+    pub day: u32,
+    pub start: Option<String>,
+    pub until: Option<String>,
+    pub enabled: bool,
+    /// Cash moved by the last posting: salary take-home, loan payment, bill.
+    pub settle: AmountDto,
+    /// Income legs (make positive: `-sum(income)`).
+    pub income: AmountDto,
+    /// Expense legs (withholdings, interest).
+    pub expense: AmountDto,
+    /// Asset legs: money kept in assets (fund, pension, annuity, bank).
+    pub assets: AmountDto,
+    /// Liability legs: debt repaid (positive = debt went down).
+    pub debt: AmountDto,
+    pub next_date: Option<String>,
+    #[specta(type = f64)]
+    pub line: u32,
+    pub legs: Vec<ScheduleLegDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ScheduleOccurrenceDto {
+    pub id: String,
+    pub label: String,
+    pub kind: String,
+    pub month: String,
+    pub date: String,
+    pub recorded: bool,
+    pub skipped: bool,
+    /// Due this month and still unrecorded.
+    pub due: bool,
+    pub settle: AmountDto,
+    pub income: AmountDto,
+    pub expense: AmountDto,
+    pub assets: AmountDto,
+    pub debt: AmountDto,
+    pub legs: Vec<ScheduleLegDto>,
+    pub txn_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ScheduleMonthDto {
+    pub month: String,
+    pub income: AmountDto,
+    pub expense: AmountDto,
+    pub assets: AmountDto,
+    pub debt: AmountDto,
+    #[specta(type = f64)]
+    pub template_count: usize,
+    #[specta(type = f64)]
+    pub recorded: usize,
+    #[specta(type = f64)]
+    pub pending: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ScheduleOverviewDto {
+    pub today: String,
+    pub has_schedule: bool,
+    pub file: String,
+    pub templates: Vec<ScheduleTemplateDto>,
+    pub months: Vec<String>,
+    pub occurrences: Vec<ScheduleOccurrenceDto>,
+    pub month_totals: Vec<ScheduleMonthDto>,
+    pub diagnostics: Vec<DiagnosticDto>,
+    pub src: String,
+    /// Settings → automation switch; the app only reminds unless this is on.
+    pub auto_commit: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ScheduleCommitDto {
+    #[specta(type = f64)]
+    pub written: usize,
+    #[specta(type = f64)]
+    pub already: usize,
+    pub files: Vec<String>,
+    pub months: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+/// Parameters for the 五险二金 salary skeleton.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct SalaryTemplateDto {
+    pub label: String,
+    /// Monthly gross pay, as typed by the user.
+    pub gross: String,
+    #[specta(type = f64)]
+    pub day: u32,
+    pub start: Option<String>,
+    /// Account that receives take-home pay.
+    pub net_account: String,
+    /// Account prefix for the sub-accounts (`assets:cn` → `assets:cn:fund`).
+    pub prefix: String,
+    /// Also book the employer contribution (company side) as income.
+    pub employer: bool,
+}
+
+// ---------------------------------------------------------------------------
 // automation
 // ---------------------------------------------------------------------------
 
@@ -823,6 +945,8 @@ pub struct MaintenanceDto {
     pub at: String,
     pub month: String,
     pub recur: Option<RecurCommitDto>,
+    /// Due scheduled templates (`recurring.ledger`) booked by this pass.
+    pub schedule: Option<ScheduleCommitDto>,
     /// Vault-relative path when a monthly report was written.
     pub report: Option<String>,
     /// Short git revision when the vault was committed.

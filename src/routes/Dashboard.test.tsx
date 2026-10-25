@@ -16,6 +16,30 @@ vi.mock("../lib/ipc", () => ({
     showCapture: vi.fn(),
     reload: reloadMock,
     planOverview: () => Promise.resolve(null),
+    scheduleOverview: () =>
+      Promise.resolve({
+        today: "2026-11-20",
+        has_schedule: true,
+        file: "recurring.ledger",
+        templates: [],
+        months: ["2026-11"],
+        occurrences: [],
+        month_totals: [
+          {
+            month: "2026-11",
+            income: amount("52,122.00 CNY", 52122),
+            expense: amount("3,750.00 CNY", 4462.5),
+            assets: amount("47,659.50 CNY", 47659.5),
+            debt: amount("0.00 CNY", 0),
+            template_count: 0,
+            recorded: 0,
+            pending: 0,
+          },
+        ],
+        diagnostics: [],
+        src: "",
+        auto_commit: false,
+      }),
     insights: () =>
       Promise.resolve([
         {
@@ -39,6 +63,7 @@ vi.mock("../lib/ipc", () => ({
     settings: ["settings"],
     plan: ["plan"],
     insights: ["insights"],
+    schedule: (months: number) => ["schedule", months],
   },
 }));
 

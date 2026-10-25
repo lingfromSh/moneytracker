@@ -14,6 +14,11 @@ account assets:property:home               ; type:A
 account assets:property:rental             ; type:A
 account assets:vehicle:car                 ; type:A
 
+; 五险二金：可提取的部分是资产，统筹掉的部分是当期支出。
+account assets:cn:fund                     ; type:A
+account assets:cn:pension                  ; type:A
+account assets:cn:annuity                  ; type:A
+
 account liabilities:credit:cmb             ; type:L
 account liabilities:mortgage:home          ; type:L
 account liabilities:loan:car               ; type:L
@@ -28,6 +33,7 @@ account income:dividend                    ; type:R
 account income:rent                        ; type:R
 account income:invest:gain                 ; type:R
 account income:other                       ; type:R
+account income:benefit                     ; type:R
 
 account expenses:food:groceries            ; type:X
 account expenses:food:restaurant           ; type:X
@@ -53,6 +59,10 @@ account expenses:education:course          ; type:X
 account expenses:entertainment             ; type:X
 account expenses:travel                    ; type:X
 account expenses:insurance                 ; type:X
+account expenses:insurance:medical         ; type:X
+account expenses:insurance:unemployment    ; type:X
+account expenses:insurance:injury          ; type:X
+account expenses:insurance:maternity       ; type:X
 account expenses:fees:bank                 ; type:X
 account expenses:tax                       ; type:X
 account expenses:unclassified              ; type:X

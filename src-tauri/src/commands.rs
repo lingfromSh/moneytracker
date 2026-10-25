@@ -1371,6 +1371,125 @@ pub fn recur_skip(state: State<'_, AppState>, id: String, month: Option<String>)
     Ok(())
 }
 
+// ---------------------------------------------------------------- schedules
+
+/// Declared monthly money from `recurring.ledger`, with the calendar of the next
+/// `months` months. `auto_commit` mirrors the settings switch: the card only
+/// reminds unless the user turned 自动记入 on.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn schedule_overview(
+    state: State<'_, AppState>,
+    months: Option<u32>,
+) -> CmdResult<ScheduleOverviewDto> {
+    let vault = state.vault()?;
+    let mut overview = ledger_engine::schedule_overview(
+        &vault,
+        months.unwrap_or(12) as usize,
+        chrono::Local::now().date_naive(),
+    );
+    overview.auto_commit = state.settings().auto_recur;
+    Ok(overview)
+}
+
+/// Book one occurrence (salary, mortgage, bill) into its day file.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn schedule_commit(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    month: Option<String>,
+) -> CmdResult<ScheduleCommitDto> {
+    let opts = state.settings().vault_options();
+    let audit = state.audit_path();
+    let vault = state.vault()?;
+    let result = ledger_engine::schedule::commit(&vault, &id, month.as_deref(), &opts)?;
+    for file in &result.files {
+        let _ = writer::append_audit(
+            &audit,
+            &AuditEntryDto {
+                ts: chrono::Local::now().to_rfc3339(),
+                op: "schedule_commit".into(),
+                file: file.clone(),
+                span_start: 0,
+                span_end: 0,
+                before: String::new(),
+                after: format!("定期模板 {id} · {}", result.months.join(",")),
+            },
+        );
+    }
+    refresh(&state, &app, result.files.clone(), "schedule");
+    Ok(result)
+}
+
+/// Book every occurrence that is due this month, in one click.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn schedule_commit_due(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CmdResult<ScheduleCommitDto> {
+    let opts = state.settings().vault_options();
+    let vault = state.vault()?;
+    let result = ledger_engine::schedule::commit_due(&vault, &opts)?;
+    refresh(&state, &app, result.files.clone(), "schedule");
+    Ok(result)
+}
+
+/// Remember "not this month" for one template.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn schedule_skip(
+    state: State<'_, AppState>,
+    id: String,
+    month: Option<String>,
+) -> CmdResult<()> {
+    let vault = state.vault()?;
+    ledger_engine::schedule::skip(&vault, &id, month.as_deref())?;
+    Ok(())
+}
+
+/// Save the whole `recurring.ledger`. Refuses text that would not parse.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn schedule_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    text: String,
+) -> CmdResult<ScheduleOverviewDto> {
+    let opts = state.settings().vault_options();
+    let vault = state.vault()?;
+    let root = vault.root().to_path_buf();
+    ledger_engine::schedule::save(&root, &text, &opts)?;
+    let fresh = state
+        .reload_from_disk(&opts)
+        .ok_or_else(|| CmdError::new("engine.vault", "could not reload the vault"))?;
+    emit_ledger_changed(
+        &app,
+        vec![ledger_engine::SCHEDULE_FILE.to_string()],
+        "schedule_saved",
+    );
+    let mut overview =
+        ledger_engine::schedule_overview(fresh.as_ref(), 12, chrono::Local::now().date_naive());
+    overview.auto_commit = state.settings().auto_recur;
+    Ok(overview)
+}
+
+/// Render the 五险二金 skeleton for the modal, without writing anything.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn schedule_salary_preview(
+    state: State<'_, AppState>,
+    request: SalaryTemplateDto,
+) -> CmdResult<String> {
+    let vault = state.vault()?;
+    let (commodity, precision) = vault.base_commodity();
+    Ok(ledger_engine::schedule::render_salary(
+        &request, commodity, precision,
+    )?)
+}
+
 /// Run the automation pass: recurring entries, monthly report, git snapshot, alerts.
 #[tauri::command(async)]
 #[specta::specta]

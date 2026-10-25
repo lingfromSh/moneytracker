@@ -7,7 +7,7 @@ use std::process::Command;
 
 use chrono::{Datelike, Local};
 
-use ledger_engine::types::{MaintenanceDto, RecurCommitDto};
+use ledger_engine::types::{MaintenanceDto, RecurCommitDto, ScheduleCommitDto};
 use ledger_engine::writer::atomic_write;
 use ledger_engine::{budget_rows, month_report, recur, EngineError, Result, Vault};
 
@@ -19,6 +19,14 @@ pub fn run(vault: &Vault, auto_recur: bool, git_auto_commit: bool) -> Maintenanc
 
     let recur_outcome: Option<RecurCommitDto> = if auto_recur {
         recur::commit_due(vault, 12, &vault.opts).ok()
+    } else {
+        None
+    };
+
+    // Declared schedules (salary, mortgage, subscriptions) are booked only when
+    // the same switch is on; the app reminds otherwise.
+    let schedule_outcome: Option<ScheduleCommitDto> = if auto_recur {
+        ledger_engine::schedule::commit_due(vault, &vault.opts).ok()
     } else {
         None
     };
@@ -66,6 +74,7 @@ pub fn run(vault: &Vault, auto_recur: bool, git_auto_commit: bool) -> Maintenanc
         at: Local::now().to_rfc3339(),
         month,
         recur: recur_outcome,
+        schedule: schedule_outcome,
         report: report_written,
         git,
         alerts,

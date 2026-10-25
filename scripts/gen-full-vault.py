@@ -37,6 +37,11 @@ account assets:property:home               ; type:A
 account assets:property:rental             ; type:A
 account assets:vehicle:car                 ; type:A
 
+; 五险二金：可提取的部分是资产，统筹掉的部分是当期支出。
+account assets:cn:fund                     ; type:A
+account assets:cn:pension                  ; type:A
+account assets:cn:annuity                  ; type:A
+
 account liabilities:credit:cmb             ; type:L
 account liabilities:mortgage:home          ; type:L
 account liabilities:loan:car               ; type:L
@@ -51,6 +56,7 @@ account income:dividend                    ; type:R
 account income:rent                        ; type:R
 account income:invest:gain                 ; type:R
 account income:other                       ; type:R
+account income:benefit                     ; type:R
 
 account expenses:food:groceries            ; type:X
 account expenses:food:restaurant           ; type:X
@@ -76,6 +82,10 @@ account expenses:education:course          ; type:X
 account expenses:entertainment             ; type:X
 account expenses:travel                    ; type:X
 account expenses:insurance                 ; type:X
+account expenses:insurance:medical         ; type:X
+account expenses:insurance:unemployment    ; type:X
+account expenses:insurance:injury          ; type:X
+account expenses:insurance:maternity       ; type:X
 account expenses:fees:bank                 ; type:X
 account expenses:tax                       ; type:X
 account expenses:unclassified              ; type:X
@@ -133,6 +143,51 @@ RULES = """; MoneyTracker rules — read by the app, never included by index.led
 = desc:房租收入 and not desc:押金  ; rule:r-rent order:40 enabled:true from:assets:bank:cmb
     income:rent              100.00%
     assets:bank:cmb
+"""
+
+RECURRING = """; MoneyTracker 固定收支 — 由日程页读取，**不**被 index.ledger 包含。
+;
+; 这些是计划和模板，不是已经发生的交易：文件被 include 的话，hledger 与账本
+; 的预算/现金流会把同一个月算两遍。所以它和 rules.ledger、goals.ledger 一样，
+; 独立存在。
+;
+; 语法：一个 hledger 的 ~ 周期块就是一条模板。
+;   ~ monthly from <起始月> day:<1-31>  ; id:<唯一 id> label:<名称> kind:<类型>
+; 头部注释里的 id/label/kind/settle/enabled 都是空格分隔的 key:value；
+; day 超过当月天数时会自动收到月末（2 月按 28/29 号算）。
+; 最后一条 posting 是现金腿 —— 它决定卡片上的「现金流」，也可以省略金额，
+; 由引擎按「恰好一条缺失」的规则补平。
+; kind 只影响界面上的标签：salary 工资 / loan 还款 / income 收入 / expense 支出。
+
+; 工资：应发 30,000.00 + 公司缴 16,422.00，个人代扣 9,460.50，到手 26,239.50。
+; 个人与公司两侧同账户合并成一行，注释里写清楚拆分。
+~ monthly from 2025-08-05 day:5  ; id:salary-main label:工资 kind:salary
+    income:salary                        -30,000.00 CNY
+    income:benefit                       -16,422.00 CNY  ; 公司缴纳侧合计
+    assets:cn:fund                         7,200.00 CNY  ; 公积金 个人 3,600 + 公司 3,600
+    assets:cn:pension                      7,200.00 CNY  ; 养老 个人 2,400 + 公司 4,800
+    assets:cn:annuity                      3,600.00 CNY  ; 年金 个人 1,200 + 公司 2,400
+    expenses:insurance:medical             3,000.00 CNY  ; 医疗 个人 714 + 公司 2,400
+    expenses:insurance:unemployment          300.00 CNY  ; 失业 个人 150.00 + 公司 150.00
+    expenses:insurance:injury                150.00 CNY  ; 工伤（公司）
+    expenses:insurance:maternity             300.00 CNY  ; 生育（公司）
+    assets:bank:cmb                       26,239.50 CNY  ; 到手
+
+; 房贷：每月 8,200.00，其中 2,130.00 是本金（冲减负债），剩下是利息。
+~ monthly from 2025-08-20 day:20  ; id:loan-home label:房贷 kind:loan
+    expenses:home:mortgage_interest        6,070.00 CNY
+    liabilities:mortgage:home              2,130.00 CNY
+    assets:bank:icbc                      -8,200.00 CNY
+
+; 房租收入：每月 3,600.00。
+~ monthly from 2025-08-01 day:1  ; id:rent-flat label:房租收入 kind:income
+    income:rent                           -3,600.00 CNY
+    assets:bank:icbc                       3,600.00 CNY
+
+; 订阅：现金腿省略金额，引擎会补 -30.00。
+~ monthly from 2025-08-15 day:15  ; id:sub-cloud label:云存储 kind:expense
+    expenses:entertainment                    30.00 CNY
+    assets:wallet:alipay
 """
 
 
@@ -432,9 +487,18 @@ for index, (year, month) in enumerate(MONTHS):
     prev_card = charges
 
 # ---------------------------------------------------------------- write out
+# README.md 是手写的说明，不属于生成物，重建目录时保留下来。
+readme_path = os.path.join(ROOT, "README.md")
+readme = None
+if os.path.isfile(readme_path):
+    with open(readme_path) as handle:
+        readme = handle.read()
 if os.path.isdir(ROOT):
     shutil.rmtree(ROOT)
 os.makedirs(ROOT)
+if readme is not None:
+    with open(readme_path, "w") as handle:
+        handle.write(readme)
 
 by_month = {}
 for block in blocks:
@@ -455,6 +519,7 @@ write("accounts.ledger", ACCOUNTS)
 write("prices.ledger", PRICES)
 write("budgets.ledger", BUDGETS)
 write("rules.ledger", RULES)
+write("recurring.ledger", RECURRING)
 write(".gitignore", ".bak/\n")
 
 years = sorted({key[:4] for key in by_month})
@@ -463,6 +528,8 @@ index = [
     "; Everything a transaction needs is reachable from here: index → year → month.",
     "; rules.ledger is deliberately NOT included: the app expands rules when it",
     "; writes an entry, so including it would make hledger apply them a second time.",
+    "; recurring.ledger and goals.ledger are not included either: they describe",
+    "; plans (`~` templates, savings goals), not money that moved.",
     "",
     "commodity 1,000.00 CNY",
     "commodity 1,000.00 USD",
